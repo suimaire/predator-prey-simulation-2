@@ -47,7 +47,7 @@ button:disabled { cursor: default; opacity: .43; }
 .parameter-scroll { height: calc(100vh - 84px); padding: 0 3px 80px; overflow: auto; scrollbar-width: thin; scrollbar-color: #c7d3ca transparent; }
 .parameter-group, .special-controls { margin: 0 0 10px; border: 1px solid #d7dfd8; border-radius: 14px; background: #fff; box-shadow: 0 5px 17px rgba(28,56,37,.04); overflow: hidden; }
 .parameter-group summary { display: flex; align-items: center; gap: 11px; padding: 12px 13px; list-style: none; cursor: pointer; user-select: none; }
-.parameter-group summary::-webkit-details-marker, .rule-card summary::-webkit-details-marker, .icon-review summary::-webkit-details-marker { display: none; }
+.parameter-group summary::-webkit-details-marker, .rule-card summary::-webkit-details-marker { display: none; }
 .parameter-group summary > span:nth-child(2) { display: grid; gap: 2px; }
 .parameter-group summary b { font-size: 13px; }
 .parameter-group summary small { color: #79867e; font-size: 10px; }
@@ -99,7 +99,7 @@ button:disabled { cursor: default; opacity: .43; }
 .step-readout strong { min-width: 40px; color: #264433; font: 800 18px 'DM Sans', sans-serif; text-align: right; }
 
 .simulation-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(285px, .72fr); gap: 15px; align-items: start; }
-.board-card, .graph-card, .statistics-card, .learning-card, .rule-card, .icon-review { border: 1px solid #d2ddd3; border-radius: 17px; background: #fff; box-shadow: 0 8px 25px rgba(29,59,38,.06); }
+.board-card, .graph-card, .statistics-card, .learning-card, .rule-card { border: 1px solid #d2ddd3; border-radius: 17px; background: #fff; box-shadow: 0 8px 25px rgba(29,59,38,.06); }
 .board-card { min-width: 0; padding: 17px; }
 .legend { display: flex; align-items: center; gap: 13px; color: #56645b; font-size: 10px; }
 .legend > span { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
@@ -159,14 +159,14 @@ button:disabled { cursor: default; opacity: .43; }
 .model-limit { margin: 0; padding: 9px 11px; border-radius: 9px; color: #78837c; background: #f4f6f3; font-size: 8px; line-height: 1.55; }
 .model-limit b { color: #53635a; }
 
-.rule-card, .icon-review { margin-top: 11px; overflow: hidden; }
-.rule-card summary, .icon-review summary { display: flex; align-items: center; gap: 12px; padding: 13px 17px; list-style: none; cursor: pointer; }
-.rule-card summary > span, .icon-review summary > span { display: grid; gap: 2px; }
-.rule-card summary b, .icon-review summary b { font-size: 11px; }
-.rule-card summary small, .icon-review summary small { color: #89938d; font-size: 8px; }
-.rule-card summary i, .icon-review summary i { margin-left: auto; color: #69776e; font-style: normal; transition: transform .2s ease; }
-.rule-card[open] summary i, .icon-review[open] summary i { transform: rotate(180deg); }
-.rule-content, .icon-review-content { border-top: 1px solid #e7ece8; }
+.rule-card { margin-top: 11px; overflow: hidden; }
+.rule-card summary { display: flex; align-items: center; gap: 12px; padding: 13px 17px; list-style: none; cursor: pointer; }
+.rule-card summary > span { display: grid; gap: 2px; }
+.rule-card summary b { font-size: 11px; }
+.rule-card summary small { color: #89938d; font-size: 8px; }
+.rule-card summary i { margin-left: auto; color: #69776e; font-style: normal; transition: transform .2s ease; }
+.rule-card[open] summary i { transform: rotate(180deg); }
+.rule-content { border-top: 1px solid #e7ece8; }
 .rule-content { padding: 15px 17px; }
 .rule-content ol { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin: 0; padding: 0; list-style: none; counter-reset: rules; }
 .rule-content li { counter-increment: rules; display: grid; gap: 4px; padding: 10px; border-radius: 10px; background: #f3f6f2; }
@@ -174,17 +174,6 @@ button:disabled { cursor: default; opacity: .43; }
 .rule-content li b { font-size: 9px; }
 .rule-content li span { color: #7c8780; font-size: 8px; line-height: 1.4; }
 .rule-content > p { margin: 11px 0 0; color: #6f7c74; font-size: 9px; line-height: 1.6; }
-.icon-review-content { display: grid; grid-template-columns: minmax(180px,.7fr) minmax(500px,1.7fr); gap: 16px; align-items: center; padding: 16px 17px; }
-.review-copy p { margin: 0; color: #66736b; font-size: 9px; line-height: 1.65; }
-.review-copy p b { color: #28513a; }
-.review-copy span { display: inline-block; margin-top: 8px; padding: 5px 8px; border-radius: 99px; color: #1f6340; background: #e4f0e5; font-size: 8px; font-weight: 800; }
-.icon-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.icon-options article { display: grid; grid-template-columns: 54px 1fr; gap: 2px 8px; align-items: center; padding: 7px; border: 1px solid #d5ddd6; border-radius: 10px; background: #fbfcfa; }
-.icon-options article.selected { border-color: #79a98a; box-shadow: inset 0 0 0 1px #79a98a; }
-.icon-options canvas { grid-row: 1 / 3; width: 54px; height: 54px; border-radius: 7px; }
-.icon-options span { align-self: end; color: #7e8982; font-size: 8px; font-weight: 800; }
-.icon-options .selected span { color: #277049; }
-.icon-options b { align-self: start; font-size: 9px; line-height: 1.35; }
 
 @media (max-width: 1180px) {
   .food-chain { display: none; }
@@ -197,7 +186,6 @@ button:disabled { cursor: default; opacity: .43; }
   .population-card > div { grid-template-columns: auto 1fr; column-gap: 7px; align-items: baseline; }
   .population-card > div > span { grid-column: 1 / 3; }
   .stat-grid { grid-template-columns: repeat(3, 1fr); }
-  .icon-review-content { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 980px) {
@@ -218,7 +206,6 @@ button:disabled { cursor: default; opacity: .43; }
   .graph-card { grid-column: 2; grid-row: 1 / 3; }
   .insight-card { grid-column: 1; }
   .lower-grid { grid-template-columns: 1fr; }
-  .icon-options { grid-template-columns: repeat(2,1fr); }
 }
 
 @media (max-width: 760px) {
@@ -258,10 +245,6 @@ button:disabled { cursor: default; opacity: .43; }
   .rule-content ol { grid-template-columns: 1fr; }
   .rule-content li { grid-template-columns: 24px auto; }
   .rule-content li::before { grid-row: 1 / 3; }
-  .icon-review-content { padding: 13px; }
-  .icon-options { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .icon-options article { grid-template-columns: 44px 1fr; }
-  .icon-options canvas { width: 44px; height: 44px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

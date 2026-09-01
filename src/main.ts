@@ -205,18 +205,6 @@ app.innerHTML = `
           </div>
         </details>
 
-        <details class="icon-review">
-          <summary><span><b>아이콘 가독성 검토</b><small>토끼 2안 · 늑대 2안 비교 결과</small></span><i>⌄</i></summary>
-          <div class="icon-review-content">
-            <div class="review-copy"><p>16–24px 크기에서 형태를 비교했습니다. <b>토끼 A</b>는 긴 귀와 둥근 몸, <b>늑대 A</b>는 긴 몸·뾰족한 귀·꼬리가 보여 서로 가장 멀리 떨어진 실루엣을 만듭니다.</p><span>보드에는 A + A 조합을 적용했습니다.</span></div>
-            <div class="icon-options">
-              <article class="selected"><span>토끼 A · 적용</span><canvas data-icon="rabbit-a" width="72" height="72"></canvas><b>긴 귀 + 둥근 몸</b></article>
-              <article><span>토끼 B</span><canvas data-icon="rabbit-b" width="72" height="72"></canvas><b>정면 얼굴형</b></article>
-              <article class="selected"><span>늑대 A · 적용</span><canvas data-icon="wolf-a" width="72" height="72"></canvas><b>긴 몸 + 꼬리</b></article>
-              <article><span>늑대 B</span><canvas data-icon="wolf-b" width="72" height="72"></canvas><b>방패형 얼굴</b></article>
-            </div>
-          </div>
-        </details>
       </main>
     </div>
   </div>
@@ -264,12 +252,6 @@ function drawRabbitA(ctx: CanvasRenderingContext2D, x: number, y: number, size: 
   ctx.restore();
 }
 
-function drawRabbitB(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
-  ctx.save(); ctx.translate(x, y); ctx.lineWidth = Math.max(1.35, size * 0.075); ctx.strokeStyle = '#2b211a'; ctx.fillStyle = '#d9873e'; ctx.lineJoin = 'round';
-  ctx.beginPath(); ctx.moveTo(-size * 0.26, -size * 0.02); ctx.lineTo(-size * 0.2, -size * 0.45); ctx.quadraticCurveTo(-size * 0.08, -size * 0.5, -size * 0.05, -size * 0.12); ctx.lineTo(size * 0.05, -size * 0.12); ctx.quadraticCurveTo(size * 0.1, -size * 0.5, size * 0.22, -size * 0.43); ctx.lineTo(size * 0.26, -size * 0.02); ctx.arc(0, size * 0.08, size * 0.29, -0.15, Math.PI + 0.15, false); ctx.closePath(); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#151515'; ctx.beginPath(); ctx.arc(-size * 0.1, size * 0.03, size * 0.035, 0, Math.PI * 2); ctx.arc(size * 0.1, size * 0.03, size * 0.035, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-}
-
 function drawWolfA(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, simple = false): void {
   ctx.save(); ctx.translate(x, y); ctx.lineWidth = Math.max(1.35, size * 0.072); ctx.strokeStyle = '#101d2b'; ctx.fillStyle = '#5b718b'; ctx.lineJoin = 'round';
   ctx.beginPath(); ctx.moveTo(-size * 0.47, size * 0.11); ctx.lineTo(-size * 0.29, -size * 0.05); ctx.lineTo(-size * 0.19, -size * 0.27); ctx.lineTo(-size * 0.03, -size * 0.13); ctx.lineTo(size * 0.18, -size * 0.1); ctx.lineTo(size * 0.3, -size * 0.32); ctx.lineTo(size * 0.41, -size * 0.12); ctx.lineTo(size * 0.49, -size * 0.03); ctx.lineTo(size * 0.3, size * 0.08); ctx.lineTo(size * 0.22, size * 0.3); ctx.lineTo(size * 0.08, size * 0.3); ctx.lineTo(size * 0.03, size * 0.1); ctx.lineTo(-size * 0.18, size * 0.12); ctx.lineTo(-size * 0.25, size * 0.31); ctx.lineTo(-size * 0.38, size * 0.31); ctx.lineTo(-size * 0.38, size * 0.13); ctx.closePath(); ctx.fill(); ctx.stroke();
@@ -277,24 +259,7 @@ function drawWolfA(ctx: CanvasRenderingContext2D, x: number, y: number, size: nu
   ctx.restore();
 }
 
-function drawWolfB(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
-  ctx.save(); ctx.translate(x, y); ctx.lineWidth = Math.max(1.35, size * 0.075); ctx.strokeStyle = '#101d2b'; ctx.fillStyle = '#465a70'; ctx.lineJoin = 'round';
-  ctx.beginPath(); ctx.moveTo(-size * 0.36, -size * 0.38); ctx.lineTo(-size * 0.12, -size * 0.24); ctx.lineTo(0, -size * 0.33); ctx.lineTo(size * 0.13, -size * 0.24); ctx.lineTo(size * 0.37, -size * 0.38); ctx.lineTo(size * 0.3, size * 0.06); ctx.lineTo(size * 0.12, size * 0.35); ctx.lineTo(0, size * 0.45); ctx.lineTo(-size * 0.13, size * 0.35); ctx.lineTo(-size * 0.31, size * 0.06); ctx.closePath(); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#edf3f5'; ctx.beginPath(); ctx.moveTo(-size * 0.2, size * 0.03); ctx.lineTo(0, size * 0.32); ctx.lineTo(size * 0.2, size * 0.03); ctx.lineTo(0, size * 0.15); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#0c1722'; ctx.beginPath(); ctx.arc(-size * 0.12, -size * 0.02, size * 0.038, 0, Math.PI * 2); ctx.arc(size * 0.12, -size * 0.02, size * 0.038, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-}
-
 function initializeIconCanvases(): void {
-  document.querySelectorAll<HTMLCanvasElement>('[data-icon]').forEach((canvas) => {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.fillStyle = '#dce8d3'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#b7c8ad'; ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
-    const kind = canvas.dataset.icon;
-    if (kind === 'rabbit-a') drawRabbitA(ctx, 36, 38, 46);
-    if (kind === 'rabbit-b') drawRabbitB(ctx, 36, 38, 46);
-    if (kind === 'wolf-a') drawWolfA(ctx, 36, 38, 52);
-    if (kind === 'wolf-b') drawWolfB(ctx, 36, 38, 48);
-  });
   document.querySelectorAll<HTMLCanvasElement>('[data-mini-icon]').forEach((canvas) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
