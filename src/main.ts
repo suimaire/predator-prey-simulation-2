@@ -174,8 +174,8 @@ app.innerHTML = `
           <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
           <ol class="leaderboard-list" id="leaderboard-list"></ol>
           <form class="leaderboard-form" id="leaderboard-form" hidden>
-            <label for="leaderboard-student-number"><span>학번</span><input id="leaderboard-student-number" maxlength="24" placeholder="예: 20314" autocomplete="off" /></label>
-            <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 김하늘" autocomplete="off" /></label>
+            <label for="leaderboard-student-number"><span>학번</span><input id="leaderboard-student-number" maxlength="24" placeholder="예: 10935" autocomplete="off" /></label>
+            <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 박창현" autocomplete="off" /></label>
             <button type="submit" class="challenge-primary" id="leaderboard-submit">이 기록 제출하기</button>
             <p class="leaderboard-privacy">입력한 학번과 이름은 수업용 기록판에 공개되고 선생님이 관리하는 서버에 저장됩니다. 같은 학번으로 다시 제출하면 최고 기록 하나만 남습니다. 실명을 남기고 싶지 않다면 선생님과 약속한 표기를 사용하세요.</p>
           </form>
