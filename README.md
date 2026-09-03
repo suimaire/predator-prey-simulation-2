@@ -60,12 +60,16 @@ record schema는 `ChallengeRecord<SimulationParameters>`와 `ApexSurvivalRecord`
 
 ## 중앙 leaderboard
 
-Apex Survival 결과 화면에서 학급과 이름을 입력해 학급 공용 기록판에 제출할 수 있습니다. 저장소는 Supabase이고, 앱은 `src/leaderboard.ts`의 `LeaderboardTransport` 인터페이스만 알고 있으므로 다른 백엔드로 교체하거나 테스트에서 메모리 구현으로 바꿔 끼울 수 있습니다.
+Apex Survival 결과 화면에서 학번과 이름을 입력해 학급 공용 기록판에 제출할 수 있습니다. 저장소는 Supabase이고, 앱은 `src/leaderboard.ts`의 `LeaderboardTransport` 인터페이스만 알고 있으므로 다른 백엔드로 교체하거나 테스트에서 메모리 구현으로 바꿔 끼울 수 있습니다.
 
-- 기록판은 학생마다 최고 기록 1개만 남기고 상위 20명을 보여 줍니다. 동점은 같은 순위를 공유하고 먼저 달성한 기록이 앞에 옵니다.
+- 기록판은 학생마다 최고 기록 1개만 남기고 상위 10명을 보여 줍니다. 마지막 자리와 점수가 같은 학생이 더 있으면 그 학생들까지 함께 표시합니다. 동점은 같은 순위를 공유하고 먼저 제출한 기록이 앞에 옵니다.
+- 학생별 최고 기록 1개로 접는 일은 **서버의 공개 view가** 합니다. 그래서 다른 학생이 몇 번 도전했고 예전 점수가 얼마였는지는 public API로도 알 수 없습니다. 원본 테이블에는 모든 제출이 그대로 남습니다.
+- 학생의 고유 식별자는 `student_number`(학번) **하나**입니다. `student_name`은 기록판에 보여 주기 위한 표시 정보이며 동일인 판정에 쓰지 않습니다. 같은 학번으로 이름을 조금 다르게 적어 제출해도 같은 학생으로 봅니다. 반대로 이름이 같아도 학번이 다르면 다른 학생입니다.
+- 같은 학번의 학생이 완전히 같은 제출을 두 번 등록하는 것은 unique index `apex_leaderboard_dedupe_idx`가 막습니다. 키는 `(challenge_id, simulation_version, seed, student_number, payload_hash)`이며 `student_name`은 들어가지 않습니다. 이름 표기만 바꿔 같은 기록을 다시 내는 길을 막기 위한 것입니다. 파라미터나 점수가 다른 진짜 새 도전은 `payload_hash`가 달라져 그대로 여러 행 남습니다.
+- 학번은 자릿수나 숫자 형식을 강제하지 않고 문자열로 다룹니다. 학번 체계가 바뀌어도 스키마와 코드를 고치지 않아도 되게 하기 위한 것이며, 앞뒤 공백 정리 · 빈 값 금지 · 최대 24자 · 위험 문자 배제만 검사합니다.
 - 읽기와 쓰기가 서로 다른 대상을 향합니다. 조회는 공개 view `apex_leaderboard_public`, 제출은 원본 테이블 `apex_leaderboard` 입니다.
 - `VITE_SUPABASE_URL`과 `VITE_SUPABASE_ANON_KEY`가 없으면 `createLeaderboardTransport`가 `null`을 돌려주고, 기록판 자리에는 안내 문구만 표시되며 나머지 기능은 그대로 동작합니다.
-- 학급과 이름은 공백을 정리한 뒤 길이와 문자 종류를 검사하고, 화면에 그릴 때 HTML escape합니다. 입력값은 브라우저에 기억해 두어 다음 제출에서 다시 입력하지 않아도 됩니다.
+- 학번과 이름은 공백을 정리한 뒤 길이와 문자 종류를 검사하고, 화면에 그릴 때 HTML escape합니다. 입력값은 브라우저에 기억해 두어 다음 제출에서 다시 입력하지 않아도 됩니다.
 - 제출은 도전이 끝난 기록 하나당 한 번만 가능하며, 새 도전을 시작하면 제출 상태가 초기화됩니다.
 
 ### 공개 범위와 권한 구조
@@ -75,7 +79,7 @@ Apex Survival은 좋은 파라미터 조합을 찾는 활동이므로, 다른 �
 | 대상 | 학생 키 권한 | 담긴 열 |
 | --- | --- | --- |
 | `apex_leaderboard` (원본) | INSERT만 | 전체. `parameter_snapshot`, `payload_hash`, `verified_*` 포함 |
-| `apex_leaderboard_public` (view) | SELECT만 | `id`, `challenge_id`, `simulation_version`, `seed`, `score`, `class_label`, `student_name`, `achieved_at` |
+| `apex_leaderboard_public` (view) | SELECT만 | `id`, `challenge_id`, `simulation_version`, `seed`, `score`, `student_number`, `student_name`, `submitted_at`. 학번 하나당 최고 기록 1행 |
 
 클라이언트의 `select=` 목록을 줄이는 것만으로는 부족합니다. 학생이 개발자 도구에서 원본 테이블에 `select=*`를 직접 보낼 수 있기 때문입니다. 그래서 서버에서 `revoke all on table public.apex_leaderboard from anon, authenticated` 로 SELECT 권한 자체를 회수하고 INSERT만 되돌려 줍니다. 공개 읽기 RLS 정책도 함께 제거합니다.
 
@@ -88,7 +92,7 @@ view를 만들었다는 사실만으로 안전하다고 가정하면 안 됩니�
 
 타입에도 같은 경계가 있습니다. `LeaderboardSubmission`(보내는 값)에만 `parameterSnapshot`과 `payloadHash`가 있고, `LeaderboardEntry`(읽는 값)에는 아예 없습니다. 화면 코드가 실수로 참조하면 컴파일이 실패합니다.
 
-제출은 `Prefer: return=minimal`로 보냅니다. 삽입한 행을 되돌려받으려면 원본 테이블 SELECT 권한이 필요한데, 그 권한이 없는 것이 이 구조의 핵심이기 때문입니다. 본인 기록 강조는 반환된 행 id 대신 학급·이름으로 판별합니다.
+제출은 `Prefer: return=minimal`로 보냅니다. 삽입한 행을 되돌려받으려면 원본 테이블 SELECT 권한이 필요한데, 그 권한이 없는 것이 이 구조의 핵심이기 때문입니다. 본인 기록 강조는 반환된 행 id 대신 학번으로 판별합니다.
 
 검증 상태(`verification`)는 현재 공개 view에 넣지 않아 기록판에 배지가 뜨지 않습니다. 공개하기로 하면 `supabase/schema.sql`의 view 정의에 열 한 줄만 추가하면 되고, 클라이언트는 그 열이 오면 배지를 그리고 없으면 그리지 않도록 이미 되어 있습니다. `verified_score`와 `verifier_version`은 교사용이므로 넣지 마세요.
 
@@ -140,4 +144,4 @@ npx tsc --noEmit
 npm run build
 ```
 
-테스트에는 leaderboard 제출 해시의 key 순서 독립성, 학급·이름 정규화와 검증, 학생별 최고 기록 집계와 동점 순위, 조회가 공개 view만 향하고 비공개 열을 요청하지 않는지, 서버가 여분의 열을 보내도 entry에 새어 들어오지 않는지, 제출이 `return=minimal`로 원본 테이블에 가는지, 환경 변수 미설정 시 비활성화 동작과 함께 기본 2차 소비자 deterministic regression, 3·4차 활성화, 상위 포식자의 실제 섭식, 효율 적용, 종 제거 고정, Reset, intervention, 격자 불변식, Apex score 경계, 동시 붕괴, 설정 잠금, 속도 독립성, 동일 seed Retry, Personal Best 갱신 규칙, 10,000 step 이력 제한 검사가 포함됩니다.
+테스트에는 leaderboard 제출 해시의 key 순서 독립성, 학번·이름 정규화와 검증, 학번 기준 동일인 판정(이름 표기가 달라도 한 학생, 이름이 같아도 학번이 다르면 다른 학생), 학생별 최고 기록 집계와 상위 10명 + 동점자 표시, 조회가 공개 view만 향하고 비공개 열을 요청하지 않는지, 서버가 여분의 열을 보내도 entry에 새어 들어오지 않는지, 제출이 `return=minimal`로 원본 테이블에 가는지, 환경 변수 미설정 시 비활성화 동작과 함께 기본 2차 소비자 deterministic regression, 3·4차 활성화, 상위 포식자의 실제 섭식, 효율 적용, 종 제거 고정, Reset, intervention, 격자 불변식, Apex score 경계, 동시 붕괴, 설정 잠금, 속도 독립성, 동일 seed Retry, Personal Best 갱신 규칙, 10,000 step 이력 제한 검사가 포함됩니다.

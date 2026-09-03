@@ -174,10 +174,10 @@ app.innerHTML = `
           <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
           <ol class="leaderboard-list" id="leaderboard-list"></ol>
           <form class="leaderboard-form" id="leaderboard-form" hidden>
-            <label for="leaderboard-class"><span>학급 · 학번</span><input id="leaderboard-class" maxlength="24" placeholder="예: 2학년 3반 또는 2-3-14" autocomplete="off" /></label>
+            <label for="leaderboard-student-number"><span>학번</span><input id="leaderboard-student-number" maxlength="24" placeholder="예: 20314" autocomplete="off" /></label>
             <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 김하늘" autocomplete="off" /></label>
             <button type="submit" class="challenge-primary" id="leaderboard-submit">이 기록 제출하기</button>
-            <p class="leaderboard-privacy">입력한 학급·학번과 이름은 수업용 기록판에 공개되고 선생님이 관리하는 서버에 저장됩니다. 실명을 남기고 싶지 않다면 선생님과 약속한 표기를 사용하세요.</p>
+            <p class="leaderboard-privacy">입력한 학번과 이름은 수업용 기록판에 공개되고 선생님이 관리하는 서버에 저장됩니다. 같은 학번으로 다시 제출하면 최고 기록 하나만 남습니다. 실명을 남기고 싶지 않다면 선생님과 약속한 표기를 사용하세요.</p>
           </form>
         </section>
         <nav class="sim-toolbar" aria-label="시뮬레이션 조작">
@@ -258,7 +258,7 @@ const leaderboardPanel = element<HTMLElement>('#leaderboard-panel');
 const leaderboardList = element<HTMLOListElement>('#leaderboard-list');
 const leaderboardStatus = element<HTMLParagraphElement>('#leaderboard-status');
 const leaderboardForm = element<HTMLFormElement>('#leaderboard-form');
-const leaderboardClassInput = element<HTMLInputElement>('#leaderboard-class');
+const leaderboardNumberInput = element<HTMLInputElement>('#leaderboard-student-number');
 const leaderboardNameInput = element<HTMLInputElement>('#leaderboard-name');
 const leaderboardSubmitButton = element<HTMLButtonElement>('#leaderboard-submit');
 const leaderboardRefreshButton = element<HTMLButtonElement>('#leaderboard-refresh');
@@ -442,7 +442,7 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/gu, (character) => HTML_ESCAPES[character]!);
 }
 
-function formatAchievedAt(isoDate: string): string {
+function formatSubmittedAt(isoDate: string): string {
   const date = new Date(isoDate);
   if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -455,8 +455,8 @@ function readStoredParticipant(): Participant | null {
     const parsed: unknown = JSON.parse(serialized);
     if (!parsed || typeof parsed !== 'object') return null;
     const candidate = parsed as Partial<Participant>;
-    if (typeof candidate.classLabel !== 'string' || typeof candidate.studentName !== 'string') return null;
-    return { classLabel: candidate.classLabel, studentName: candidate.studentName };
+    if (typeof candidate.studentNumber !== 'string' || typeof candidate.studentName !== 'string') return null;
+    return { studentNumber: candidate.studentNumber, studentName: candidate.studentName };
   } catch {
     return null;
   }
@@ -498,9 +498,9 @@ function renderLeaderboardPanel(): void {
     leaderboardList.innerHTML = ranked.map((entry) => `
       <li class="${participantKey(entry) === highlightedParticipant ? 'is-mine' : ''}">
         <b>${entry.rank}</b>
-        <span class="leaderboard-who"><strong>${escapeHtml(entry.studentName)}</strong><small>${escapeHtml(entry.classLabel)}</small></span>
+        <span class="leaderboard-who"><strong>${escapeHtml(entry.studentName)}</strong><small>${escapeHtml(entry.studentNumber)}</small></span>
         <span class="leaderboard-score">${entry.score.toLocaleString()} step</span>
-        <span class="leaderboard-meta">${escapeHtml(formatAchievedAt(entry.achievedAt))}${verificationMarkup(entry)}</span>
+        <span class="leaderboard-meta">${escapeHtml(formatSubmittedAt(entry.submittedAt))}${verificationMarkup(entry)}</span>
       </li>`).join('');
     leaderboardStatus.textContent = leaderboardStatusText(ranked.length);
     leaderboardStatus.dataset.tone = leaderboardStatusPhase === 'error' ? 'error' : 'normal';
@@ -537,7 +537,7 @@ async function refreshLeaderboard(): Promise<void> {
 async function submitFinishedRecord(): Promise<void> {
   const record = lastFinishedRecord;
   if (!leaderboardTransport || !record || leaderboardSubmitting || hasSubmittedFinishedRecord) return;
-  const validation = validateParticipant({ classLabel: leaderboardClassInput.value, studentName: leaderboardNameInput.value });
+  const validation = validateParticipant({ studentNumber: leaderboardNumberInput.value, studentName: leaderboardNameInput.value });
   if (!validation.ok) {
     leaderboardStatusPhase = 'error';
     leaderboardMessage = validation.message;
@@ -1060,7 +1060,7 @@ function animationLoop(time: number): void {
 
 const storedParticipant = readStoredParticipant();
 if (storedParticipant) {
-  leaderboardClassInput.value = storedParticipant.classLabel;
+  leaderboardNumberInput.value = storedParticipant.studentNumber;
   leaderboardNameInput.value = storedParticipant.studentName;
 }
 

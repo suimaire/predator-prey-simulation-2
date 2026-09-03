@@ -3,14 +3,18 @@ import type { SimulationParameters } from './model.ts';
 
 export type VerificationStatus = 'unverified' | 'verified' | 'rejected';
 
+/**
+ * 학번이 학생의 고유 식별자입니다. 이름은 기록판에 보여 주기 위한 표시 정보이며
+ * 동일인 판정에는 쓰지 않습니다(참조: participantKey).
+ */
 export interface Participant {
-  classLabel: string;
+  studentNumber: string;
   studentName: string;
 }
 
 /** 학생 브라우저가 서버로 보내는 값. parameterSnapshot과 payloadHash는 여기에만 존재합니다. */
 export interface LeaderboardSubmission extends ChallengeRecord<SimulationParameters> {
-  classLabel: string;
+  studentNumber: string;
   studentName: string;
   payloadHash: string;
 }
@@ -26,9 +30,14 @@ export interface LeaderboardEntry {
   simulationVersion: string;
   seed: number;
   score: number;
-  classLabel: string;
+  studentNumber: string;
   studentName: string;
-  achievedAt: string;
+  /**
+   * 서버가 INSERT 시점에 default now()로 채운 실제 제출 시각입니다. 학생 요청은 이 열을
+   * 지정할 수 없으므로 공개 제출 시각과 동점 정렬 기준으로 안전하게 쓸 수 있습니다.
+   * 학생이 보낸 achieved_at은 공개 view에 없으므로 이 타입에도 존재하지 않습니다.
+   */
+  submittedAt: string;
   /** 공개 view가 검증 상태를 내보내기로 한 경우에만 존재합니다. */
   verification?: VerificationStatus;
 }
@@ -55,8 +64,13 @@ export interface LeaderboardTransport {
   submit(submission: LeaderboardSubmission): Promise<void>;
 }
 
-export const PARTICIPANT_LIMITS = Object.freeze({ classLabel: 24, studentName: 16 });
-export const DEFAULT_LEADERBOARD_LIMIT = 20;
+/**
+ * 학번은 자릿수나 숫자 형식을 강제하지 않습니다. 학번 체계가 바뀔 수 있으므로 문자열로
+ * 다루고, 앞뒤 공백 정리 · 빈 값 금지 · 최대 길이 · 위험 문자 배제만 검사합니다.
+ */
+export const PARTICIPANT_LIMITS = Object.freeze({ studentNumber: 24, studentName: 16 });
+/** 기본 표시 인원. 마지막 자리와 동점인 학생이 더 있으면 그 학생들까지 함께 보여 줍니다. */
+export const DEFAULT_LEADERBOARD_LIMIT = 10;
 
 /** 공개 view가 노출하는 열 전체. 이 목록 밖의 열은 학생 브라우저가 읽을 수 없습니다. */
 export const PUBLIC_LEADERBOARD_COLUMNS: readonly string[] = Object.freeze([
@@ -65,9 +79,9 @@ export const PUBLIC_LEADERBOARD_COLUMNS: readonly string[] = Object.freeze([
   'simulation_version',
   'seed',
   'score',
-  'class_label',
+  'student_number',
   'student_name',
-  'achieved_at',
+  'submitted_at',
 ]);
 
 const PARTICIPANT_PATTERN = /^[가-힣ㄱ-ㅎㅏ-ㅣA-Za-z0-9 ()·._-]+$/u;
@@ -78,7 +92,7 @@ function collapseWhitespace(value: string): string {
 
 export function normalizeParticipant(input: Participant): Participant {
   return {
-    classLabel: collapseWhitespace(input.classLabel),
+    studentNumber: collapseWhitespace(input.studentNumber),
     studentName: collapseWhitespace(input.studentName),
   };
 }
@@ -89,23 +103,26 @@ export type ParticipantValidation =
 
 export function validateParticipant(input: Participant): ParticipantValidation {
   const participant = normalizeParticipant(input);
-  if (!participant.classLabel) return { ok: false, message: '학급 또는 학번을 입력해 주세요.' };
+  if (!participant.studentNumber) return { ok: false, message: '학번을 입력해 주세요.' };
   if (!participant.studentName) return { ok: false, message: '이름을 입력해 주세요.' };
-  if (participant.classLabel.length > PARTICIPANT_LIMITS.classLabel) {
-    return { ok: false, message: `학급 또는 학번은 ${PARTICIPANT_LIMITS.classLabel}자 이내로 입력해 주세요.` };
+  if (participant.studentNumber.length > PARTICIPANT_LIMITS.studentNumber) {
+    return { ok: false, message: `학번은 ${PARTICIPANT_LIMITS.studentNumber}자 이내로 입력해 주세요.` };
   }
   if (participant.studentName.length > PARTICIPANT_LIMITS.studentName) {
     return { ok: false, message: `이름은 ${PARTICIPANT_LIMITS.studentName}자 이내로 입력해 주세요.` };
   }
-  if (!PARTICIPANT_PATTERN.test(participant.classLabel) || !PARTICIPANT_PATTERN.test(participant.studentName)) {
+  if (!PARTICIPANT_PATTERN.test(participant.studentNumber) || !PARTICIPANT_PATTERN.test(participant.studentName)) {
     return { ok: false, message: '한글, 영문, 숫자와 . · - _ ( ) 기호만 사용할 수 있습니다.' };
   }
   return { ok: true, participant };
 }
 
+/**
+ * 동일인 판정 기준은 학번 하나입니다. 같은 학번으로 이름을 조금 다르게 적어 제출해도
+ * 같은 학생으로 봅니다. 서버의 공개 view도 같은 규칙(학번 정규화 후 그룹)으로 접습니다.
+ */
 export function participantKey(participant: Participant): string {
-  const normalized = normalizeParticipant(participant);
-  return `${normalized.classLabel.toLocaleLowerCase('ko')}::${normalized.studentName.toLocaleLowerCase('ko')}`;
+  return normalizeParticipant(participant).studentNumber.toLocaleLowerCase('ko');
 }
 
 function canonicalize(value: unknown): unknown {
@@ -161,7 +178,7 @@ export async function createSubmission(
   return {
     ...record,
     parameterSnapshot: { ...record.parameterSnapshot },
-    classLabel: validation.participant.classLabel,
+    studentNumber: validation.participant.studentNumber,
     studentName: validation.participant.studentName,
     payloadHash: await computePayloadHash(record, subtle),
   };
@@ -176,7 +193,7 @@ export async function submissionMatchesScore(
 
 function compareEntries(left: LeaderboardEntry, right: LeaderboardEntry): number {
   if (left.score !== right.score) return right.score - left.score;
-  if (left.achievedAt !== right.achievedAt) return left.achievedAt < right.achievedAt ? -1 : 1;
+  if (left.submittedAt !== right.submittedAt) return left.submittedAt < right.submittedAt ? -1 : 1;
   return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
 }
 
@@ -191,8 +208,27 @@ export function bestPerParticipant(entries: readonly LeaderboardEntry[]): Leader
 }
 
 export interface RankOptions {
+  /**
+   * 학생별 최고 기록 1개로 접습니다. 공개 view가 서버에서 이미 접어서 보내 주지만,
+   * 다른 백엔드를 끼우거나 view가 잘못 배포된 경우에도 화면에 같은 학생이 두 번
+   * 나오지 않도록 클라이언트에서 한 번 더 접습니다.
+   */
   collapseToBest?: boolean;
   limit?: number;
+}
+
+/**
+ * 마지막 자리와 점수가 같은 학생은 잘라 내지 않고 함께 남깁니다. 10위가 842점인데
+ * 11위와 12위도 842점이라면 12명을 돌려줍니다. 같은 점수인데 화면에 누구는 있고
+ * 누구는 없는 상태를 만들지 않기 위한 것입니다.
+ */
+function sliceWithTies(ranked: readonly RankedLeaderboardEntry[], limit: number): RankedLeaderboardEntry[] {
+  if (limit <= 0) return [];
+  if (ranked.length <= limit) return [...ranked];
+  const cutoffScore = ranked[limit - 1]!.score;
+  let end = limit;
+  while (end < ranked.length && ranked[end]!.score === cutoffScore) end += 1;
+  return ranked.slice(0, end);
 }
 
 /** 동점은 같은 순위를 공유하고 다음 순위는 건너뜁니다(1, 1, 3). */
@@ -210,12 +246,19 @@ export function rankEntries(
     previousScore = entry.score;
     ranked.push({ ...entry, rank });
   }
-  return ranked.slice(0, limit);
+  return sliceWithTies(ranked, limit);
 }
 
 export interface SupabaseLeaderboardConfig {
   url: string;
+  /** publishable key(구 anon key). apikey 헤더로만 나갑니다. */
   anonKey: string;
+  /**
+   * 나중에 Supabase Auth 로그인을 붙였을 때 발급되는 사용자 access token(JWT)입니다.
+   * 값이 있을 때만 Authorization: Bearer 헤더를 붙입니다. publishable key는 JWT가
+   * 아니므로 이 자리에 넣지 마세요.
+   */
+  accessToken?: string;
   /** 제출(INSERT) 대상 원본 테이블. 학생은 이 테이블을 읽을 수 없습니다. */
   table?: string;
   /** 조회(SELECT) 대상 공개 view. 기본값은 `${table}_public` 입니다. */
@@ -231,9 +274,9 @@ interface PublicLeaderboardRow {
   simulation_version: string;
   seed: number;
   score: number;
-  class_label: string;
+  student_number: string;
   student_name: string;
-  achieved_at: string;
+  submitted_at: string;
   verification?: VerificationStatus | null;
 }
 
@@ -246,9 +289,9 @@ function toEntry(row: PublicLeaderboardRow): LeaderboardEntry {
     simulationVersion: row.simulation_version,
     seed: Number(row.seed),
     score: Number(row.score),
-    classLabel: row.class_label,
+    studentNumber: row.student_number,
     studentName: row.student_name,
-    achievedAt: row.achieved_at,
+    submittedAt: row.submitted_at,
   };
   if (VERIFICATION_VALUES.includes(row.verification as VerificationStatus)) {
     entry.verification = row.verification as VerificationStatus;
@@ -256,6 +299,11 @@ function toEntry(row: PublicLeaderboardRow): LeaderboardEntry {
   return entry;
 }
 
+/**
+ * 제출 payload. submitted_at / created_at / verification / verified_* 는 일부러 넣지 않습니다.
+ * 서버가 열 단위 GRANT로 이 열들의 INSERT를 막고 있으므로 보내면 요청 자체가 거절됩니다.
+ * achieved_at은 학생 브라우저가 잰 도전 완료 시각이며 순위 계산에는 쓰이지 않습니다.
+ */
 function toRow(submission: LeaderboardSubmission): Record<string, unknown> {
   return {
     challenge_id: submission.challengeId,
@@ -263,7 +311,7 @@ function toRow(submission: LeaderboardSubmission): Record<string, unknown> {
     seed: submission.seed,
     score: submission.score,
     parameter_snapshot: submission.parameterSnapshot,
-    class_label: submission.classLabel,
+    student_number: submission.studentNumber,
     student_name: submission.studentName,
     achieved_at: submission.achievedAt,
     payload_hash: submission.payloadHash,
@@ -292,22 +340,28 @@ export function createSupabaseLeaderboardTransport(
   const table = config.table ?? 'apex_leaderboard';
   const publicView = config.publicView ?? `${table}_public`;
   const restRoot = `${config.url.replace(/\/+$/u, '')}/rest/v1`;
+  // 익명 요청에는 publishable key를 apikey 헤더로만 보냅니다. sb_publishable_ key는 JWT가
+  // 아니므로 Authorization: Bearer 자리에 넣지 않습니다. 로그인 사용자가 생기면 그때 발급되는
+  // 실제 access token(JWT)만 Authorization으로 보냅니다.
   const headers: Record<string, string> = {
     apikey: config.anonKey,
-    Authorization: `Bearer ${config.anonKey}`,
     'Content-Type': 'application/json',
   };
+  const accessToken = config.accessToken?.trim();
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
   return {
     name: 'supabase',
     async list(query: LeaderboardQuery = {}): Promise<LeaderboardEntry[]> {
+      // 공개 view가 이미 학생별 최고 기록 1행만 내므로 여기서 받는 행 수는 곧 학생 수입니다.
+      // 표시 인원보다 넉넉히 받아 두어야 마지막 자리 동점자까지 빠짐없이 계산할 수 있습니다.
       const limit = query.limit ?? DEFAULT_LEADERBOARD_LIMIT * 5;
       const search = new URLSearchParams({
         select: PUBLIC_LEADERBOARD_COLUMNS.join(','),
         challenge_id: `eq.${definition.id}`,
         simulation_version: `eq.${definition.simulationVersion}`,
         seed: `eq.${definition.seed}`,
-        order: 'score.desc,achieved_at.asc',
+        order: 'score.desc,submitted_at.asc',
         limit: String(limit),
       });
       const response = await fetchImpl(`${restRoot}/${publicView}?${search.toString()}`, { method: 'GET', headers });
