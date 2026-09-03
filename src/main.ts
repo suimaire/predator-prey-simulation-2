@@ -128,6 +128,9 @@ if (!app) throw new Error('앱을 표시할 요소를 찾을 수 없습니다.')
 
 app.innerHTML = `
   <div class="app-shell parameters-hidden" id="app-shell">
+    <nav class="portal-nav" aria-label="과학 수업 포털 안내">
+      <a class="portal-link" href="https://suimaire.github.io/" aria-label="과학 수업 포털로 돌아가기">← 과학 수업 포털</a>
+    </nav>
     <header class="topbar">
       <div class="brand-mark" aria-hidden="true"><span></span></div>
       <div class="brand-copy"><p class="eyebrow">통합과학 2 · 생태계 상호작용</p><h1>Rabbits <span>&</span> Wolves</h1><p>Extended forest population lab</p></div>

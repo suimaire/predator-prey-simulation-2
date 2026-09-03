@@ -17,6 +17,10 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 [hidden] { display: none !important; }
 
 .app-shell { min-height: 100vh; }
+.portal-nav { padding: 12px clamp(18px, 3.5vw, 50px) 0; background: #153f2a; }
+.portal-link { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px 12px; border: 1px solid rgba(255,255,255,.35); border-radius: 9px; color: #e6eee8; background: rgba(255,255,255,.04); font-size: 13px; font-weight: 650; line-height: 1.4; text-decoration: none; white-space: nowrap; touch-action: manipulation; }
+.portal-link:hover { border-color: rgba(255,255,255,.6); background: rgba(255,255,255,.1); }
+.portal-link:focus-visible { outline: 3px solid #f1b840; outline-offset: 3px; }
 .topbar { min-height: 88px; display: flex; align-items: center; gap: 17px; padding: 14px clamp(18px, 3.5vw, 50px); color: #f8fbf7; background: #153f2a; border-bottom: 4px solid #f1ba48; }
 .brand-mark { width: 48px; height: 48px; position: relative; flex: 0 0 auto; border: 1px solid rgba(255,255,255,.32); border-radius: 14px; background: #245b3c; overflow: hidden; }
 .brand-mark::before, .brand-mark::after { content: ''; position: absolute; width: 21px; height: 13px; border-radius: 50% 0 50% 50%; background: #d9e89d; }
@@ -300,6 +304,7 @@ dialog .confirm-removal { color: #fff; border-color: #a65431; background: #a6543
 
 @media (max-width: 760px) {
   html, body { overflow-x: hidden; }
+  .portal-nav { padding-inline: 14px; }
   .topbar { min-height: 72px; padding: 11px 14px; }
   .brand-mark { width: 42px; height: 42px; }
   .brand-copy h1 { font-size: 22px; }
