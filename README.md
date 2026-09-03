@@ -56,7 +56,71 @@ npm run dev
 - Personal Best는 브라우저 `localStorage`에 score, parameter snapshot, challenge seed, simulation version, 달성 시각을 함께 저장합니다.
 - 결과의 `같은 설정으로 다시 도전`은 동일 파라미터와 동일 seed를 사용합니다.
 
-현재 record schema는 `ChallengeRecord<SimulationParameters>`와 `ApexSurvivalRecord`로 정의되어 있어 이후 서버 leaderboard 제출 구조로 재사용할 수 있지만, 이번 버전에는 서버 전송이나 학생 식별 정보를 포함하지 않습니다.
+record schema는 `ChallengeRecord<SimulationParameters>`와 `ApexSurvivalRecord`로 정의되어 있으며, 아래 중앙 기록판의 제출 payload가 이 구조를 그대로 재사용합니다.
+
+## 중앙 leaderboard
+
+Apex Survival 결과 화면에서 학급과 이름을 입력해 학급 공용 기록판에 제출할 수 있습니다. 저장소는 Supabase이고, 앱은 `src/leaderboard.ts`의 `LeaderboardTransport` 인터페이스만 알고 있으므로 다른 백엔드로 교체하거나 테스트에서 메모리 구현으로 바꿔 끼울 수 있습니다.
+
+- 기록판은 학생마다 최고 기록 1개만 남기고 상위 20명을 보여 줍니다. 동점은 같은 순위를 공유하고 먼저 달성한 기록이 앞에 옵니다.
+- 읽기와 쓰기가 서로 다른 대상을 향합니다. 조회는 공개 view `apex_leaderboard_public`, 제출은 원본 테이블 `apex_leaderboard` 입니다.
+- `VITE_SUPABASE_URL`과 `VITE_SUPABASE_ANON_KEY`가 없으면 `createLeaderboardTransport`가 `null`을 돌려주고, 기록판 자리에는 안내 문구만 표시되며 나머지 기능은 그대로 동작합니다.
+- 학급과 이름은 공백을 정리한 뒤 길이와 문자 종류를 검사하고, 화면에 그릴 때 HTML escape합니다. 입력값은 브라우저에 기억해 두어 다음 제출에서 다시 입력하지 않아도 됩니다.
+- 제출은 도전이 끝난 기록 하나당 한 번만 가능하며, 새 도전을 시작하면 제출 상태가 초기화됩니다.
+
+### 공개 범위와 권한 구조
+
+Apex Survival은 좋은 파라미터 조합을 찾는 활동이므로, 다른 학생의 `parameter_snapshot`이 보이면 활동이 성립하지 않습니다. 그래서 학생 키(publishable key)로는 원본 테이블을 **읽을 수 없게** 만들고, 공개해도 되는 열만 담은 view 하나만 열어 둡니다.
+
+| 대상 | 학생 키 권한 | 담긴 열 |
+| --- | --- | --- |
+| `apex_leaderboard` (원본) | INSERT만 | 전체. `parameter_snapshot`, `payload_hash`, `verified_*` 포함 |
+| `apex_leaderboard_public` (view) | SELECT만 | `id`, `challenge_id`, `simulation_version`, `seed`, `score`, `class_label`, `student_name`, `achieved_at` |
+
+클라이언트의 `select=` 목록을 줄이는 것만으로는 부족합니다. 학생이 개발자 도구에서 원본 테이블에 `select=*`를 직접 보낼 수 있기 때문입니다. 그래서 서버에서 `revoke all on table public.apex_leaderboard from anon, authenticated` 로 SELECT 권한 자체를 회수하고 INSERT만 되돌려 줍니다. 공개 읽기 RLS 정책도 함께 제거합니다.
+
+view는 `security_invoker = false`로 만듭니다. 이 값의 의미를 짚어 두면,
+
+- `false`(사용): view가 **소유자(postgres) 권한**으로 원본 테이블을 읽습니다. 학생에게 원본 SELECT 권한이 없어도 view가 동작합니다. 소유자 권한이므로 원본 테이블의 RLS도 우회하는데, 기록판은 원래 전체 공개이므로 의도한 동작이며 노출 범위의 상한은 view의 SELECT 목록입니다.
+- `true`: view가 **호출자(anon) 권한**으로 읽습니다. 그러면 원본 테이블 SELECT 권한이 다시 필요해지고, 그 권한을 주는 순간 `select=*`로 `parameter_snapshot`이 노출됩니다. 즉 이 구조에서는 쓸 수 없습니다.
+
+view를 만들었다는 사실만으로 안전하다고 가정하면 안 됩니다. 실제로 확인해야 하는 것은 두 가지입니다. **(1)** 원본 테이블에 `select=*`를 보냈을 때 거부되는가, **(2)** view에는 비공개 열이 아예 존재하지 않는가. 아래 "권한 검증" 절차로 확인할 수 있습니다.
+
+타입에도 같은 경계가 있습니다. `LeaderboardSubmission`(보내는 값)에만 `parameterSnapshot`과 `payloadHash`가 있고, `LeaderboardEntry`(읽는 값)에는 아예 없습니다. 화면 코드가 실수로 참조하면 컴파일이 실패합니다.
+
+제출은 `Prefer: return=minimal`로 보냅니다. 삽입한 행을 되돌려받으려면 원본 테이블 SELECT 권한이 필요한데, 그 권한이 없는 것이 이 구조의 핵심이기 때문입니다. 본인 기록 강조는 반환된 행 id 대신 학급·이름으로 판별합니다.
+
+검증 상태(`verification`)는 현재 공개 view에 넣지 않아 기록판에 배지가 뜨지 않습니다. 공개하기로 하면 `supabase/schema.sql`의 view 정의에 열 한 줄만 추가하면 되고, 클라이언트는 그 열이 오면 배지를 그리고 없으면 그리지 않도록 이미 되어 있습니다. `verified_score`와 `verifier_version`은 교사용이므로 넣지 마세요.
+
+교사가 `parameter_snapshot`을 조회하는 기능은 **아직 없습니다.** 현재는 Supabase 대시보드에서 직접 봐야 하며, 교사 로그인은 5단계(server-side verification)와 함께 설계할 예정입니다.
+
+### 권한 검증
+
+publishable key만으로 아래가 모두 기대대로 나와야 합니다.
+
+| 요청 | 기대 결과 |
+| --- | --- |
+| `GET /rest/v1/apex_leaderboard_public?select=*` | 200 · 공개 8개 열만 |
+| `GET /rest/v1/apex_leaderboard?select=*` | 401 · permission denied |
+| `GET /rest/v1/apex_leaderboard?select=parameter_snapshot` | 401 · permission denied |
+| `POST /rest/v1/apex_leaderboard` (정상 기록) | 201 |
+| `PATCH` / `DELETE` | 반영 0건 |
+
+### 제출 payload와 무결성
+
+제출할 때 `challengeId`, `simulationVersion`, `seed`, `score`, `parameterSnapshot`만 key 순서까지 정규화한 뒤 SHA-256으로 요약한 `payloadHash`를 함께 보냅니다. 학생 이름이나 달성 시각은 해시에 들어가지 않으므로 표기를 고쳐도 해시는 그대로입니다.
+
+이 해시는 점수를 증명하지 않습니다. 클라이언트가 계산하는 값이므로 위조가 가능하며, 목적은 저장된 snapshot과 제출된 점수가 서로 어긋났는지 드러내는 것과, 5단계에서 서버가 같은 정규화 규칙으로 재실행 결과를 대조할 자리를 미리 만들어 두는 것입니다. 실제 신뢰는 서버 재실행 검증이 들어올 때 생깁니다.
+
+`apex_leaderboard` 테이블에는 `verification`, `verified_score`, `verified_at`, `verifier_version` 열이 미리 있습니다. 지금은 항상 `unverified`이며 anon key로는 이 열을 쓸 수 없습니다. 기록판은 이미 `검증됨 / 재현 불일치 / 미검증`을 구분해 표시하므로, 나중에 서버가 이 열만 채우면 클라이언트 변경 없이 검증 결과가 드러납니다.
+
+### Supabase 설정
+
+1. Supabase 프로젝트를 만들고 SQL Editor에서 [`supabase/schema.sql`](supabase/schema.sql)을 한 번 실행합니다. 테이블, 인덱스, 권한, RLS 정책, 공개 view, 제출 빈도 제한 트리거가 함께 만들어집니다. 여러 번 실행해도 안전하므로 스키마가 바뀌면 다시 실행하면 됩니다.
+2. `.env.example`을 `.env.local`로 복사하고 프로젝트 URL과 **anon public key**를 채웁니다. `service_role` key는 RLS를 우회하므로 절대 클라이언트에 넣지 않습니다.
+3. GitHub Pages 배포에는 저장소 secret `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`를 등록합니다. 테이블 이름을 바꿨다면 repository variable `VITE_LEADERBOARD_TABLE`도 함께 설정합니다.
+
+RLS INSERT 정책은 현재 challenge 정의(`apex-survival` / `apex-v1` / seed `260903`)와 일치하며 검증 열을 건드리지 않는 행만 허용합니다. UPDATE와 DELETE 정책이 없으므로 학생 키로는 남의 기록을 고치거나 지울 수 없고, SELECT 권한 자체가 없으므로 원본 테이블을 읽을 수도 없습니다.
 
 ## 교육적 가정과 한계
 
@@ -76,4 +140,4 @@ npx tsc --noEmit
 npm run build
 ```
 
-테스트에는 기본 2차 소비자 deterministic regression, 3·4차 활성화, 상위 포식자의 실제 섭식, 효율 적용, 종 제거 고정, Reset, intervention, 격자 불변식, Apex score 경계, 동시 붕괴, 설정 잠금, 속도 독립성, 동일 seed Retry, Personal Best 갱신 규칙, 10,000 step 이력 제한 검사가 포함됩니다.
+테스트에는 leaderboard 제출 해시의 key 순서 독립성, 학급·이름 정규화와 검증, 학생별 최고 기록 집계와 동점 순위, 조회가 공개 view만 향하고 비공개 열을 요청하지 않는지, 서버가 여분의 열을 보내도 entry에 새어 들어오지 않는지, 제출이 `return=minimal`로 원본 테이블에 가는지, 환경 변수 미설정 시 비활성화 동작과 함께 기본 2차 소비자 deterministic regression, 3·4차 활성화, 상위 포식자의 실제 섭식, 효율 적용, 종 제거 고정, Reset, intervention, 격자 불변식, Apex score 경계, 동시 붕괴, 설정 잠금, 속도 독립성, 동일 seed Retry, Personal Best 갱신 규칙, 10,000 step 이력 제한 검사가 포함됩니다.

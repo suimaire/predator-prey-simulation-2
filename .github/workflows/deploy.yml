@@ -29,6 +29,11 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_LEADERBOARD_TABLE: ${{ vars.VITE_LEADERBOARD_TABLE }}
+          VITE_LEADERBOARD_PUBLIC_VIEW: ${{ vars.VITE_LEADERBOARD_PUBLIC_VIEW }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

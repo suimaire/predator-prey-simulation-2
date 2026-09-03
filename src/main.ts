@@ -12,6 +12,17 @@ import {
   type ApexSurvivalRecord,
 } from './challenge.ts';
 import {
+  createLeaderboardTransport,
+  createSubmission,
+  participantStorageKey,
+  participantKey,
+  rankEntries,
+  validateParticipant,
+  type LeaderboardEntry,
+  type LeaderboardTransport,
+  type Participant,
+} from './leaderboard.ts';
+import {
   DEFAULT_PARAMETERS,
   ForestSimulation,
   SPECIES_LABELS,
@@ -155,6 +166,20 @@ app.innerHTML = `
           <p id="mode-summary">파라미터와 먹이사슬 단계를 자유롭게 바꾸며 탐구합니다.</p>
         </section>
         <section class="challenge-panel" id="challenge-panel" aria-live="polite" hidden></section>
+        <section class="leaderboard-panel" id="leaderboard-panel" aria-labelledby="leaderboard-heading" hidden>
+          <div class="leaderboard-heading">
+            <div><p class="section-kicker">CLASS LEADERBOARD</p><h2 id="leaderboard-heading">학급 기록판</h2></div>
+            <button type="button" id="leaderboard-refresh">↻ 새로고침</button>
+          </div>
+          <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
+          <ol class="leaderboard-list" id="leaderboard-list"></ol>
+          <form class="leaderboard-form" id="leaderboard-form" hidden>
+            <label for="leaderboard-class"><span>학급 · 학번</span><input id="leaderboard-class" maxlength="24" placeholder="예: 2학년 3반 또는 2-3-14" autocomplete="off" /></label>
+            <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 김하늘" autocomplete="off" /></label>
+            <button type="submit" class="challenge-primary" id="leaderboard-submit">이 기록 제출하기</button>
+            <p class="leaderboard-privacy">입력한 학급·학번과 이름은 수업용 기록판에 공개되고 선생님이 관리하는 서버에 저장됩니다. 실명을 남기고 싶지 않다면 선생님과 약속한 표기를 사용하세요.</p>
+          </form>
+        </section>
         <nav class="sim-toolbar" aria-label="시뮬레이션 조작">
           <div class="run-controls"><button class="run-button" id="run-button" type="button" aria-label="시뮬레이션 실행"><span>▶</span><b>Run</b></button><button id="pause-button" type="button" aria-label="시뮬레이션 일시정지" disabled><span>Ⅱ</span><b>Pause</b></button><button id="step-button" type="button" aria-label="한 step 실행"><span>↦</span><b>Step</b></button><button id="reset-button" type="button" aria-label="시뮬레이션 Reset"><span>↺</span><b>Reset</b></button></div>
           <div class="toolbar-middle"><label for="speed-control"><span>속도</span><input id="speed-control" type="range" min="1" max="24" value="8" /><output id="speed-output">8 step/s</output></label></div>
@@ -229,6 +254,14 @@ const transferControl = element<HTMLInputElement>('#transfer-efficiency');
 const inspector = element<HTMLDivElement>('#cell-inspector');
 const removalDialog = element<HTMLDialogElement>('#removal-dialog');
 const challengePanel = element<HTMLElement>('#challenge-panel');
+const leaderboardPanel = element<HTMLElement>('#leaderboard-panel');
+const leaderboardList = element<HTMLOListElement>('#leaderboard-list');
+const leaderboardStatus = element<HTMLParagraphElement>('#leaderboard-status');
+const leaderboardForm = element<HTMLFormElement>('#leaderboard-form');
+const leaderboardClassInput = element<HTMLInputElement>('#leaderboard-class');
+const leaderboardNameInput = element<HTMLInputElement>('#leaderboard-name');
+const leaderboardSubmitButton = element<HTMLButtonElement>('#leaderboard-submit');
+const leaderboardRefreshButton = element<HTMLButtonElement>('#leaderboard-refresh');
 
 let parameters: SimulationParameters = { ...DEFAULT_PARAMETERS };
 let freeParameters: SimulationParameters = { ...parameters };
@@ -239,6 +272,22 @@ let hasApexDesign = false;
 const apexSession = new ApexChallengeSession();
 let personalBest: ApexSurvivalRecord | null = loadApexPersonalBest(window.localStorage);
 let isNewPersonalBest = false;
+const leaderboardTransport: LeaderboardTransport | null = createLeaderboardTransport({
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+  supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+  table: import.meta.env.VITE_LEADERBOARD_TABLE,
+  publicView: import.meta.env.VITE_LEADERBOARD_PUBLIC_VIEW,
+});
+type LeaderboardStatus = 'disabled' | 'idle' | 'loading' | 'ready' | 'error';
+let leaderboardStatusPhase: LeaderboardStatus = leaderboardTransport ? 'idle' : 'disabled';
+let leaderboardEntries: readonly LeaderboardEntry[] = [];
+let leaderboardMessage = '';
+let leaderboardSubmitting = false;
+let leaderboardRequestId = 0;
+let lastFinishedRecord: ApexSurvivalRecord | null = null;
+let hasSubmittedFinishedRecord = false;
+let highlightedParticipant: string | null = null;
+let leaderboardSignature = '';
 let challengeMessage = '';
 let running = false;
 let lastAnimationTime = performance.now();
@@ -355,6 +404,7 @@ function formatSteps(value: number): string {
 
 function renderChallengePanel(): void {
   challengePanel.hidden = appMode !== 'apex';
+  renderLeaderboardPanel();
   if (appMode !== 'apex') return;
   const state = apexSession.getState();
   const metric = simulation.getHistory().at(-1)!;
@@ -384,6 +434,139 @@ function renderChallengePanel(): void {
     </div>
     <ul class="challenge-levels">${statusMarkup}</ul>
     <div class="challenge-actions">${state.phase === 'setup' ? setupActions : state.phase === 'active' ? activeActions : overActions}</div>`;
+}
+
+const HTML_ESCAPES: Readonly<Record<string, string>> = Object.freeze({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' });
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/gu, (character) => HTML_ESCAPES[character]!);
+}
+
+function formatAchievedAt(isoDate: string): string {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function readStoredParticipant(): Participant | null {
+  try {
+    const serialized = window.localStorage.getItem(participantStorageKey());
+    if (!serialized) return null;
+    const parsed: unknown = JSON.parse(serialized);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const candidate = parsed as Partial<Participant>;
+    if (typeof candidate.classLabel !== 'string' || typeof candidate.studentName !== 'string') return null;
+    return { classLabel: candidate.classLabel, studentName: candidate.studentName };
+  } catch {
+    return null;
+  }
+}
+
+function rememberParticipant(participant: Participant): void {
+  try {
+    window.localStorage.setItem(participantStorageKey(), JSON.stringify(participant));
+  } catch {
+    // 저장이 막힌 브라우저에서도 제출 자체는 계속 동작합니다.
+  }
+}
+
+function leaderboardStatusText(entryCount: number): string {
+  if (leaderboardStatusPhase === 'disabled') return '이 배포에는 중앙 기록판 서버가 연결되어 있지 않습니다. Personal Best는 이 브라우저에 계속 저장됩니다.';
+  if (leaderboardStatusPhase === 'loading') return '기록판을 불러오는 중입니다…';
+  if (leaderboardStatusPhase === 'error') return leaderboardMessage || '기록판을 불러오지 못했습니다.';
+  if (leaderboardStatusPhase === 'idle') return '기록판을 준비하고 있습니다…';
+  if (entryCount === 0) return '아직 제출된 기록이 없습니다. 첫 기록을 남겨 보세요.';
+  return `학생마다 최고 기록 1개씩, 상위 ${entryCount}명을 보여 줍니다.`;
+}
+
+function verificationMarkup(entry: LeaderboardEntry): string {
+  // 공개 view가 검증 상태를 내보내지 않는 동안에는 배지를 그리지 않습니다.
+  if (!entry.verification) return '';
+  if (entry.verification === 'verified') return '<i class="is-verified" title="서버 재실행으로 확인된 기록">✔ 검증됨</i>';
+  if (entry.verification === 'rejected') return '<i class="is-rejected" title="서버 재실행 결과가 제출 점수와 다릅니다">✖ 재현 불일치</i>';
+  return '<i class="is-unverified" title="아직 서버에서 재실행하지 않은 기록">· 미검증</i>';
+}
+
+function renderLeaderboardPanel(): void {
+  leaderboardPanel.hidden = appMode !== 'apex';
+  if (appMode !== 'apex') return;
+
+  const ranked = rankEntries(leaderboardEntries);
+  const signature = JSON.stringify([leaderboardStatusPhase, leaderboardMessage, highlightedParticipant, ranked.map((entry) => [entry.id, entry.rank, entry.score, entry.verification])]);
+  if (signature !== leaderboardSignature) {
+    leaderboardSignature = signature;
+    leaderboardList.innerHTML = ranked.map((entry) => `
+      <li class="${participantKey(entry) === highlightedParticipant ? 'is-mine' : ''}">
+        <b>${entry.rank}</b>
+        <span class="leaderboard-who"><strong>${escapeHtml(entry.studentName)}</strong><small>${escapeHtml(entry.classLabel)}</small></span>
+        <span class="leaderboard-score">${entry.score.toLocaleString()} step</span>
+        <span class="leaderboard-meta">${escapeHtml(formatAchievedAt(entry.achievedAt))}${verificationMarkup(entry)}</span>
+      </li>`).join('');
+    leaderboardStatus.textContent = leaderboardStatusText(ranked.length);
+    leaderboardStatus.dataset.tone = leaderboardStatusPhase === 'error' ? 'error' : 'normal';
+  }
+
+  const phase = apexSession.getState().phase;
+  const canSubmit = Boolean(leaderboardTransport) && phase === 'over' && lastFinishedRecord !== null && !hasSubmittedFinishedRecord;
+  leaderboardForm.hidden = !canSubmit;
+  leaderboardSubmitButton.disabled = leaderboardSubmitting;
+  leaderboardSubmitButton.textContent = leaderboardSubmitting ? '제출 중…' : '이 기록 제출하기';
+  leaderboardRefreshButton.disabled = !leaderboardTransport || leaderboardStatusPhase === 'loading';
+}
+
+async function refreshLeaderboard(): Promise<void> {
+  if (!leaderboardTransport) return;
+  const requestId = leaderboardRequestId + 1;
+  leaderboardRequestId = requestId;
+  leaderboardStatusPhase = 'loading';
+  leaderboardMessage = '';
+  renderLeaderboardPanel();
+  try {
+    const entries = await leaderboardTransport.list();
+    if (requestId !== leaderboardRequestId) return;
+    leaderboardEntries = entries;
+    leaderboardStatusPhase = 'ready';
+  } catch (error) {
+    if (requestId !== leaderboardRequestId) return;
+    leaderboardStatusPhase = 'error';
+    leaderboardMessage = error instanceof Error ? error.message : '기록판을 불러오지 못했습니다.';
+  }
+  renderLeaderboardPanel();
+}
+
+async function submitFinishedRecord(): Promise<void> {
+  const record = lastFinishedRecord;
+  if (!leaderboardTransport || !record || leaderboardSubmitting || hasSubmittedFinishedRecord) return;
+  const validation = validateParticipant({ classLabel: leaderboardClassInput.value, studentName: leaderboardNameInput.value });
+  if (!validation.ok) {
+    leaderboardStatusPhase = 'error';
+    leaderboardMessage = validation.message;
+    renderLeaderboardPanel();
+    return;
+  }
+  leaderboardSubmitting = true;
+  renderLeaderboardPanel();
+  try {
+    const submission = await createSubmission(record, validation.participant);
+    await leaderboardTransport.submit(submission);
+    hasSubmittedFinishedRecord = true;
+    highlightedParticipant = participantKey(validation.participant);
+    rememberParticipant(validation.participant);
+    leaderboardSubmitting = false;
+    await refreshLeaderboard();
+    if (leaderboardStatusPhase === 'ready') leaderboardMessage = '';
+  } catch (error) {
+    leaderboardStatusPhase = 'error';
+    leaderboardMessage = error instanceof Error ? error.message : '기록을 제출하지 못했습니다.';
+  } finally {
+    leaderboardSubmitting = false;
+    renderLeaderboardPanel();
+  }
+}
+
+function clearFinishedRecord(): void {
+  lastFinishedRecord = null;
+  hasSubmittedFinishedRecord = false;
 }
 
 function updateControlAvailability(): void {
@@ -600,6 +783,9 @@ function updateAllControls(): void {
 
 function finishApexChallenge(): void {
   const record = createApexRecord(apexSession.getState());
+  lastFinishedRecord = record;
+  hasSubmittedFinishedRecord = false;
+  highlightedParticipant = null;
   try {
     const result = saveApexPersonalBest(window.localStorage, record);
     personalBest = result.best;
@@ -630,6 +816,7 @@ function beginApexChallenge(parameterSource: SimulationParameters = parameters):
   inspector.hidden = true;
   isNewPersonalBest = false;
   challengeMessage = '';
+  clearFinishedRecord();
   const initialMetric = simulation.getHistory().at(-1)!;
   const started = apexSession.start(parameters, initialMetric);
   if (!started) {
@@ -651,6 +838,7 @@ function returnToApexSetup(parameterSource: SimulationParameters = parameters): 
   inspector.hidden = true;
   isNewPersonalBest = false;
   challengeMessage = '';
+  clearFinishedRecord();
   updateAllControls();
   render();
 }
@@ -669,6 +857,8 @@ function switchMode(nextMode: AppMode): void {
   apexSession.returnToSetup();
   isNewPersonalBest = false;
   challengeMessage = '';
+  clearFinishedRecord();
+  if (nextMode === 'apex' && leaderboardStatusPhase === 'idle') void refreshLeaderboard();
   if (nextMode === 'apex') {
     if (!hasApexDesign) {
       apexDesignParameters = apexParameters(parameters);
@@ -784,6 +974,12 @@ challengePanel.addEventListener('click', (event) => {
   }
 });
 
+leaderboardRefreshButton.addEventListener('click', () => { void refreshLeaderboard(); });
+leaderboardForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void submitFinishedRecord();
+});
+
 runButton.addEventListener('click', () => {
   if (appMode === 'free' || apexSession.getState().phase === 'active') setRunning(true);
 });
@@ -860,6 +1056,12 @@ function animationLoop(time: number): void {
     if (steps > 0) render();
   }
   requestAnimationFrame(animationLoop);
+}
+
+const storedParticipant = readStoredParticipant();
+if (storedParticipant) {
+  leaderboardClassInput.value = storedParticipant.classLabel;
+  leaderboardNameInput.value = storedParticipant.studentName;
 }
 
 updateAllControls();
