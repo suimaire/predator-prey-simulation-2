@@ -34,6 +34,7 @@ import {
   type SimulationSnapshot,
   type Species,
 } from './model.ts';
+import { createFreeExplorationSeed, createInitialFreeParameters } from './seed.ts';
 
 type NumericParameterKey = Exclude<keyof SimulationParameters, 'toroidal' | 'seed' | 'foodChainDepth'>;
 type ParameterGroup = 'start' | 'forest' | 'rabbit' | 'wolf' | 'tertiary' | 'quaternary';
@@ -126,6 +127,10 @@ function parameterGroupMarkup(group: ParameterGroup, open: boolean): string {
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('앱을 표시할 요소를 찾을 수 없습니다.');
 
+// This module is evaluated once per page load, so the free-exploration seed is
+// generated once and then kept as the initial seed for this page session.
+const initialFreeParameters = createInitialFreeParameters();
+
 app.innerHTML = `
   <div class="app-shell parameters-hidden" id="app-shell">
     <nav class="portal-nav" aria-label="과학 수업 포털 안내">
@@ -151,7 +156,7 @@ app.innerHTML = `
           ${parameterGroupMarkup('start', true)}
           <section class="special-controls">
             <label class="seed-control" for="seed-input"><span><b id="seed-label">Random seed</b><small id="seed-helper">같은 seed와 설정은 같은 결과를 재현합니다.</small></span></label>
-            <div class="seed-input-row"><input id="seed-input" maxlength="40" value="${DEFAULT_PARAMETERS.seed}" /><button type="button" id="random-seed" aria-label="새 랜덤 시드 만들기">↻</button></div>
+            <div class="seed-input-row"><input id="seed-input" maxlength="40" value="${initialFreeParameters.seed}" /><button type="button" id="random-seed" aria-label="새 랜덤 시드 만들기">↻</button></div>
             <label class="toggle-control" for="toroidal-toggle"><span><b>토로이드 경계</b><small>가장자리가 반대쪽과 연결됩니다.</small></span><input id="toroidal-toggle" type="checkbox" checked /><i></i></label>
           </section>
           ${parameterGroupMarkup('forest', true)}
@@ -266,7 +271,7 @@ const leaderboardNameInput = element<HTMLInputElement>('#leaderboard-name');
 const leaderboardSubmitButton = element<HTMLButtonElement>('#leaderboard-submit');
 const leaderboardRefreshButton = element<HTMLButtonElement>('#leaderboard-refresh');
 
-let parameters: SimulationParameters = { ...DEFAULT_PARAMETERS };
+let parameters: SimulationParameters = { ...initialFreeParameters };
 let freeParameters: SimulationParameters = { ...parameters };
 let apexDesignParameters: SimulationParameters = apexParameters(parameters);
 let simulation = new ForestSimulation(parameters);
@@ -927,16 +932,14 @@ toroidalToggle.addEventListener('change', () => {
 });
 
 element<HTMLButtonElement>('#random-seed').addEventListener('click', () => {
-  const values = new Uint32Array(1);
-  crypto.getRandomValues(values);
-  parameters = { ...parameters, seed: `FOREST-${String(values[0] % 100000).padStart(5, '0')}` };
+  parameters = { ...parameters, seed: createFreeExplorationSeed() };
   freeParameters = { ...parameters };
   updateAllControls(); resetSimulation();
 });
 
 element<HTMLButtonElement>('#restore-defaults').addEventListener('click', () => {
   if (challengeIsLocked()) return;
-  parameters = appMode === 'apex' ? apexParameters({ ...DEFAULT_PARAMETERS }) : { ...DEFAULT_PARAMETERS };
+  parameters = appMode === 'apex' ? apexParameters({ ...DEFAULT_PARAMETERS }) : { ...initialFreeParameters };
   if (appMode === 'apex') apexDesignParameters = { ...parameters }; else freeParameters = { ...parameters };
   updateAllControls(); resetSimulation();
 });
