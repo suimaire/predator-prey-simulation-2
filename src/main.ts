@@ -16,6 +16,7 @@ import {
   createSubmission,
   participantStorageKey,
   participantKey,
+  rankAccentClass,
   rankEntries,
   validateParticipant,
   type LeaderboardEntry,
@@ -149,11 +150,11 @@ app.innerHTML = `
         <div class="parameter-scroll">
           <section class="leaderboard-panel" id="leaderboard-panel" aria-labelledby="leaderboard-heading" hidden>
             <div class="leaderboard-heading">
-              <h3 id="leaderboard-heading">학급 기록판</h3>
-              <button type="button" id="leaderboard-refresh" aria-label="학급 기록판 새로고침" title="새로고침">↻</button>
+              <h3 id="leaderboard-heading">생태 HAFS 보호단</h3>
+              <button type="button" id="leaderboard-refresh" aria-label="생태 HAFS 보호단 기록 새로고침" title="새로고침">↻</button>
             </div>
             <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
-            <ol class="leaderboard-list" id="leaderboard-list" tabindex="0" aria-label="학급 상위 기록"></ol>
+            <ol class="leaderboard-list" id="leaderboard-list" tabindex="0" aria-label="생태 HAFS 보호단 상위 기록"></ol>
             <form class="leaderboard-form" id="leaderboard-form" hidden>
               <label for="leaderboard-student-number"><span>학번</span><input id="leaderboard-student-number" maxlength="24" placeholder="예: 10935" autocomplete="off" /></label>
               <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 박창현" autocomplete="off" /></label>
@@ -504,7 +505,7 @@ function renderLeaderboardPanel(): void {
   if (signature !== leaderboardSignature) {
     leaderboardSignature = signature;
     leaderboardList.innerHTML = ranked.map((entry) => `
-      <li class="${participantKey(entry) === highlightedParticipant ? 'is-mine' : ''}">
+      <li class="${[rankAccentClass(entry.rank), participantKey(entry) === highlightedParticipant ? 'is-mine' : ''].filter(Boolean).join(' ')}">
         <b>${entry.rank}</b>
         <span class="leaderboard-who"><strong>${escapeHtml(entry.studentName)}</strong></span>
         <span class="leaderboard-score">${entry.score.toLocaleString()} step</span>

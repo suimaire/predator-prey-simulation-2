@@ -138,11 +138,20 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 .leaderboard-list { display: grid; gap: 4px; max-height: min(240px, 32vh); max-height: min(240px, 32dvh); margin: 0; padding: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; scrollbar-color: #c7d3ca transparent; scrollbar-gutter: stable; list-style: none; }
 .leaderboard-list:focus-visible { outline: 3px solid #f1b840; outline-offset: 2px; }
 .leaderboard-list:empty { display: none; }
-.leaderboard-list li { display: grid; grid-template-columns: 18px minmax(0,1fr) auto; gap: 3px 5px; align-items: baseline; padding: 7px 5px; border-radius: 8px; background: #f6f9f5; }
-.leaderboard-list li:nth-child(-n+3) { background: #eef6ee; }
-.leaderboard-list li.is-mine { background: #fff4cf; box-shadow: inset 0 0 0 1px #e8ce8a; }
+.leaderboard-list li { display: grid; grid-template-columns: 18px minmax(0,1fr) auto; gap: 3px 5px; align-items: baseline; padding: 6px 4px; border: 1px solid transparent; border-radius: 8px; background: #f6f9f5; }
+/* 상위 3위는 표시 순서가 아니라 rank 값으로 판정합니다. 동점이면 같은 rank를 나눠 가지므로
+   1, 1, 3 형태에서 앞의 두 명이 모두 금색을 받습니다. 색은 장식이고 순위는 숫자로도 읽힙니다. */
+.leaderboard-list li.rank-gold { border-color: #c2a13c; background: #f7f6ec; }
+.leaderboard-list li.rank-silver { border-color: #a6afa8; background: #f4f7f4; }
+.leaderboard-list li.rank-bronze { border-color: #b57c4e; background: #f8f4ef; }
+.leaderboard-list li.is-mine { border-color: #e8ce8a; background: #fff4cf; }
+.leaderboard-list li.is-mine.rank-gold { border-color: #c2a13c; }
+.leaderboard-list li.is-mine.rank-silver { border-color: #a6afa8; }
+.leaderboard-list li.is-mine.rank-bronze { border-color: #b57c4e; }
 .leaderboard-list b { color: #2d704b; font-size: 12px; font-weight: 800; text-align: center; }
-.leaderboard-list li:nth-child(1) b { color: #a5761b; }
+.leaderboard-list li.rank-gold b { color: #8a6f1d; }
+.leaderboard-list li.rank-silver b { color: #59635c; }
+.leaderboard-list li.rank-bronze b { color: #8a5a34; }
 .leaderboard-who { display: grid; min-width: 0; }
 .leaderboard-who strong { color: #22402d; font-size: 12px; overflow-wrap: anywhere; }
 .leaderboard-score { color: #1d5d3a; font-size: 12px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }

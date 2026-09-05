@@ -249,6 +249,18 @@ export function rankEntries(
   return sliceWithTies(ranked, limit);
 }
 
+/**
+ * 상위 3위에만 붙는 장식용 클래스입니다. 표시 순서가 아니라 rank 값으로 판정하므로
+ * 동점으로 같은 rank를 나눠 가진 학생은 모두 같은 테두리를 받습니다(1, 1, 3이면 금 · 금 · 동).
+ * 색은 장식일 뿐이고 순위 정보 자체는 계속 숫자로 함께 표시합니다.
+ */
+export function rankAccentClass(rank: number): string {
+  if (rank === 1) return 'rank-gold';
+  if (rank === 2) return 'rank-silver';
+  if (rank === 3) return 'rank-bronze';
+  return '';
+}
+
 export interface SupabaseLeaderboardConfig {
   url: string;
   /** publishable key(구 anon key). apikey 헤더로만 나갑니다. */

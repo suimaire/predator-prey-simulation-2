@@ -13,6 +13,7 @@ import {
   normalizeParticipant,
   participantKey,
   PUBLIC_LEADERBOARD_COLUMNS,
+  rankAccentClass,
   rankEntries,
   submissionMatchesScore,
   validateParticipant,
@@ -435,4 +436,27 @@ test('환경 변수가 없으면 transport 없이 앱이 동작한다', () => {
   assert.equal(createLeaderboardTransport({ supabaseUrl: ' ', supabaseAnonKey: 'key' }), null);
   assert.equal(createLeaderboardTransport({ supabaseUrl: 'https://example.supabase.co', supabaseAnonKey: '' }), null);
   assert.notEqual(createLeaderboardTransport({ supabaseUrl: 'https://example.supabase.co', supabaseAnonKey: 'key' }), null);
+});
+
+test('상위 3위 테두리는 표시 순서가 아니라 rank 값으로 정해진다', () => {
+  const entries = [
+    entry({ id: 'd1', score: 900, studentNumber: '10101', studentName: '가은' }),
+    entry({ id: 'd2', score: 900, studentNumber: '10102', studentName: '나연', submittedAt: '2026-09-03T02:00:00.000Z' }),
+    entry({ id: 'd3', score: 800, studentNumber: '10103', studentName: '다올', submittedAt: '2026-09-03T03:00:00.000Z' }),
+    entry({ id: 'd4', score: 700, studentNumber: '10104', studentName: '라온', submittedAt: '2026-09-03T04:00:00.000Z' }),
+  ];
+  const ranked = rankEntries(entries);
+  assert.deepEqual(ranked.map((item) => item.rank), [1, 1, 3, 4]);
+  assert.deepEqual(
+    ranked.map((item) => rankAccentClass(item.rank)),
+    ['rank-gold', 'rank-gold', 'rank-bronze', ''],
+  );
+});
+
+test('rank 값이 그대로 금 · 은 · 동 클래스로 이어진다', () => {
+  assert.equal(rankAccentClass(1), 'rank-gold');
+  assert.equal(rankAccentClass(2), 'rank-silver');
+  assert.equal(rankAccentClass(3), 'rank-bronze');
+  assert.equal(rankAccentClass(4), '');
+  assert.equal(rankAccentClass(12), '');
 });
