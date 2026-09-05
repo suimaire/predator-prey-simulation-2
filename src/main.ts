@@ -147,6 +147,20 @@ app.innerHTML = `
       <aside class="parameter-panel" aria-label="시뮬레이션 파라미터">
         <div class="panel-title-row"><div><p class="section-kicker">EXPERIMENT SETUP</p><h2>실험 조건</h2></div><button type="button" class="icon-button close-parameters" aria-label="실험 조건 닫기">×</button></div>
         <div class="parameter-scroll">
+          <section class="leaderboard-panel" id="leaderboard-panel" aria-labelledby="leaderboard-heading" hidden>
+            <div class="leaderboard-heading">
+              <h3 id="leaderboard-heading">학급 기록판</h3>
+              <button type="button" id="leaderboard-refresh" aria-label="학급 기록판 새로고침" title="새로고침">↻</button>
+            </div>
+            <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
+            <ol class="leaderboard-list" id="leaderboard-list" tabindex="0" aria-label="학급 상위 기록"></ol>
+            <form class="leaderboard-form" id="leaderboard-form" hidden>
+              <label for="leaderboard-student-number"><span>학번</span><input id="leaderboard-student-number" maxlength="24" placeholder="예: 10935" autocomplete="off" /></label>
+              <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 박창현" autocomplete="off" /></label>
+              <button type="submit" class="challenge-primary" id="leaderboard-submit">이 기록 제출하기</button>
+              <p class="leaderboard-privacy">입력한 학번과 이름은 수업용 기록판에 공개되고 선생님이 관리하는 서버에 저장됩니다. 같은 학번으로 다시 제출하면 최고 기록 하나만 남습니다. 실명을 남기고 싶지 않다면 선생님과 약속한 표기를 사용하세요.</p>
+            </form>
+          </section>
           <p class="parameter-lock-note" id="parameter-lock-note" hidden>🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</p>
           <section class="special-controls chain-controls">
             <label for="food-depth"><span><b>먹이사슬 단계</b><small>활성화할 최고 소비자 단계를 고릅니다.</small></span></label>
@@ -174,20 +188,6 @@ app.innerHTML = `
           <p id="mode-summary">파라미터와 먹이사슬 단계를 자유롭게 바꾸며 탐구합니다.</p>
         </section>
         <section class="challenge-panel" id="challenge-panel" aria-live="polite" hidden></section>
-        <section class="leaderboard-panel" id="leaderboard-panel" aria-labelledby="leaderboard-heading" hidden>
-          <div class="leaderboard-heading">
-            <div><p class="section-kicker">CLASS LEADERBOARD</p><h2 id="leaderboard-heading">학급 기록판</h2></div>
-            <button type="button" id="leaderboard-refresh">↻ 새로고침</button>
-          </div>
-          <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
-          <ol class="leaderboard-list" id="leaderboard-list"></ol>
-          <form class="leaderboard-form" id="leaderboard-form" hidden>
-            <label for="leaderboard-student-number"><span>학번</span><input id="leaderboard-student-number" maxlength="24" placeholder="예: 10935" autocomplete="off" /></label>
-            <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 박창현" autocomplete="off" /></label>
-            <button type="submit" class="challenge-primary" id="leaderboard-submit">이 기록 제출하기</button>
-            <p class="leaderboard-privacy">입력한 학번과 이름은 수업용 기록판에 공개되고 선생님이 관리하는 서버에 저장됩니다. 같은 학번으로 다시 제출하면 최고 기록 하나만 남습니다. 실명을 남기고 싶지 않다면 선생님과 약속한 표기를 사용하세요.</p>
-          </form>
-        </section>
         <nav class="sim-toolbar" aria-label="시뮬레이션 조작">
           <div class="run-controls"><button class="run-button" id="run-button" type="button" aria-label="시뮬레이션 실행"><span>▶</span><b>Run</b></button><button id="pause-button" type="button" aria-label="시뮬레이션 일시정지" disabled><span>Ⅱ</span><b>Pause</b></button><button id="step-button" type="button" aria-label="한 step 실행"><span>↦</span><b>Step</b></button><button id="reset-button" type="button" aria-label="시뮬레이션 Reset"><span>↺</span><b>Reset</b></button></div>
           <div class="toolbar-middle"><label for="speed-control"><span>속도</span><input id="speed-control" type="range" min="1" max="24" value="8" /><output id="speed-output">8 step/s</output></label></div>
@@ -453,7 +453,7 @@ function escapeHtml(value: string): string {
 function formatSubmittedAt(isoDate: string): string {
   const date = new Date(isoDate);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 }
 
 function readStoredParticipant(): Participant | null {
@@ -506,9 +506,9 @@ function renderLeaderboardPanel(): void {
     leaderboardList.innerHTML = ranked.map((entry) => `
       <li class="${participantKey(entry) === highlightedParticipant ? 'is-mine' : ''}">
         <b>${entry.rank}</b>
-        <span class="leaderboard-who"><strong>${escapeHtml(entry.studentName)}</strong><small>${escapeHtml(entry.studentNumber)}</small></span>
+        <span class="leaderboard-who"><strong>${escapeHtml(entry.studentName)}</strong></span>
         <span class="leaderboard-score">${entry.score.toLocaleString()} step</span>
-        <span class="leaderboard-meta">${escapeHtml(formatSubmittedAt(entry.submittedAt))}${verificationMarkup(entry)}</span>
+        <span class="leaderboard-meta"><small>${escapeHtml(entry.studentNumber)}</small><time datetime="${escapeHtml(entry.submittedAt)}">${escapeHtml(formatSubmittedAt(entry.submittedAt))}</time>${verificationMarkup(entry)}</span>
       </li>`).join('');
     leaderboardStatus.textContent = leaderboardStatusText(ranked.length);
     leaderboardStatus.dataset.tone = leaderboardStatusPhase === 'error' ? 'error' : 'normal';
