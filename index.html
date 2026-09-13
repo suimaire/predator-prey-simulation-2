@@ -20,6 +20,19 @@
   </head>
   <body>
     <div id="app"></div>
+    <p class="page-views page-views--standalone" data-page-views hidden></p>
+    <!-- 조회수: 포털 공통 모듈(suimaire.github.io/assets/js/page-views.js). production 에서만 로드되며 실패해도 앱과 무관 -->
+    <script>
+      (function () {
+        try {
+          if (location.hostname !== 'suimaire.github.io' && !/[?&]page-views=/.test(location.search)) return;
+          var s = document.createElement('script');
+          s.type = 'module';
+          s.src = 'https://suimaire.github.io/assets/js/page-views.js';
+          document.head.appendChild(s);
+        } catch (e) {}
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
