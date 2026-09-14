@@ -62,8 +62,9 @@ record schema는 `ChallengeRecord<SimulationParameters>`와 `ApexSurvivalRecord`
 
 Apex Survival 결과 화면에서 학번과 이름을 입력해 학급 공용 기록판에 제출할 수 있습니다. 저장소는 Supabase이고, 앱은 `src/leaderboard.ts`의 `LeaderboardTransport` 인터페이스만 알고 있으므로 다른 백엔드로 교체하거나 테스트에서 메모리 구현으로 바꿔 끼울 수 있습니다.
 
-- 기록판은 학생마다 최고 기록 1개만 남기고 상위 10명을 보여 줍니다. 마지막 자리와 점수가 같은 학생이 더 있으면 그 학생들까지 함께 표시합니다. 동점은 같은 순위를 공유하고 먼저 제출한 기록이 앞에 옵니다.
-- 학생별 최고 기록 1개로 접는 일은 **서버의 공개 view가** 합니다. 그래서 다른 학생이 몇 번 도전했고 예전 점수가 얼마였는지는 public API로도 알 수 없습니다. 원본 테이블에는 모든 제출이 그대로 남습니다.
+- 기록판은 **생태 HAFS 보호단**(기본 탭)과 **데이터 조작단** 두 보드로 나뉩니다. 어느 기록이 어느 보드에 올라갈지는 자동으로 판정하지 않고, 교사가 `board_group` 열을 기록 id 단위로 직접 정합니다(아래 "교사용 운영 절차"). 학생은 기록을 다시 제출할 필요가 없습니다.
+- 두 보드 모두 학생마다 최고 기록 1개만 남기고 상위 10명을 보여 줍니다. 마지막 자리와 점수가 같은 학생이 더 있으면 그 학생들까지 함께 표시합니다. 동점은 같은 순위를 공유하고 먼저 제출한 기록이 앞에 옵니다. 데이터 조작단도 1위부터 점수 내림차순입니다.
+- 학생별 최고 기록 1개로 접는 일은 **서버의 공개 view가** 보드별로 따로 합니다. 한 학생이 보호단 기록과 조작단 기록을 모두 가지면 각 보드에 그 학생의 해당 보드 내 최고 기록이 하나씩 올라갑니다. 그래서 다른 학생이 몇 번 도전했고 예전 점수가 얼마였는지는 public API로도 알 수 없습니다. 원본 테이블에는 모든 제출이 그대로 남습니다.
 - 학생의 고유 식별자는 `student_number`(학번) **하나**입니다. `student_name`은 기록판에 보여 주기 위한 표시 정보이며 동일인 판정에 쓰지 않습니다. 같은 학번으로 이름을 조금 다르게 적어 제출해도 같은 학생으로 봅니다. 반대로 이름이 같아도 학번이 다르면 다른 학생입니다.
 - 같은 학번의 학생이 완전히 같은 제출을 두 번 등록하는 것은 unique index `apex_leaderboard_dedupe_idx`가 막습니다. 키는 `(challenge_id, simulation_version, seed, student_number, payload_hash)`이며 `student_name`은 들어가지 않습니다. 이름 표기만 바꿔 같은 기록을 다시 내는 길을 막기 위한 것입니다. 파라미터나 점수가 다른 진짜 새 도전은 `payload_hash`가 달라져 그대로 여러 행 남습니다.
 - 학번은 자릿수나 숫자 형식을 강제하지 않고 문자열로 다룹니다. 학번 체계가 바뀌어도 스키마와 코드를 고치지 않아도 되게 하기 위한 것이며, 앞뒤 공백 정리 · 빈 값 금지 · 최대 24자 · 위험 문자 배제만 검사합니다.
@@ -78,8 +79,8 @@ Apex Survival은 좋은 파라미터 조합을 찾는 활동이므로, 다른 �
 
 | 대상 | 학생 키 권한 | 담긴 열 |
 | --- | --- | --- |
-| `apex_leaderboard` (원본) | INSERT만 | 전체. `parameter_snapshot`, `payload_hash`, `verified_*` 포함 |
-| `apex_leaderboard_public` (view) | SELECT만 | `id`, `challenge_id`, `simulation_version`, `seed`, `score`, `student_number`, `student_name`, `submitted_at`. 학번 하나당 최고 기록 1행 |
+| `apex_leaderboard` (원본) | INSERT만. `board_group`·`verification`·`verified_*`·`submitted_at`은 지정 불가, UPDATE 불가 | 전체. `parameter_snapshot`, `payload_hash`, `verified_*`, `board_group` 포함 |
+| `apex_leaderboard_public` (view) | SELECT만 | `id`, `challenge_id`, `simulation_version`, `seed`, `score`, `student_number`, `student_name`, `submitted_at`, `board_group`. `hidden` 행 제외, 보드별로 학번 하나당 최고 기록 1행 |
 
 클라이언트의 `select=` 목록을 줄이는 것만으로는 부족합니다. 학생이 개발자 도구에서 원본 테이블에 `select=*`를 직접 보낼 수 있기 때문입니다. 그래서 서버에서 `revoke all on table public.apex_leaderboard from anon, authenticated` 로 SELECT 권한 자체를 회수하고 INSERT만 되돌려 줍니다. 공개 읽기 RLS 정책도 함께 제거합니다.
 
@@ -104,11 +105,22 @@ publishable key만으로 아래가 모두 기대대로 나와야 합니다.
 
 | 요청 | 기대 결과 |
 | --- | --- |
-| `GET /rest/v1/apex_leaderboard_public?select=*` | 200 · 공개 8개 열만 |
+| `GET /rest/v1/apex_leaderboard_public?select=*` | 200 · 공개 9개 열만. 각 행에 `board_group`(`protector` 또는 `manipulator`)이 **있고** `parameter_snapshot`·`payload_hash`·`achieved_at`은 **없음**. `hidden` 값은 나오지 않음 |
+| `GET /rest/v1/apex_leaderboard_public?select=parameter_snapshot` | 400 · 열이 존재하지 않음 |
 | `GET /rest/v1/apex_leaderboard?select=*` | 401 · permission denied |
 | `GET /rest/v1/apex_leaderboard?select=parameter_snapshot` | 401 · permission denied |
-| `POST /rest/v1/apex_leaderboard` (정상 기록) | 201 |
-| `PATCH` / `DELETE` | 반영 0건 |
+| `POST /rest/v1/apex_leaderboard` (정상 기록) | 201 · 저장된 행의 `board_group`은 `protector` |
+| `POST /rest/v1/apex_leaderboard` (본문에 `"board_group":"manipulator"` 추가) | 401 · permission denied (열 INSERT 권한 없음) |
+| `PATCH /rest/v1/apex_leaderboard?id=eq.<id>` (본문 `{"board_group":"hidden"}`) | 401 · permission denied, 반영 0건 |
+| `PATCH` / `DELETE` (그 밖의 열) | 반영 0건 |
+
+터미널에서 확인할 때는 아래처럼 보냅니다. `<URL>`과 `<KEY>`는 `.env.local`의 값입니다.
+
+```bash
+curl -s "<URL>/rest/v1/apex_leaderboard_public?select=*&limit=3" -H "apikey: <KEY>"
+```
+
+응답 JSON의 각 객체에 `"board_group"` 키가 있고 `"parameter_snapshot"` 키가 없으면 정상입니다.
 
 ### 제출 payload와 무결성
 
@@ -120,11 +132,95 @@ publishable key만으로 아래가 모두 기대대로 나와야 합니다.
 
 ### Supabase 설정
 
-1. Supabase 프로젝트를 만들고 SQL Editor에서 [`supabase/schema.sql`](supabase/schema.sql)을 한 번 실행합니다. 테이블, 인덱스, 권한, RLS 정책, 공개 view, 제출 빈도 제한 트리거가 함께 만들어집니다. 여러 번 실행해도 안전하므로 스키마가 바뀌면 다시 실행하면 됩니다.
+1. Supabase 프로젝트를 만들고 SQL Editor에서 [`supabase/schema.sql`](supabase/schema.sql)을 실행합니다. 테이블, 인덱스, 권한, RLS 정책, 공개 view, 제출 빈도 제한 트리거가 함께 만들어집니다. 여러 번 실행해도 안전하므로 스키마가 바뀌면 다시 실행하면 됩니다.
 2. `.env.example`을 `.env.local`로 복사하고 프로젝트 URL과 **anon public key**를 채웁니다. `service_role` key는 RLS를 우회하므로 절대 클라이언트에 넣지 않습니다.
 3. GitHub Pages 배포에는 저장소 secret `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`를 등록합니다. 테이블 이름을 바꿨다면 repository variable `VITE_LEADERBOARD_TABLE`도 함께 설정합니다.
 
-RLS INSERT 정책은 현재 challenge 정의(`apex-survival` / `apex-v1` / seed `260903`)와 일치하며 검증 열을 건드리지 않는 행만 허용합니다. UPDATE와 DELETE 정책이 없으므로 학생 키로는 남의 기록을 고치거나 지울 수 없고, SELECT 권한 자체가 없으므로 원본 테이블을 읽을 수도 없습니다.
+RLS INSERT 정책은 현재 challenge 정의(`apex-survival` / `apex-v1` / seed `260903`)와 일치하며 검증 열과 `board_group`을 건드리지 않는 행만 허용합니다. UPDATE와 DELETE 정책이 없으므로 학생 키로는 남의 기록을 고치거나 지울 수 없고, SELECT 권한 자체가 없으므로 원본 테이블을 읽을 수도 없습니다.
+
+두 보드 기능은 `board_group` 열이 있는 view를 전제로 합니다. 기존 프로젝트라면 **새 클라이언트를 배포하기 전에** `supabase/schema.sql`을 다시 실행하세요. 열이 추가되면서 기존 행은 모두 `protector`로 채워지고, 지워지는 행은 없습니다.
+
+### 교사용 운영 절차 — 데이터 조작단 지정
+
+`board_group` 값은 세 가지입니다.
+
+| 값 | 표시 위치 |
+| --- | --- |
+| `protector` (기본값) | 생태 HAFS 보호단 |
+| `manipulator` | 데이터 조작단 — 웹 페이지에서 설정할 수 없는 파라미터 값이 사용된 기록 |
+| `hidden` | 어느 보드에도 표시하지 않음 |
+
+원칙
+- **학번 단위가 아니라 기록 id 단위로 지정합니다.** 같은 학생의 기록이라도 정상 기록은 보호단에, 조작된 기록만 조작단에 둘 수 있습니다.
+- **기존 행은 절대 삭제하지 않습니다.** 보이지 않게 하려면 `DELETE` 대신 `hidden`으로 바꿉니다. 언제든 되돌릴 수 있습니다.
+- 판정은 자동이 아닙니다. 아래 1번 쿼리로 `parameter_snapshot`을 눈으로 확인한 뒤 결정합니다.
+- 모든 쿼리는 Supabase **SQL Editor**(postgres 역할)에서 실행합니다. 학생 키로는 이 열을 바꿀 수 없습니다.
+- 값을 바꾼 뒤 학생 화면에서 기록판 ↻ 버튼을 누르거나 페이지를 새로고침하면 반영됩니다. 학생이 다시 제출할 필요는 없습니다.
+- 보드마다 학생별 **최고 기록**만 보입니다. 어떤 학생의 보호단 최고 기록을 조작단으로 옮기면, 그 학생의 다음으로 높은 보호단 기록이 있을 경우 그것이 보호단에 올라옵니다. 그 기록도 확인하세요.
+
+**1) 최근 제출 목록 확인** — `parameter_snapshot`을 눈으로 확인하는 용도입니다.
+
+```sql
+select
+  id,
+  student_number,
+  student_name,
+  score,
+  submitted_at,
+  board_group,
+  parameter_snapshot
+from public.apex_leaderboard
+where challenge_id = 'apex-survival'
+  and simulation_version = 'apex-v1'
+  and seed = 260903
+order by submitted_at desc
+limit 100;
+```
+
+**2) 특정 기록을 데이터 조작단으로 옮기기** — `id` 목록만 바꿔 씁니다.
+
+```sql
+update public.apex_leaderboard
+set board_group = 'manipulator'
+where id in (
+  '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000002'
+)
+returning id, student_number, student_name, score, board_group;
+```
+
+**3) 특정 기록을 다시 생태 HAFS 보호단으로 되돌리기**
+
+```sql
+update public.apex_leaderboard
+set board_group = 'protector'
+where id in (
+  '00000000-0000-0000-0000-000000000001'
+)
+returning id, student_number, student_name, score, board_group;
+```
+
+**4) 특정 기록을 두 보드 모두에서 숨기기** — 행은 지우지 않습니다.
+
+```sql
+update public.apex_leaderboard
+set board_group = 'hidden'
+where id in (
+  '00000000-0000-0000-0000-000000000001'
+)
+returning id, student_number, student_name, score, board_group;
+```
+
+**5) 현재 분류별 행 수**
+
+```sql
+select board_group, count(*) as row_count
+from public.apex_leaderboard
+group by board_group
+order by board_group;
+```
+
+`update`에는 반드시 `where id in (...)`을 붙이세요. `where` 없이 실행하면 모든 기록의 분류가 한꺼번에 바뀝니다. `returning` 결과에 나온 행 수가 지정한 id 수와 같은지 확인하면 오타로 빠진 id를 알아챌 수 있습니다.
 
 ## 교육적 가정과 한계
 

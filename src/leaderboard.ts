@@ -4,6 +4,16 @@ import type { SimulationParameters } from './model.ts';
 export type VerificationStatus = 'unverified' | 'verified' | 'rejected';
 
 /**
+ * 공개 기록판 분류. 교사가 SQL Editor에서 기록 id 단위로 손으로 정하며, 클라이언트는
+ * 판정하지 않고 받은 값대로 나눠 보여 주기만 합니다. 서버의 'hidden' 값은 공개 view에서
+ * 이미 빠지므로 이 타입에는 없습니다.
+ *   protector   : 생태 HAFS 보호단(기본)
+ *   manipulator : 데이터 조작단
+ */
+export type BoardGroup = 'protector' | 'manipulator';
+export const BOARD_GROUPS: readonly BoardGroup[] = Object.freeze(['protector', 'manipulator']);
+
+/**
  * 학번이 학생의 고유 식별자입니다. 이름은 기록판에 보여 주기 위한 표시 정보이며
  * 동일인 판정에는 쓰지 않습니다(참조: participantKey).
  */
@@ -38,6 +48,8 @@ export interface LeaderboardEntry {
    * 학생이 보낸 achieved_at은 공개 view에 없으므로 이 타입에도 존재하지 않습니다.
    */
   submittedAt: string;
+  /** 이 기록이 올라갈 기록판. 교사가 정한 값이며 학생 제출로는 바꿀 수 없습니다. */
+  boardGroup: BoardGroup;
   /** 공개 view가 검증 상태를 내보내기로 한 경우에만 존재합니다. */
   verification?: VerificationStatus;
 }
@@ -47,7 +59,10 @@ export interface RankedLeaderboardEntry extends LeaderboardEntry {
 }
 
 export interface LeaderboardQuery {
+  /** 기록판 하나당 받아 올 최대 행 수. */
   limit?: number;
+  /** 지정하면 그 기록판만, 없으면 두 기록판을 모두 받아 옵니다. */
+  boardGroup?: BoardGroup;
 }
 
 /**
@@ -82,6 +97,7 @@ export const PUBLIC_LEADERBOARD_COLUMNS: readonly string[] = Object.freeze([
   'student_number',
   'student_name',
   'submitted_at',
+  'board_group',
 ]);
 
 const PARTICIPANT_PATTERN = /^[가-힣ㄱ-ㅎㅏ-ㅣA-Za-z0-9 ()·._-]+$/u;
@@ -249,6 +265,20 @@ export function rankEntries(
   return sliceWithTies(ranked, limit);
 }
 
+export type RankedBoards = Record<BoardGroup, RankedLeaderboardEntry[]>;
+
+/**
+ * 기록판마다 따로 순위를 매깁니다. 학번당 최고 기록 1개, 상위 10명 + 마지막 자리 동점자,
+ * 동점 순위 공유, 동점이면 먼저 제출한 기록이 앞이라는 규칙이 두 보드에 똑같이 적용됩니다.
+ * 한 학생이 두 보드에 기록을 가지면 각 보드에서 따로 접히므로 양쪽에 모두 나타납니다.
+ */
+export function rankBoards(entries: readonly LeaderboardEntry[], options: RankOptions = {}): RankedBoards {
+  return {
+    protector: rankEntries(entries.filter((entry) => entry.boardGroup === 'protector'), options),
+    manipulator: rankEntries(entries.filter((entry) => entry.boardGroup === 'manipulator'), options),
+  };
+}
+
 /**
  * 상위 3위에만 붙는 장식용 클래스입니다. 표시 순서가 아니라 rank 값으로 판정하므로
  * 동점으로 같은 rank를 나눠 가진 학생은 모두 같은 테두리를 받습니다(1, 1, 3이면 금 · 금 · 동).
@@ -289,12 +319,18 @@ interface PublicLeaderboardRow {
   student_number: string;
   student_name: string;
   submitted_at: string;
+  board_group: string;
   verification?: VerificationStatus | null;
 }
 
 const VERIFICATION_VALUES: readonly VerificationStatus[] = ['unverified', 'verified', 'rejected'];
 
-function toEntry(row: PublicLeaderboardRow): LeaderboardEntry {
+/**
+ * 요청한 기록판과 board_group이 정확히 일치하는 행만 entry로 바꿉니다. 'hidden'이나 모르는 값,
+ * 다른 보드 값이 오면(view가 잘못 배포된 경우 등) 그 행은 버리고 화면에 올리지 않습니다.
+ */
+function toEntry(row: PublicLeaderboardRow, boardGroup: BoardGroup): LeaderboardEntry | null {
+  if (row.board_group !== boardGroup) return null;
   const entry: LeaderboardEntry = {
     id: String(row.id),
     challengeId: row.challenge_id,
@@ -304,6 +340,7 @@ function toEntry(row: PublicLeaderboardRow): LeaderboardEntry {
     studentNumber: row.student_number,
     studentName: row.student_name,
     submittedAt: row.submitted_at,
+    boardGroup,
   };
   if (VERIFICATION_VALUES.includes(row.verification as VerificationStatus)) {
     entry.verification = row.verification as VerificationStatus;
@@ -312,7 +349,7 @@ function toEntry(row: PublicLeaderboardRow): LeaderboardEntry {
 }
 
 /**
- * 제출 payload. submitted_at / created_at / verification / verified_* 는 일부러 넣지 않습니다.
+ * 제출 payload. submitted_at / created_at / verification / verified_* / board_group 은 일부러 넣지 않습니다.
  * 서버가 열 단위 GRANT로 이 열들의 INSERT를 막고 있으므로 보내면 요청 자체가 거절됩니다.
  * achieved_at은 학생 브라우저가 잰 도전 완료 시각이며 순위 계산에는 쓰이지 않습니다.
  */
@@ -362,25 +399,37 @@ export function createSupabaseLeaderboardTransport(
   const accessToken = config.accessToken?.trim();
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
+  async function listBoard(boardGroup: BoardGroup, limit: number): Promise<LeaderboardEntry[]> {
+    const search = new URLSearchParams({
+      select: PUBLIC_LEADERBOARD_COLUMNS.join(','),
+      challenge_id: `eq.${definition.id}`,
+      simulation_version: `eq.${definition.simulationVersion}`,
+      seed: `eq.${definition.seed}`,
+      board_group: `eq.${boardGroup}`,
+      order: 'score.desc,submitted_at.asc',
+      limit: String(limit),
+    });
+    // no-store: 교사가 board_group을 바꾼 뒤 새로고침하면 브라우저 HTTP 캐시가 아니라
+    // 항상 서버의 현재 분류를 받아 오도록 합니다.
+    const response = await fetchImpl(`${restRoot}/${publicView}?${search.toString()}`, { method: 'GET', headers, cache: 'no-store' });
+    if (!response.ok) throw new Error(await describeFailure(response));
+    const rows: unknown = await response.json();
+    if (!Array.isArray(rows)) throw new Error('leaderboard 응답 형식을 이해할 수 없습니다.');
+    return (rows as PublicLeaderboardRow[])
+      .map((row) => toEntry(row, boardGroup))
+      .filter((entry): entry is LeaderboardEntry => entry !== null);
+  }
+
   return {
     name: 'supabase',
     async list(query: LeaderboardQuery = {}): Promise<LeaderboardEntry[]> {
-      // 공개 view가 이미 학생별 최고 기록 1행만 내므로 여기서 받는 행 수는 곧 학생 수입니다.
+      // 공개 view가 이미 기록판별 · 학생별 최고 기록 1행만 내므로 받는 행 수는 곧 학생 수입니다.
       // 표시 인원보다 넉넉히 받아 두어야 마지막 자리 동점자까지 빠짐없이 계산할 수 있습니다.
+      // 기록판마다 따로 요청해서 한쪽 보드가 limit을 다 차지해 다른 보드가 잘리는 일을 막습니다.
       const limit = query.limit ?? DEFAULT_LEADERBOARD_LIMIT * 5;
-      const search = new URLSearchParams({
-        select: PUBLIC_LEADERBOARD_COLUMNS.join(','),
-        challenge_id: `eq.${definition.id}`,
-        simulation_version: `eq.${definition.simulationVersion}`,
-        seed: `eq.${definition.seed}`,
-        order: 'score.desc,submitted_at.asc',
-        limit: String(limit),
-      });
-      const response = await fetchImpl(`${restRoot}/${publicView}?${search.toString()}`, { method: 'GET', headers });
-      if (!response.ok) throw new Error(await describeFailure(response));
-      const rows: unknown = await response.json();
-      if (!Array.isArray(rows)) throw new Error('leaderboard 응답 형식을 이해할 수 없습니다.');
-      return (rows as PublicLeaderboardRow[]).map(toEntry);
+      const groups = query.boardGroup ? [query.boardGroup] : BOARD_GROUPS;
+      const boards = await Promise.all(groups.map((group) => listBoard(group, limit)));
+      return boards.flat();
     },
     async submit(submission: LeaderboardSubmission): Promise<void> {
       // return=minimal: 삽입한 행을 되돌려받지 않습니다. 되돌려받으려면 원본 테이블

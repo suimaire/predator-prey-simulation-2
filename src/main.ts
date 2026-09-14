@@ -16,13 +16,15 @@ import {
   createSubmission,
   participantStorageKey,
   participantKey,
-  rankAccentClass,
-  rankEntries,
+  rankBoards,
   validateParticipant,
+  BOARD_GROUPS,
+  type BoardGroup,
   type LeaderboardEntry,
   type LeaderboardTransport,
   type Participant,
 } from './leaderboard.ts';
+import { boardMarkup } from './leaderboardView.ts';
 import {
   DEFAULT_PARAMETERS,
   ForestSimulation,
@@ -148,13 +150,17 @@ app.innerHTML = `
       <aside class="parameter-panel" aria-label="시뮬레이션 파라미터">
         <div class="panel-title-row"><div><p class="section-kicker">EXPERIMENT SETUP</p><h2>실험 조건</h2></div><button type="button" class="icon-button close-parameters" aria-label="실험 조건 닫기">×</button></div>
         <div class="parameter-scroll">
-          <section class="leaderboard-panel" id="leaderboard-panel" aria-labelledby="leaderboard-heading" hidden>
+          <section class="leaderboard-panel" id="leaderboard-panel" aria-label="Apex Survival 기록판" hidden>
             <div class="leaderboard-heading">
-              <h3 id="leaderboard-heading">생태 HAFS 보호단</h3>
-              <button type="button" id="leaderboard-refresh" aria-label="생태 HAFS 보호단 기록 새로고침" title="새로고침">↻</button>
+              <div class="leaderboard-tabs" role="tablist" aria-label="기록판 선택">
+                <button type="button" role="tab" id="leaderboard-tab-protector" data-board="protector" aria-controls="leaderboard-board-protector" aria-selected="true">생태 HAFS 보호단</button>
+                <button type="button" role="tab" id="leaderboard-tab-manipulator" data-board="manipulator" aria-controls="leaderboard-board-manipulator" aria-selected="false" tabindex="-1">데이터 조작단</button>
+              </div>
+              <button type="button" id="leaderboard-refresh" aria-label="기록판 새로고침" title="새로고침">↻</button>
             </div>
             <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
-            <ol class="leaderboard-list" id="leaderboard-list" tabindex="0" aria-label="생태 HAFS 보호단 상위 기록"></ol>
+            <div class="leaderboard-board" role="tabpanel" id="leaderboard-board-protector" aria-labelledby="leaderboard-tab-protector"></div>
+            <div class="leaderboard-board" role="tabpanel" id="leaderboard-board-manipulator" aria-labelledby="leaderboard-tab-manipulator" hidden></div>
             <form class="leaderboard-form" id="leaderboard-form" hidden>
               <label for="leaderboard-student-number"><span>학번</span><input id="leaderboard-student-number" maxlength="24" placeholder="예: 10935" autocomplete="off" /></label>
               <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 박창현" autocomplete="off" /></label>
@@ -264,7 +270,14 @@ const inspector = element<HTMLDivElement>('#cell-inspector');
 const removalDialog = element<HTMLDialogElement>('#removal-dialog');
 const challengePanel = element<HTMLElement>('#challenge-panel');
 const leaderboardPanel = element<HTMLElement>('#leaderboard-panel');
-const leaderboardList = element<HTMLOListElement>('#leaderboard-list');
+const leaderboardBoards: Readonly<Record<BoardGroup, HTMLDivElement>> = {
+  protector: element<HTMLDivElement>('#leaderboard-board-protector'),
+  manipulator: element<HTMLDivElement>('#leaderboard-board-manipulator'),
+};
+const leaderboardTabs: Readonly<Record<BoardGroup, HTMLButtonElement>> = {
+  protector: element<HTMLButtonElement>('#leaderboard-tab-protector'),
+  manipulator: element<HTMLButtonElement>('#leaderboard-tab-manipulator'),
+};
 const leaderboardStatus = element<HTMLParagraphElement>('#leaderboard-status');
 const leaderboardForm = element<HTMLFormElement>('#leaderboard-form');
 const leaderboardNumberInput = element<HTMLInputElement>('#leaderboard-student-number');
@@ -297,6 +310,8 @@ let lastFinishedRecord: ApexSurvivalRecord | null = null;
 let hasSubmittedFinishedRecord = false;
 let highlightedParticipant: string | null = null;
 let leaderboardSignature = '';
+// 기본 표시는 보호단입니다. 기억해 두지 않으므로 페이지를 다시 열면 늘 보호단부터 보입니다.
+let activeLeaderboardBoard: BoardGroup = 'protector';
 let challengeMessage = '';
 let running = false;
 let lastAnimationTime = performance.now();
@@ -445,18 +460,6 @@ function renderChallengePanel(): void {
     <div class="challenge-actions">${state.phase === 'setup' ? setupActions : state.phase === 'active' ? activeActions : overActions}</div>`;
 }
 
-const HTML_ESCAPES: Readonly<Record<string, string>> = Object.freeze({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' });
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/gu, (character) => HTML_ESCAPES[character]!);
-}
-
-function formatSubmittedAt(isoDate: string): string {
-  const date = new Date(isoDate);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-}
-
 function readStoredParticipant(): Participant | null {
   try {
     const serialized = window.localStorage.getItem(participantStorageKey());
@@ -484,34 +487,36 @@ function leaderboardStatusText(entryCount: number): string {
   if (leaderboardStatusPhase === 'loading') return '기록판을 불러오는 중입니다…';
   if (leaderboardStatusPhase === 'error') return leaderboardMessage || '기록판을 불러오지 못했습니다.';
   if (leaderboardStatusPhase === 'idle') return '기록판을 준비하고 있습니다…';
-  if (entryCount === 0) return '아직 제출된 기록이 없습니다. 첫 기록을 남겨 보세요.';
+  // 기록이 없으면 보드 본문이 빈 상태 문구를 대신 보여 주므로 상태 줄은 비워 둡니다.
+  if (entryCount === 0) return '';
   return `학생마다 최고 기록 1개씩, 상위 ${entryCount}명을 보여 줍니다.`;
-}
-
-function verificationMarkup(entry: LeaderboardEntry): string {
-  // 공개 view가 검증 상태를 내보내지 않는 동안에는 배지를 그리지 않습니다.
-  if (!entry.verification) return '';
-  if (entry.verification === 'verified') return '<i class="is-verified" title="서버 재실행으로 확인된 기록">✔ 검증됨</i>';
-  if (entry.verification === 'rejected') return '<i class="is-rejected" title="서버 재실행 결과가 제출 점수와 다릅니다">✖ 재현 불일치</i>';
-  return '<i class="is-unverified" title="아직 서버에서 재실행하지 않은 기록">· 미검증</i>';
 }
 
 function renderLeaderboardPanel(): void {
   leaderboardPanel.hidden = appMode !== 'apex';
   if (appMode !== 'apex') return;
 
-  const ranked = rankEntries(leaderboardEntries);
-  const signature = JSON.stringify([leaderboardStatusPhase, leaderboardMessage, highlightedParticipant, ranked.map((entry) => [entry.id, entry.rank, entry.score, entry.verification])]);
+  const boards = rankBoards(leaderboardEntries);
+  const signature = JSON.stringify([
+    leaderboardStatusPhase,
+    leaderboardMessage,
+    highlightedParticipant,
+    activeLeaderboardBoard,
+    BOARD_GROUPS.map((board) => boards[board].map((entry) => [entry.id, entry.rank, entry.score, entry.verification])),
+  ]);
   if (signature !== leaderboardSignature) {
     leaderboardSignature = signature;
-    leaderboardList.innerHTML = ranked.map((entry) => `
-      <li class="${[rankAccentClass(entry.rank), participantKey(entry) === highlightedParticipant ? 'is-mine' : ''].filter(Boolean).join(' ')}">
-        <b>${entry.rank}</b>
-        <span class="leaderboard-who"><strong>${escapeHtml(entry.studentName)}</strong></span>
-        <span class="leaderboard-score">${entry.score.toLocaleString()} step</span>
-        <span class="leaderboard-meta"><small>${escapeHtml(entry.studentNumber)}</small><time datetime="${escapeHtml(entry.submittedAt)}">${escapeHtml(formatSubmittedAt(entry.submittedAt))}</time>${verificationMarkup(entry)}</span>
-      </li>`).join('');
-    leaderboardStatus.textContent = leaderboardStatusText(ranked.length);
+    for (const board of BOARD_GROUPS) {
+      const isActive = board === activeLeaderboardBoard;
+      leaderboardTabs[board].setAttribute('aria-selected', String(isActive));
+      leaderboardTabs[board].tabIndex = isActive ? 0 : -1;
+      leaderboardBoards[board].hidden = !isActive;
+      leaderboardBoards[board].innerHTML = boardMarkup(board, boards[board], {
+        highlightedParticipant,
+        showEmptyState: leaderboardStatusPhase === 'ready',
+      });
+    }
+    leaderboardStatus.textContent = leaderboardStatusText(boards[activeLeaderboardBoard].length);
     leaderboardStatus.dataset.tone = leaderboardStatusPhase === 'error' ? 'error' : 'normal';
   }
 
@@ -982,6 +987,23 @@ challengePanel.addEventListener('click', (event) => {
 });
 
 leaderboardRefreshButton.addEventListener('click', () => { void refreshLeaderboard(); });
+function selectLeaderboardBoard(board: BoardGroup, focus = false): void {
+  activeLeaderboardBoard = board;
+  renderLeaderboardPanel();
+  if (focus) leaderboardTabs[board].focus();
+}
+for (const board of BOARD_GROUPS) {
+  leaderboardTabs[board].addEventListener('click', () => selectLeaderboardBoard(board));
+  leaderboardTabs[board].addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return;
+    event.preventDefault();
+    const index = BOARD_GROUPS.indexOf(board);
+    const next = event.key === 'Home' ? 0
+      : event.key === 'End' ? BOARD_GROUPS.length - 1
+        : (index + (event.key === 'ArrowRight' ? 1 : -1) + BOARD_GROUPS.length) % BOARD_GROUPS.length;
+    selectLeaderboardBoard(BOARD_GROUPS[next]!, true);
+  });
+}
 leaderboardForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void submitFinishedRecord();

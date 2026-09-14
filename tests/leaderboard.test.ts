@@ -44,6 +44,7 @@ function entry(overrides: Partial<LeaderboardEntry> & Pick<LeaderboardEntry, 'id
     studentNumber: overrides.studentNumber,
     studentName: overrides.studentName,
     submittedAt: overrides.submittedAt ?? '2026-09-03T01:00:00.000Z',
+    boardGroup: overrides.boardGroup ?? 'protector',
   };
 }
 
@@ -159,31 +160,44 @@ test('조회는 공개 view를 향하고 비공개 열을 요청하지 않는다
     student_number: '20314',
     student_name: '김하늘',
     submitted_at: '2026-09-03T01:00:00.000Z',
+    board_group: 'protector',
   };
+  const caches: (RequestCache | undefined)[] = [];
   const transport = createSupabaseLeaderboardTransport(
     { url: 'https://example.supabase.co/', anonKey: 'anon-key' },
-    async (url) => {
+    async (url, init) => {
       calls.push(url);
-      return new Response(JSON.stringify([row]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      caches.push(init?.cache);
+      const rows = url.includes('board_group=eq.protector') ? [row] : [];
+      return new Response(JSON.stringify(rows), { status: 200, headers: { 'Content-Type': 'application/json' } });
     },
   );
 
   const entries = await transport.list();
-  assert.equal(calls[0]!.startsWith('https://example.supabase.co/rest/v1/apex_leaderboard_public?'), true);
-  assert.match(calls[0]!, /simulation_version=eq\.apex-v1/u);
-  assert.match(calls[0]!, /seed=eq\.260903/u);
-  // 동점 tie-break는 학생이 보낸 achieved_at이 아니라 서버가 채운 submitted_at을 씁니다.
-  assert.match(calls[0]!, /order=score\.desc%2Csubmitted_at\.asc/u);
-  for (const forbidden of ['parameter_snapshot', 'payload_hash', 'achieved_at', 'verified_score', 'verified_at', 'verifier_version']) {
-    assert.equal(calls[0]!.includes(forbidden), false, `조회 URL에 ${forbidden}가 들어 있습니다.`);
+  // 기록판마다 따로 요청합니다.
+  assert.equal(calls.length, 2);
+  for (const call of calls) {
+    assert.equal(call.startsWith('https://example.supabase.co/rest/v1/apex_leaderboard_public?'), true);
+    assert.match(call, /simulation_version=eq\.apex-v1/u);
+    assert.match(call, /seed=eq\.260903/u);
+    // 동점 tie-break는 학생이 보낸 achieved_at이 아니라 서버가 채운 submitted_at을 씁니다.
+    assert.match(call, /order=score\.desc%2Csubmitted_at\.asc/u);
+    for (const forbidden of ['parameter_snapshot', 'payload_hash', 'achieved_at', 'verified_score', 'verified_at', 'verifier_version']) {
+      assert.equal(call.includes(forbidden), false, `조회 URL에 ${forbidden}가 들어 있습니다.`);
+    }
   }
+  assert.deepEqual(calls.map((call) => new URL(call).searchParams.get('board_group')), ['eq.protector', 'eq.manipulator']);
+  // 교사가 분류를 바꾼 뒤 새로고침하면 브라우저 캐시가 아니라 서버 값을 받아야 합니다.
+  assert.deepEqual(caches, ['no-store', 'no-store']);
+  assert.equal(entries.length, 1);
   assert.equal(entries[0]!.id, '7');
   assert.equal(entries[0]!.studentNumber, '20314');
+  assert.equal(entries[0]!.boardGroup, 'protector');
 });
 
 test('공개 열 목록에는 비공개 필드가 들어 있지 않다', () => {
   assert.deepEqual([...PUBLIC_LEADERBOARD_COLUMNS], [
-    'id', 'challenge_id', 'simulation_version', 'seed', 'score', 'student_number', 'student_name', 'submitted_at',
+    'id', 'challenge_id', 'simulation_version', 'seed', 'score', 'student_number', 'student_name', 'submitted_at', 'board_group',
   ]);
   // achieved_at은 학생이 보낸 값이라 공개 view에서 뺐습니다. 조회 목록에도 있으면 안 됩니다.
   for (const forbidden of ['achieved_at', 'parameter_snapshot', 'payload_hash', 'verification', 'verified_score', 'verified_at', 'verifier_version']) {
@@ -201,6 +215,7 @@ test('서버가 여분의 열을 보내더라도 entry로 새어 들어오지 �
     student_number: '20314',
     student_name: '김하늘',
     submitted_at: '2026-09-03T01:00:00.000Z',
+    board_group: 'protector',
     achieved_at: '2026-09-03T00:59:00.000Z',
     parameter_snapshot: parameters,
     payload_hash: 'b'.repeat(64),
@@ -213,7 +228,7 @@ test('서버가 여분의 열을 보내더라도 entry로 새어 들어오지 �
   const [entry] = await transport.list();
   assert.deepEqual(
     Object.keys(entry!).sort(),
-    ['challengeId', 'id', 'score', 'seed', 'simulationVersion', 'studentName', 'studentNumber', 'submittedAt'],
+    ['boardGroup', 'challengeId', 'id', 'score', 'seed', 'simulationVersion', 'studentName', 'studentNumber', 'submittedAt'],
   );
 });
 
@@ -227,6 +242,7 @@ test('공개 view가 검증 상태를 내보내면 그때만 entry에 담긴다'
     student_number: '20314',
     student_name: '김하늘',
     submitted_at: '2026-09-03T01:00:00.000Z',
+    board_group: 'protector',
   };
   const make = (row: object) => createSupabaseLeaderboardTransport(
     { url: 'https://example.supabase.co', anonKey: 'anon-key' },
@@ -259,6 +275,8 @@ test('제출은 원본 테이블로 가고 삽입한 행을 되돌려받지 않�
   assert.equal(body.payload_hash, submission.payloadHash);
   assert.equal('verification' in body, false);
   assert.equal('verified_score' in body, false);
+  // 기록판 분류는 교사만 정합니다. 학생 제출 payload에 실리면 안 됩니다.
+  assert.equal('board_group' in body, false);
   // 제출 시각은 서버 default now()가 정합니다. 클라이언트가 실어 보내는 일이 없어야 합니다.
   assert.equal('submitted_at' in body, false);
   assert.equal('created_at' in body, false);
@@ -275,27 +293,36 @@ test('익명 요청은 publishable key를 apikey 헤더로만 보낸다', async 
     { url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' },
     capture,
   );
-  await anonymous.list();
-  assert.equal(seen[0]!.apikey, 'sb_publishable_test');
-  // sb_publishable_ key는 JWT가 아니므로 Authorization: Bearer 자리에 넣지 않습니다.
-  assert.equal('Authorization' in seen[0]!, false);
+  // list()는 기록판마다 한 번씩 요청하므로 매번 받은 헤더를 모두 확인합니다.
+  const headersOf = async (transport: { list(): Promise<unknown> }) => {
+    seen.length = 0;
+    await transport.list();
+    assert.equal(seen.length, 2);
+    return [...seen];
+  };
+
+  for (const headers of await headersOf(anonymous)) {
+    assert.equal(headers.apikey, 'sb_publishable_test');
+    // sb_publishable_ key는 JWT가 아니므로 Authorization: Bearer 자리에 넣지 않습니다.
+    assert.equal('Authorization' in headers, false);
+  }
 
   // 나중에 Supabase Auth 로그인을 붙이면 그때 발급되는 access token만 Authorization으로 갑니다.
   const signedIn = createSupabaseLeaderboardTransport(
     { url: 'https://example.supabase.co', anonKey: 'sb_publishable_test', accessToken: 'user-jwt' },
     capture,
   );
-  await signedIn.list();
-  assert.equal(seen[1]!.apikey, 'sb_publishable_test');
-  assert.equal(seen[1]!.Authorization, 'Bearer user-jwt');
+  for (const headers of await headersOf(signedIn)) {
+    assert.equal(headers.apikey, 'sb_publishable_test');
+    assert.equal(headers.Authorization, 'Bearer user-jwt');
+  }
 
   // 공백뿐인 token은 없는 것으로 봅니다.
   const blank = createSupabaseLeaderboardTransport(
     { url: 'https://example.supabase.co', anonKey: 'sb_publishable_test', accessToken: '   ' },
     capture,
   );
-  await blank.list();
-  assert.equal('Authorization' in seen[2]!, false);
+  for (const headers of await headersOf(blank)) assert.equal('Authorization' in headers, false);
 });
 
 test('동점 정렬은 서버가 채운 제출 시각을 따른다', () => {

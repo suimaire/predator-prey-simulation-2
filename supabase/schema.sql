@@ -5,7 +5,8 @@
 --   원본 테이블 apex_leaderboard : 학생(anon)은 INSERT만. 그것도 지정된 열에만.
 --                                  SELECT/UPDATE/DELETE 전부 없음.
 --   공개 view apex_leaderboard_public : 학생은 SELECT만. 공개해도 되는 열만 담고,
---                                       학생 한 명당 최고 기록 1행만 냅니다.
+--                                       기록판(board_group)마다 학생 한 명당 최고 기록 1행만 냅니다.
+--   board_group 열 : 교사 전용 분류. 학생은 INSERT 때 지정할 수도, UPDATE 할 수도 없습니다.
 --
 -- parameter_snapshot과 payload_hash는 원본 테이블에만 있고, 학생 키로는 원본 테이블을
 -- 어떤 방식으로도 읽을 수 없으므로 select=* 로도 가져올 수 없습니다.
@@ -51,19 +52,45 @@ create table if not exists public.apex_leaderboard (
   verified_score     integer,
   verified_at        timestamptz,
   verifier_version   text,
+  -- 기록판 분류. 교사가 SQL Editor에서 손으로만 정합니다. 학생 요청은 지정할 수 없습니다.
+  board_group        text        not null default 'protector',
   created_at         timestamptz not null default now(),
 
   constraint apex_leaderboard_score_range   check (score between 0 and 1000000),
   constraint apex_leaderboard_number_length check (char_length(student_number) between 1 and 24),
   constraint apex_leaderboard_name_length   check (char_length(student_name) between 1 and 16),
   constraint apex_leaderboard_hash_format   check (payload_hash ~ '^[0-9a-f]{64}$'),
-  constraint apex_leaderboard_verification  check (verification in ('unverified', 'verified', 'rejected'))
+  constraint apex_leaderboard_verification  check (verification in ('unverified', 'verified', 'rejected')),
+  constraint apex_leaderboard_board_group   check (board_group in ('protector', 'manipulator', 'hidden'))
 );
 
 -- 이 스크립트를 예전 버전으로 이미 한 번 실행했다면 위 create table 은 아무 일도 하지 않으므로
 -- 열을 따로 추가해 줍니다. 이미 있으면 조용히 넘어갑니다.
 alter table public.apex_leaderboard
   add column if not exists submitted_at timestamptz not null default now();
+
+-- 기록판 분류 열
+--   'protector'   : 생태 HAFS 보호단(기본값)
+--   'manipulator' : 데이터 조작단. 웹 페이지에서 설정할 수 없는 파라미터 값이 사용된 기록
+--   'hidden'      : 두 보드 어디에도 보이지 않음. 행은 지우지 않고 남깁니다.
+-- 자동 판정은 없습니다. 교사가 parameter_snapshot을 눈으로 확인하고 SQL Editor(postgres
+-- 역할)에서 기록 id 단위로 UPDATE 합니다. 아래 CHECK는 들어갈 수 있는 값의 종류만 제한하는
+-- 타입 제약이며, 어떤 기록이 조작인지 판정하지 않습니다.
+-- 열을 추가하는 순간 기존 행은 모두 기본값 'protector'로 채워집니다.
+alter table public.apex_leaderboard
+  add column if not exists board_group text not null default 'protector';
+
+do $board_group$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.apex_leaderboard'::regclass and conname = 'apex_leaderboard_board_group'
+  ) then
+    alter table public.apex_leaderboard
+      add constraint apex_leaderboard_board_group check (board_group in ('protector', 'manipulator', 'hidden'));
+  end if;
+end
+$board_group$;
 
 -- class_label -> student_number 이름 변경. rename 이므로 저장된 값이 그대로 따라옵니다.
 -- 열을 새로 만들고 복사한 뒤 예전 열을 DROP 하는 방식이 아니므로 데이터가 사라질 여지가
@@ -154,8 +181,8 @@ alter table public.apex_leaderboard enable row level security;
 revoke all on table public.apex_leaderboard from anon, authenticated;
 
 -- 테이블 전체가 아니라 열을 지정해서 INSERT를 허용합니다. 목록에 없는
--- submitted_at / created_at / verification / verified_* 는 학생 요청이 값을 넣을 수 없고
--- 서버 기본값만 들어갑니다. 학생이 개발자 도구에서 submitted_at을 직접 실어 보내면
+-- submitted_at / created_at / verification / verified_* / board_group 은 학생 요청이 값을 넣을
+-- 수 없고 서버 기본값만 들어갑니다. 즉 학생 제출은 언제나 'protector'로 들어갑니다. 학생이 개발자 도구에서 submitted_at을 직접 실어 보내면
 -- PostgREST가 42501 permission denied 로 거절합니다. 즉 제출 시각 위조가 불가능합니다.
 grant insert (
   challenge_id,
@@ -178,6 +205,8 @@ drop policy if exists apex_leaderboard_read on public.apex_leaderboard;
 -- 이 값이 아니라 서버가 채우는 submitted_at으로 매기므로, 학생이 achieved_at을 조작해도
 -- 기록판 순서에는 영향을 주지 못합니다.
 -- UPDATE / DELETE 정책이 없으므로 학생 키로는 기존 기록을 고치거나 지울 수 없습니다.
+-- board_group 도 마찬가지로 UPDATE GRANT와 정책이 모두 없으므로 학생 키로는 바꿀 수 없고,
+-- 교사가 SQL Editor(postgres 역할, RLS 우회)에서만 바꿉니다.
 -- (관리용 service_role key는 RLS를 우회하므로 절대 클라이언트에 넣지 마세요.)
 drop policy if exists apex_leaderboard_insert on public.apex_leaderboard;
 create policy apex_leaderboard_insert
@@ -192,6 +221,7 @@ create policy apex_leaderboard_insert
     and verified_score is null
     and verified_at is null
     and verifier_version is null
+    and board_group = 'protector'
     and achieved_at between now() - interval '1 day' and now() + interval '1 hour'
   );
 
@@ -219,10 +249,16 @@ create policy apex_leaderboard_insert
 -- 대표 기록 선택 순서는 score desc → submitted_at asc → id asc 입니다. 같은 학생이 같은
 -- 최고점을 여러 번 냈다면 먼저 서버에 도착한 기록이 대표가 되고, 그것마저 같으면 id로
 -- 결정론적으로 끊습니다.
+--
+-- 기록판 분류(board_group)
+--   'hidden' 행은 view에서 아예 빠지므로 두 보드 어디에도 나오지 않습니다.
+--   "학번당 최고 기록 1행" 은 board_group 별로 따로 고릅니다. 한 학생이 보호단 기록과
+--   조작단 기록을 모두 가지면 각 보드에 그 학생의 해당 그룹 내 최고 기록이 하나씩 올라갑니다.
+--   상위 10명 + 동점자 자르기와 순위 계산은 클라이언트가 보드마다 같은 규칙으로 합니다.
 drop view if exists public.apex_leaderboard_public;
 create view public.apex_leaderboard_public
 with (security_invoker = false) as
-select distinct on (challenge_id, simulation_version, seed, participant_key)
+select distinct on (challenge_id, simulation_version, seed, board_group, participant_key)
   id,
   challenge_id,
   simulation_version,
@@ -233,7 +269,9 @@ select distinct on (challenge_id, simulation_version, seed, participant_key)
   -- 서버가 채운 제출 시각만 공개합니다. 학생이 보낸 achieved_at은 일부러 뺐습니다.
   -- 목록에 없으면 클라이언트가 어떤 요청으로도 꺼낼 수 없고, TypeScript 타입에도
   -- 존재하지 않으므로 화면 코드가 실수로 참조하면 컴파일 단계에서 걸립니다.
-  submitted_at
+  submitted_at,
+  -- 'protector' 또는 'manipulator' 만 나옵니다('hidden'은 아래 where에서 제외).
+  board_group
 from (
   -- participant_key는 여기서만 쓰고 위 select 목록에는 넣지 않습니다. 공개 열 목록을
   -- 늘리지 않으려는 것이며, distinct on 은 대상 식을 select 목록에 요구하지 않습니다.
@@ -242,11 +280,13 @@ from (
     base.*,
     lower(regexp_replace(btrim(base.student_number), '\s+', ' ', 'g')) as participant_key
   from public.apex_leaderboard as base
+  where base.board_group <> 'hidden'
 ) as normalized
 order by
   challenge_id,
   simulation_version,
   seed,
+  board_group,
   participant_key,
   score desc,
   submitted_at asc,
@@ -255,6 +295,8 @@ order by
 -- 검증 상태(verification)를 기록판에 보여 주고 싶어지면 위 목록에 한 줄 추가하면 됩니다.
 -- 클라이언트는 이미 그 열이 오면 배지를 그리고, 없으면 그리지 않도록 되어 있습니다.
 -- verified_score / verified_at / verifier_version 은 교사용이므로 넣지 마세요.
+-- parameter_snapshot 과 그 파생값(특정 파라미터를 꺼낸 식, 해시, "조작 여부" 같은 계산값)도
+-- 절대 넣지 마세요. 학생에게는 board_group 이라는 교사의 결론만 보입니다.
 
 alter view public.apex_leaderboard_public owner to postgres;
 
