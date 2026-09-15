@@ -71,7 +71,8 @@ alter table public.apex_leaderboard
 
 -- 기록판 분류 열
 --   'protector'   : 생태 HAFS 보호단(기본값)
---   'manipulator' : 데이터 조작단. 웹 페이지에서 설정할 수 없는 파라미터 값이 사용된 기록
+--   'manipulator' : HAFS AI RED TEAM. 웹 페이지에서 설정할 수 없는 파라미터 값이 사용된 기록.
+--                   이 값이 하나라도 있는 학생은 같은 기록판 범위의 보호단에서 빠집니다(3번 view).
 --   'hidden'      : 두 보드 어디에도 보이지 않음. 행은 지우지 않고 남깁니다.
 -- 자동 판정은 없습니다. 교사가 parameter_snapshot을 눈으로 확인하고 SQL Editor(postgres
 -- 역할)에서 기록 id 단위로 UPDATE 합니다. 아래 CHECK는 들어갈 수 있는 값의 종류만 제한하는
@@ -252,12 +253,25 @@ create policy apex_leaderboard_insert
 --
 -- 기록판 분류(board_group)
 --   'hidden' 행은 view에서 아예 빠지므로 두 보드 어디에도 나오지 않습니다.
---   "학번당 최고 기록 1행" 은 board_group 별로 따로 고릅니다. 한 학생이 보호단 기록과
---   조작단 기록을 모두 가지면 각 보드에 그 학생의 해당 그룹 내 최고 기록이 하나씩 올라갑니다.
+--   "학번당 최고 기록 1행" 은 board_group 별로 따로 고릅니다.
+--   RED TEAM 우선 규칙: 같은 기록판 범위(challenge_id, simulation_version, seed) 안에서
+--   'manipulator' 기록이 하나라도 있는 학생(participant_key)은 'protector' 행이 전부 빠지고
+--   HAFS AI RED TEAM 에만 나옵니다. 원본 행은 그대로이며, 교사가 그 학생의 'manipulator'
+--   지정을 모두 되돌리면 남아 있던 'protector' 기록이 다시 보호단에 나옵니다.
 --   상위 10명 + 동점자 자르기와 순위 계산은 클라이언트가 보드마다 같은 규칙으로 합니다.
 drop view if exists public.apex_leaderboard_public;
 create view public.apex_leaderboard_public
 with (security_invoker = false) as
+-- participant_key는 여기서만 쓰고 아래 select 목록에는 넣지 않습니다. 공개 열 목록을
+-- 늘리지 않으려는 것이며, distinct on 은 대상 식을 select 목록에 요구하지 않습니다.
+-- student_name은 들어가지 않습니다. 같은 학번이면 이름 표기가 달라도 한 학생입니다.
+with normalized as (
+  select
+    base.*,
+    lower(regexp_replace(btrim(base.student_number), '\s+', ' ', 'g')) as participant_key
+  from public.apex_leaderboard as base
+  where base.board_group <> 'hidden'
+)
 select distinct on (challenge_id, simulation_version, seed, board_group, participant_key)
   id,
   challenge_id,
@@ -272,16 +286,17 @@ select distinct on (challenge_id, simulation_version, seed, board_group, partici
   submitted_at,
   -- 'protector' 또는 'manipulator' 만 나옵니다('hidden'은 아래 where에서 제외).
   board_group
-from (
-  -- participant_key는 여기서만 쓰고 위 select 목록에는 넣지 않습니다. 공개 열 목록을
-  -- 늘리지 않으려는 것이며, distinct on 은 대상 식을 select 목록에 요구하지 않습니다.
-  -- student_name은 들어가지 않습니다. 같은 학번이면 이름 표기가 달라도 한 학생입니다.
-  select
-    base.*,
-    lower(regexp_replace(btrim(base.student_number), '\s+', ' ', 'g')) as participant_key
-  from public.apex_leaderboard as base
-  where base.board_group <> 'hidden'
-) as normalized
+from normalized
+where normalized.board_group = 'manipulator'
+  or not exists (
+    select 1
+    from normalized as red_team
+    where red_team.board_group = 'manipulator'
+      and red_team.challenge_id = normalized.challenge_id
+      and red_team.simulation_version = normalized.simulation_version
+      and red_team.seed = normalized.seed
+      and red_team.participant_key = normalized.participant_key
+  )
 order by
   challenge_id,
   simulation_version,

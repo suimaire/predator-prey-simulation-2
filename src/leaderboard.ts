@@ -8,7 +8,7 @@ export type VerificationStatus = 'unverified' | 'verified' | 'rejected';
  * 판정하지 않고 받은 값대로 나눠 보여 주기만 합니다. 서버의 'hidden' 값은 공개 view에서
  * 이미 빠지므로 이 타입에는 없습니다.
  *   protector   : 생태 HAFS 보호단(기본)
- *   manipulator : 데이터 조작단
+ *   manipulator : HAFS AI RED TEAM. 이 기록이 있는 학생은 같은 기록판의 보호단에서 빠집니다.
  */
 export type BoardGroup = 'protector' | 'manipulator';
 export const BOARD_GROUPS: readonly BoardGroup[] = Object.freeze(['protector', 'manipulator']);
@@ -267,14 +267,24 @@ export function rankEntries(
 
 export type RankedBoards = Record<BoardGroup, RankedLeaderboardEntry[]>;
 
+/** 공개 view의 RED TEAM 우선 규칙과 같은 범위: 기록판(challenge · version · seed) + 학생. */
+function boardScopedParticipantKey(entry: LeaderboardEntry): string {
+  return JSON.stringify([entry.challengeId, entry.simulationVersion, entry.seed, participantKey(entry)]);
+}
+
 /**
  * 기록판마다 따로 순위를 매깁니다. 학번당 최고 기록 1개, 상위 10명 + 마지막 자리 동점자,
  * 동점 순위 공유, 동점이면 먼저 제출한 기록이 앞이라는 규칙이 두 보드에 똑같이 적용됩니다.
- * 한 학생이 두 보드에 기록을 가지면 각 보드에서 따로 접히므로 양쪽에 모두 나타납니다.
+ * 같은 기록판 범위에서 manipulator 기록이 있는 학생은 보호단에서 빠지고 RED TEAM에만 나옵니다.
+ * 공개 view가 이미 그렇게 거르지만, view가 예전 정의로 남아 있어도 화면에서 겹치지 않게 한 번 더 거릅니다.
  */
 export function rankBoards(entries: readonly LeaderboardEntry[], options: RankOptions = {}): RankedBoards {
+  const redTeam = new Set(entries.filter((entry) => entry.boardGroup === 'manipulator').map(boardScopedParticipantKey));
   return {
-    protector: rankEntries(entries.filter((entry) => entry.boardGroup === 'protector'), options),
+    protector: rankEntries(
+      entries.filter((entry) => entry.boardGroup === 'protector' && !redTeam.has(boardScopedParticipantKey(entry))),
+      options,
+    ),
     manipulator: rankEntries(entries.filter((entry) => entry.boardGroup === 'manipulator'), options),
   };
 }

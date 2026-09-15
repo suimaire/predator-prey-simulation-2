@@ -9,17 +9,17 @@ import {
 /** 기록판 화면 문구와 마크업. DOM에 의존하지 않으므로 테스트에서 그대로 호출할 수 있습니다. */
 export const BOARD_LABELS: Readonly<Record<BoardGroup, string>> = Object.freeze({
   protector: '생태 HAFS 보호단',
-  manipulator: '데이터 조작단',
+  manipulator: 'HAFS AI RED TEAM',
 });
 
 export const BOARD_DESCRIPTIONS: Readonly<Record<BoardGroup, string>> = Object.freeze({
   protector: '',
-  manipulator: '웹 페이지에서 설정할 수 없는 파라미터 값이 사용된 기록',
+  manipulator: '시스템의 경계를 탐색한 특별 기록',
 });
 
 const BOARD_EMPTY_MESSAGES: Readonly<Record<BoardGroup, string>> = Object.freeze({
   protector: '아직 제출된 기록이 없습니다. 첫 기록을 남겨 보세요.',
-  manipulator: '현재 데이터 조작단에 올라간 기록이 없습니다.',
+  manipulator: '현재 HAFS AI RED TEAM에 올라간 기록이 없습니다.',
 });
 
 const HTML_ESCAPES: Readonly<Record<string, string>> = Object.freeze({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' });

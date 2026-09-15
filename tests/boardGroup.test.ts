@@ -61,14 +61,37 @@ test('board_group을 자동으로 정하는 함수·트리거는 없다', () => 
   for (const body of functions) assert.equal(body.includes('board_group'), false);
 });
 
-test('공개 view는 board_group을 노출하고 hidden을 빼며 보드별로 학번당 1행을 고른다', () => {
-  const view = statement(/create view public\.apex_leaderboard_public[\s\S]*?;/u);
-  assert.match(view, /with \(security_invoker = false\)/u);
-  assert.match(view, /distinct on \(challenge_id, simulation_version, seed, board_group, participant_key\)/u);
-  assert.match(view, /where base\.board_group <> 'hidden'/u);
-  assert.match(view, /order by\s+challenge_id,\s+simulation_version,\s+seed,\s+board_group,\s+participant_key,\s+score desc,\s+submitted_at asc,\s+id asc/u);
+const migration = readFileSync(new URL('../supabase/migrations/20260915_red_team_precedence.sql', import.meta.url), 'utf8')
+  .replace(/--.*$/gmu, '');
 
-  const selectList = view.slice(view.indexOf('distinct on'), view.indexOf('from ('));
+/** schema.sql(전체 설치)과 migration(운영 DB 패치)의 view 정의가 같은 규칙을 담는지 함께 검사합니다. */
+const publicViews: readonly [string, string][] = [
+  ['schema.sql', statement(/create view public\.apex_leaderboard_public[\s\S]*?;/u)],
+  ['migration', (() => {
+    const match = migration.match(/create or replace view public\.apex_leaderboard_public[\s\S]*?;/u);
+    assert.ok(match, 'migration에서 view 정의를 찾지 못했습니다.');
+    return match[0];
+  })()],
+];
+
+test('공개 view는 board_group을 노출하고 hidden을 빼며 보드별로 학번당 1행을 고른다', () => {
+  for (const [source, view] of publicViews) {
+    assert.match(view, /with \(security_invoker = false\)/u, source);
+    assert.match(view, /distinct on \(challenge_id, simulation_version, seed, board_group, participant_key\)/u, source);
+    assert.match(view, /lower\(regexp_replace\(btrim\(base\.student_number\), '\\s\+', ' ', 'g'\)\) as participant_key/u, source);
+    assert.match(view, /where base\.board_group <> 'hidden'/u, source);
+    assert.match(view, /order by\s+challenge_id,\s+simulation_version,\s+seed,\s+board_group,\s+participant_key,\s+score desc,\s+submitted_at asc,\s+id asc/u, source);
+    // 공개 열 9개와 순서가 그대로여야 운영 DB에서 create or replace view 가 성공합니다.
+    const columns = view.slice(view.indexOf('distinct on'), view.indexOf('from normalized'));
+    assert.equal(
+      columns.replace(/\s+/gu, ' ').trim(),
+      'distinct on (challenge_id, simulation_version, seed, board_group, participant_key) id, challenge_id, simulation_version, seed, score, student_number, student_name, submitted_at, board_group',
+      source,
+    );
+  }
+
+  const [, view] = publicViews[0]!;
+  const selectList = view.slice(view.indexOf('distinct on'), view.indexOf('from normalized'));
   assert.match(selectList, /\bboard_group\b/u);
   for (const forbidden of ['parameter_snapshot', 'payload_hash', 'achieved_at', 'verified_score', 'verifier_version', 'base.*']) {
     assert.equal(selectList.includes(forbidden), false, `공개 view 열에 ${forbidden}가 있습니다.`);
@@ -76,6 +99,22 @@ test('공개 view는 board_group을 노출하고 hidden을 빼며 보드별로 �
   // 학생 키는 view SELECT만, 원본 테이블 SELECT는 여전히 없습니다.
   assert.match(sql, /grant select on table public\.apex_leaderboard_public to anon, authenticated;/u);
   assert.doesNotMatch(sql, /grant select[^;]*on table public\.apex_leaderboard\s+to/iu);
+});
+
+test('공개 view는 같은 기록판 범위에 manipulator 기록이 있는 학생의 protector 행을 뺀다', () => {
+  for (const [source, view] of publicViews) {
+    const rule = view.slice(view.indexOf('from normalized'), view.indexOf('order by'));
+    assert.match(rule, /where normalized\.board_group = 'manipulator'\s+or not exists \(/u, source);
+    assert.match(rule, /from normalized as red_team/u, source);
+    assert.match(rule, /red_team\.board_group = 'manipulator'/u, source);
+    // 범위는 distinct on 과 같은 기록판 열 + 학생 키. 이름으로는 묶지 않습니다.
+    for (const column of ['challenge_id', 'simulation_version', 'seed', 'participant_key']) {
+      assert.match(rule, new RegExp(`red_team\\.${column} = normalized\\.${column}`, 'u'), `${source}: ${column}`);
+    }
+    assert.equal(rule.includes('student_name'), false, source);
+  }
+  // 운영 DB 패치는 행 · 테이블을 건드리지 않습니다.
+  assert.doesNotMatch(migration, /\b(drop|delete|update|insert|truncate|alter table)\b/iu);
 });
 
 test('클라이언트 공개 열 목록도 view와 같고 비공개 열이 없다', () => {
@@ -109,7 +148,7 @@ function entry(
   };
 }
 
-test('보호단과 조작단은 각각 학번당 최고 기록 1개로 접힌다', () => {
+test('보호단과 RED TEAM은 각각 학번당 최고 기록 1개로 접힌다', () => {
   const boards = rankBoards([
     entry('p1', 500, '20314', 'protector'),
     entry('p2', 700, '20314', 'protector'),
@@ -119,29 +158,107 @@ test('보호단과 조작단은 각각 학번당 최고 기록 1개로 접힌다
     entry('m3', 4000, '20502', 'manipulator'),
   ]);
   assert.deepEqual(boards.protector.map((item) => [item.id, item.rank]), [['p2', 1], ['p3', 2]]);
-  // 조작단도 1위부터 점수 내림차순입니다.
+  // RED TEAM도 1위부터 점수 내림차순입니다.
   assert.deepEqual(boards.manipulator.map((item) => [item.id, item.rank]), [['m2', 1], ['m3', 2]]);
 });
 
-test('한 학생이 양쪽에 기록을 가지면 두 보드에 각각 나타난다', () => {
+function ids(ranked: readonly { id: string; rank: number }[]): [string, number][] {
+  return ranked.map((item) => [item.id, item.rank]);
+}
+
+test('Case A: protector 기록만 있는 학생은 보호단에만 나온다', () => {
+  const boards = rankBoards([entry('a', 10000, '10101', 'protector')]);
+  assert.deepEqual(ids(boards.protector), [['a', 1]]);
+  assert.deepEqual(boards.manipulator, []);
+});
+
+test('Case B: manipulator 기록만 있는 학생은 RED TEAM에만 나온다', () => {
+  const boards = rankBoards([entry('b', 20000, '10102', 'manipulator')]);
+  assert.deepEqual(boards.protector, []);
+  assert.deepEqual(ids(boards.manipulator), [['b', 1]]);
+});
+
+test('Case C: 두 분류 기록을 모두 가진 학생은 RED TEAM에만 나온다', () => {
   const boards = rankBoards([
-    entry('safe', 800, '20314', 'protector'),
-    entry('forged', 99999, '20314', 'manipulator'),
+    entry('c-safe', 30000, '10103', 'protector'),
+    entry('c-red', 40000, '10103', 'manipulator'),
     entry('other', 900, '20401', 'protector'),
   ]);
-  assert.deepEqual(boards.protector.map((item) => [item.id, item.rank]), [['other', 1], ['safe', 2]]);
-  assert.deepEqual(boards.manipulator.map((item) => [item.id, item.rank]), [['forged', 1]]);
-  // 조작단 점수가 보호단 순위에 끼어들지 않습니다.
-  assert.equal(boards.protector.some((item) => item.score === 99999), false);
+  // 제외된 학생이 빠진 뒤에도 남은 학생은 1위부터 다시 매겨집니다.
+  assert.deepEqual(ids(boards.protector), [['other', 1]]);
+  assert.deepEqual(ids(boards.manipulator), [['c-red', 1]]);
+});
+
+test('Case C-2: RED TEAM 점수가 더 낮아도 우선 규칙은 같다', () => {
+  const boards = rankBoards([
+    entry('safe', 99999, '20314', 'protector'),
+    entry('red', 10, '20314', 'manipulator'),
+  ]);
+  assert.deepEqual(boards.protector, []);
+  assert.deepEqual(ids(boards.manipulator), [['red', 1]]);
+});
+
+test('Case D: protector 여러 개 + manipulator 하나면 보호단의 모든 기록이 빠진다', () => {
+  const boards = rankBoards([
+    entry('d-p1', 5000, '10104', 'protector', '2026-09-03T01:00:00.000Z'),
+    entry('d-p2', 9000, '10104', 'protector', '2026-09-03T02:00:00.000Z'),
+    entry('d-p3', 7000, ' 10104 ', 'protector', '2026-09-03T03:00:00.000Z'),
+    entry('d-red', 3000, '10104', 'manipulator', '2026-09-03T04:00:00.000Z'),
+    entry('e-red', 3000, '10105', 'manipulator', '2026-09-03T00:30:00.000Z'),
+  ]);
+  // 공백만 다른 학번(' 10104 ')도 같은 학생이므로 함께 빠집니다.
+  assert.deepEqual(boards.protector, []);
+  // RED TEAM은 기존 규칙대로: 동점이면 같은 순위, 먼저 제출한 기록이 앞.
+  assert.deepEqual(ids(boards.manipulator), [['e-red', 1], ['d-red', 1]]);
+});
+
+test('Case E: 이름이 같아도 학번이 다르면 서로 영향을 주지 않는다', () => {
+  const boards = rankBoards([
+    { ...entry('kim-1', 8000, '10201', 'protector'), studentName: '김하프스' },
+    { ...entry('kim-2', 6000, '10202', 'manipulator'), studentName: '김하프스' },
+  ]);
+  assert.deepEqual(ids(boards.protector), [['kim-1', 1]]);
+  assert.deepEqual(ids(boards.manipulator), [['kim-2', 1]]);
+});
+
+test('Case F: 다른 seed · version · challenge의 manipulator 기록은 이 기록판의 보호단에 영향을 주지 않는다', () => {
+  const here = entry('here', 8000, '10301', 'protector');
+  for (const elsewhere of [
+    { ...entry('other-seed', 9000, '10301', 'manipulator'), seed: APEX_CHALLENGE_CONFIG.seed + 1 },
+    { ...entry('other-version', 9000, '10301', 'manipulator'), simulationVersion: 'apex-v0' },
+    { ...entry('other-challenge', 9000, '10301', 'manipulator'), challengeId: 'another-challenge' },
+  ]) {
+    const boards = rankBoards([here, elsewhere]);
+    assert.deepEqual(ids(boards.protector), [['here', 1]], elsewhere.id);
+  }
+  // 같은 범위라면 제외됩니다.
+  assert.deepEqual(rankBoards([here, entry('same-scope', 1, '10301', 'manipulator')]).protector, []);
+});
+
+test('manipulator 지정을 모두 되돌리면 남아 있던 protector 기록이 다시 보호단에 나온다', () => {
+  const records = [entry('p', 800, '20314', 'protector'), entry('m', 9000, '20314', 'manipulator')];
+  assert.deepEqual(rankBoards(records).protector, []);
+  const reverted = records.map((item) => ({ ...item, boardGroup: 'protector' as const }));
+  assert.deepEqual(ids(rankBoards(reverted).protector), [['m', 1]]);
+  // 원본 입력 배열은 바뀌지 않습니다.
+  assert.deepEqual(records.map((item) => item.boardGroup), ['protector', 'manipulator']);
+});
+
+test('hidden만 있는 학생은 공개 응답에 없으므로 어느 보드에도 나오지 않는다', async () => {
+  const entries = await serve({ protector: [row(1, 700, '10401', 'hidden')], manipulator: [row(2, 900, '10401', 'hidden')] }).list();
+  const boards = rankBoards(entries);
+  assert.deepEqual([boards.protector.length, boards.manipulator.length], [0, 0]);
 });
 
 function topTenWithTies(board: BoardGroup): LeaderboardEntry[] {
+  // 보드마다 다른 학생입니다. 같은 학번이면 RED TEAM 우선 규칙으로 보호단에서 빠지기 때문입니다.
+  const prefix = board === 'protector' ? 'p' : 'm';
   return [
-    ...Array.from({ length: 9 }, (_, index) => entry(`${board}-top${index}`, 1000 - index * 10, `3${index}`, board)),
-    entry(`${board}-tie-late`, 842, '41', board, '2026-09-03T03:00:00.000Z'),
-    entry(`${board}-tie-early`, 842, '42', board, '2026-09-03T01:00:00.000Z'),
-    entry(`${board}-tie-mid`, 842, '43', board, '2026-09-03T02:00:00.000Z'),
-    entry(`${board}-below`, 500, '44', board, '2026-09-03T04:00:00.000Z'),
+    ...Array.from({ length: 9 }, (_, index) => entry(`${board}-top${index}`, 1000 - index * 10, `${prefix}3${index}`, board)),
+    entry(`${board}-tie-late`, 842, `${prefix}41`, board, '2026-09-03T03:00:00.000Z'),
+    entry(`${board}-tie-early`, 842, `${prefix}42`, board, '2026-09-03T01:00:00.000Z'),
+    entry(`${board}-tie-mid`, 842, `${prefix}43`, board, '2026-09-03T02:00:00.000Z'),
+    entry(`${board}-below`, 500, `${prefix}44`, board, '2026-09-03T04:00:00.000Z'),
   ];
 }
 
@@ -230,7 +347,7 @@ test('공개 view 응답에 비공개 열이 섞여 와도 entry에는 들어가
 // 화면 마크업
 // ---------------------------------------------------------------------------
 
-test('데이터 조작단이 비어 있으면 빈 목록 대신 설명과 안내 문구만 그린다', () => {
+test('HAFS AI RED TEAM이 비어 있으면 빈 목록 대신 설명과 안내 문구만 그린다', () => {
   const html = boardMarkup('manipulator', []);
   assert.equal(html.includes('<ol'), false);
   assert.equal(html.includes('<li'), false);
@@ -243,10 +360,11 @@ test('데이터 조작단이 비어 있으면 빈 목록 대신 설명과 안내
   assert.equal(loading.includes('leaderboard-empty'), false);
 });
 
-test('조작단에는 설명 문구가 붙고 1위부터 순위가 그려진다', () => {
+test('RED TEAM에는 설명 문구가 붙고 1위부터 순위가 그려진다', () => {
   assert.equal(BOARD_LABELS.protector, '생태 HAFS 보호단');
-  assert.equal(BOARD_LABELS.manipulator, '데이터 조작단');
-  assert.equal(BOARD_DESCRIPTIONS.manipulator, '웹 페이지에서 설정할 수 없는 파라미터 값이 사용된 기록');
+  assert.equal(BOARD_LABELS.manipulator, 'HAFS AI RED TEAM');
+  assert.equal(BOARD_DESCRIPTIONS.manipulator, '시스템의 경계를 탐색한 특별 기록');
+  assert.equal(boardMarkup('manipulator', []).includes('데이터 조작단'), false);
 
   const boards = rankBoards([
     entry('m1', 4000, '20501', 'manipulator'),
@@ -256,9 +374,9 @@ test('조작단에는 설명 문구가 붙고 1위부터 순위가 그려진다'
   assert.equal((html.match(/<li /gu) ?? []).length, 2);
   assert.ok(html.indexOf('9,000') < html.indexOf('4,000'));
   assert.match(html, /<b>1<\/b>/u);
-  assert.match(html, /aria-label="데이터 조작단 상위 기록"/u);
+  assert.match(html, /aria-label="HAFS AI RED TEAM 상위 기록"/u);
 
-  // 보호단에는 조작단 설명이 붙지 않습니다.
+  // 보호단에는 RED TEAM 설명이 붙지 않습니다.
   const protector = boardMarkup('protector', rankBoards([entry('p1', 800, '20314', 'protector')]).protector);
   assert.equal(protector.includes('leaderboard-board-note'), false);
 });
