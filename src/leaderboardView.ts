@@ -17,6 +17,15 @@ export const BOARD_DESCRIPTIONS: Readonly<Record<BoardGroup, string>> = Object.f
   manipulator: '시스템의 경계를 탐색한 특별 기록',
 });
 
+/**
+ * 탭 버튼 안의 마크업. 좁은 탭에서 줄이 바뀔 때 "RED TEAM"이 갈라지지 않도록 묶습니다.
+ * 글자 자체는 BOARD_LABELS와 같습니다(textContent 기준).
+ */
+export const BOARD_TAB_MARKUP: Readonly<Record<BoardGroup, string>> = Object.freeze({
+  protector: '생태 HAFS 보호단',
+  manipulator: 'HAFS AI <span class="tab-nowrap">RED TEAM</span>',
+});
+
 const BOARD_EMPTY_MESSAGES: Readonly<Record<BoardGroup, string>> = Object.freeze({
   protector: '아직 제출된 기록이 없습니다. 첫 기록을 남겨 보세요.',
   manipulator: '현재 HAFS AI RED TEAM에 올라간 기록이 없습니다.',

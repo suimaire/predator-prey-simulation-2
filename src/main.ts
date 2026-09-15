@@ -24,7 +24,7 @@ import {
   type LeaderboardTransport,
   type Participant,
 } from './leaderboard.ts';
-import { BOARD_LABELS, boardMarkup } from './leaderboardView.ts';
+import { BOARD_TAB_MARKUP, boardMarkup } from './leaderboardView.ts';
 import {
   DEFAULT_PARAMETERS,
   ForestSimulation,
@@ -153,8 +153,8 @@ app.innerHTML = `
           <section class="leaderboard-panel" id="leaderboard-panel" aria-label="Apex Survival 기록판" hidden>
             <div class="leaderboard-heading">
               <div class="leaderboard-tabs" role="tablist" aria-label="기록판 선택">
-                <button type="button" role="tab" id="leaderboard-tab-protector" data-board="protector" aria-controls="leaderboard-board-protector" aria-selected="true">${BOARD_LABELS.protector}</button>
-                <button type="button" role="tab" id="leaderboard-tab-manipulator" data-board="manipulator" aria-controls="leaderboard-board-manipulator" aria-selected="false" tabindex="-1">${BOARD_LABELS.manipulator}</button>
+                <button type="button" role="tab" id="leaderboard-tab-protector" data-board="protector" aria-controls="leaderboard-board-protector" aria-selected="true">${BOARD_TAB_MARKUP.protector}</button>
+                <button type="button" role="tab" id="leaderboard-tab-manipulator" data-board="manipulator" aria-controls="leaderboard-board-manipulator" aria-selected="false" tabindex="-1">${BOARD_TAB_MARKUP.manipulator}</button>
               </div>
               <button type="button" id="leaderboard-refresh" aria-label="기록판 새로고침" title="새로고침">↻</button>
             </div>

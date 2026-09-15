@@ -11,7 +11,7 @@ import {
   type BoardGroup,
   type LeaderboardEntry,
 } from '../src/leaderboard.ts';
-import { BOARD_DESCRIPTIONS, BOARD_LABELS, boardMarkup } from '../src/leaderboardView.ts';
+import { BOARD_DESCRIPTIONS, BOARD_LABELS, BOARD_TAB_MARKUP, boardMarkup } from '../src/leaderboardView.ts';
 
 // ---------------------------------------------------------------------------
 // schema.sql 정적 검사
@@ -365,6 +365,11 @@ test('RED TEAM에는 설명 문구가 붙고 1위부터 순위가 그려진다',
   assert.equal(BOARD_LABELS.manipulator, 'HAFS AI RED TEAM');
   assert.equal(BOARD_DESCRIPTIONS.manipulator, '시스템의 경계를 탐색한 특별 기록');
   assert.equal(boardMarkup('manipulator', []).includes('데이터 조작단'), false);
+  // 탭 마크업은 줄바꿈 위치만 정할 뿐 글자는 표시명과 같습니다.
+  for (const board of BOARD_GROUPS) {
+    assert.equal(BOARD_TAB_MARKUP[board].replace(/<[^>]*>/gu, ''), BOARD_LABELS[board], board);
+  }
+  assert.match(BOARD_TAB_MARKUP.manipulator, /^HAFS AI <span class="tab-nowrap">RED TEAM<\/span>$/u);
 
   const boards = rankBoards([
     entry('m1', 4000, '20501', 'manipulator'),
