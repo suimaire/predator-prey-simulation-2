@@ -379,3 +379,9 @@ dialog .confirm-removal { color: #fff; border-color: #a65431; background: #a6543
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; transition-duration: .001ms !important; }
 }
+
+/* 페이지 하단 브랜드 footer (index.html) */
+.site-brand-footer { padding: 18px 16px 16px; border-top: 1px solid #d7dfd8; text-align: center; }
+.site-brand-footer p { margin: 0; line-height: 1.5; }
+.site-brand-footer__name { color: #17251c; font-size: 13px; font-weight: 700; }
+.site-brand-footer__credit { color: #6f7c74; font-size: 12px; }
