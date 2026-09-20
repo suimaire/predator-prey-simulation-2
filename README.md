@@ -50,7 +50,8 @@ npm run dev
 - 도전 설정은 먹이사슬 깊이를 4차 소비자까지로 고정하고 `APEX_CHALLENGE_CONFIG`의 seed `260903`을 사용합니다.
 - `Start Challenge`를 누르면 현재 파라미터의 snapshot을 저장하고 step 0에서 새 simulation을 시작합니다.
 - 매 logical step 직후 식생의 `forestAbundance`와 네 소비자 population을 확인합니다. 어느 하나라도 처음 0이 된 step은 점수에 포함하지 않습니다.
-- 진행 중과 결과 화면에서는 결과에 영향을 주는 설정을 잠급니다. 화면 진행 속도만 바꿀 수 있으며 score 계산에는 사용되지 않습니다.
+- 진행 중에는 결과에 영향을 주는 설정을 잠그고, 종료 즉시 자동 해제합니다. Parameters에서 다음 도전의 조건을 수정해도 최종 결과와 숲·그래프는 새 도전 전까지 유지됩니다. 변경한 조건으로 새 도전을 시작하거나 이전 기록과 같은 조건으로 다시 도전할 수 있습니다.
+- 화면 진행 속도는 1~40 step/s(기본 8)이며 score 계산에는 사용되지 않습니다.
 - 종 제거 실험은 Apex Survival에서 비활성화되고 자유 탐구에서는 기존대로 동작합니다.
 - 종료 시 마지막 숲, 그래프, 생태 피라미드와 설정을 보존하며 붕괴 step을 그래프에 표시합니다.
 - Personal Best는 브라우저 `localStorage`에 score, parameter snapshot, challenge seed, simulation version, 달성 시각을 함께 저장합니다.

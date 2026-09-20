@@ -137,14 +137,18 @@ const initialFreeParameters = createInitialFreeParameters();
 
 app.innerHTML = `
   <div class="app-shell parameters-hidden" id="app-shell">
-    <nav class="portal-nav" aria-label="과학 수업 포털 안내">
-      <a class="portal-link" href="https://suimaire.github.io/" aria-label="과학 수업 포털로 돌아가기">← 과학 수업 포털</a>
-    </nav>
     <header class="topbar">
-      <div class="brand-mark" aria-hidden="true"><span></span></div>
-      <div class="brand-copy"><p class="eyebrow">통합과학 2 · 생태계 상호작용</p><h1>Rabbits <span>&</span> Wolves</h1><p>Extended forest population lab</p></div>
-      <div class="food-chain" id="header-chain" aria-label="현재 먹이 관계"></div>
-      <div class="lesson-chip"><b>탐구 02</b><span>영양 단계와 생태계 변화</span></div>
+      <div class="header-intro">
+        <nav class="portal-nav" aria-label="과학 수업 포털 안내"><a class="portal-link" href="https://suimaire.github.io/" aria-label="과학 수업 포털로 돌아가기">← 과학 수업 포털</a><span class="lesson-chip">탐구 02 · 영양 단계와 생태계 변화</span></nav>
+        <div class="brand-row"><div class="brand-mark" aria-hidden="true"><span></span></div><div class="brand-copy"><p class="eyebrow">통합과학 2 · 생태계 상호작용</p><h1>Rabbits <span>&</span> Wolves</h1><p>Extended forest population lab</p></div></div>
+        <div class="food-chain" id="header-chain" aria-label="현재 먹이 관계"></div>
+      </div>
+      <section class="pyramid-card ecological-pyramid--header" aria-label="실시간 생태 피라미드">
+        <div class="pyramid-toolbar"><h2>실시간 생태 피라미드</h2><div class="segmented-control" role="group" aria-label="피라미드 표현 방식"><button type="button" data-pyramid-mode="numbers" aria-pressed="true">개체수</button><button type="button" data-pyramid-mode="energy" aria-pressed="false">에너지 흐름</button></div></div>
+        <div class="pyramid" id="pyramid" aria-describedby="pyramid-note"></div>
+        <p class="pyramid-note" id="pyramid-note"></p>
+        <p class="chain-summary" id="chain-summary"></p>
+      </section>
     </header>
 
     <div class="lab-layout">
@@ -156,35 +160,28 @@ app.innerHTML = `
 
         <section class="simulation-stage" aria-label="시뮬레이션과 조작">
           <div class="simulation-main">
-            <section class="population-hud" aria-label="현재 실험 상태">
-              <div class="hud-readings">
-                <div class="step-readout"><span>STEP</span><strong id="step-value">000</strong></div>
-                <article class="mini-population forest-population"><i class="forest-key" aria-hidden="true"></i><span><small>식생량</small><b id="forest-population"></b><em>성장 단계 합</em></span></article>
-                <div class="population-strip" id="population-strip"></div>
-              </div>
-              <p class="population-comparison" id="population-comparison"></p>
-            </section>
             <section class="board-card" aria-labelledby="forest-heading">
               <div class="board-heading"><div><p class="section-kicker">LIVE ECOSYSTEM</p><h2 id="forest-heading">숲 생태계</h2></div><div class="legend" id="board-legend"></div></div>
+              <section class="population-hud" aria-label="현재 실험 상태">
+                <div class="hud-readings">
+                  <div class="step-readout"><span>STEP</span><strong id="step-value">000</strong></div>
+                  <article class="mini-population forest-population"><i class="forest-key" aria-hidden="true"></i><span><small>식생량</small><b id="forest-population"></b><em>성장 단계 합</em></span></article>
+                  <div class="population-strip" id="population-strip"></div>
+                </div>
+                <p class="population-comparison" id="population-comparison"></p>
+              </section>
               <div class="canvas-frame"><canvas id="forest-board" tabindex="0" aria-label="격자형 숲 생태계. 칸을 선택하면 상태를 확인할 수 있습니다."></canvas><div class="board-status" id="board-status"><span></span><b>준비됨</b></div><div class="cell-inspector" id="cell-inspector" hidden></div></div>
               <div class="board-footnote"><span>칸을 클릭하거나 터치해 식생 단계와 개체 에너지를 확인하세요.</span><span><b>공간 규칙</b> 식생과 동물은 함께 존재 · 동물은 한 칸에 한 마리</span></div>
             </section>
           </div>
 
           <div class="simulation-sidebar">
-            <section class="pyramid-card ecological-pyramid--compact">
-              <div class="card-heading"><div><p class="section-kicker">LIVE ECOLOGICAL PYRAMID</p><h2>실시간 생태 피라미드</h2></div><span class="live-pill"><i></i> LIVE</span></div>
-              <div class="segmented-control" role="group" aria-label="피라미드 표현 방식"><button type="button" data-pyramid-mode="numbers" aria-pressed="true">개체수</button><button type="button" data-pyramid-mode="energy" aria-pressed="false">에너지 흐름</button></div>
-              <div class="pyramid" id="pyramid"></div>
-              <p class="pyramid-note" id="pyramid-note"></p>
-              <div class="chain-status"><small>현재 먹이사슬</small><b id="current-chain"></b><span id="chain-summary"></span></div>
-            </section>
             <aside class="simulation-console" aria-label="Experiment Console" id="simulation-console">
               <div class="console-heading" id="experiment-heading"><p class="section-kicker">EXPERIMENT CONSOLE</p><h2>자유 탐구</h2></div>
               <section class="challenge-panel" id="challenge-panel" aria-live="polite" hidden></section>
               <nav class="sim-toolbar" aria-label="시뮬레이션 조작">
                 <div class="run-controls"><button class="run-button" id="run-button" type="button" aria-label="시뮬레이션 실행"><span>▶</span><b>Run</b></button><button id="pause-button" type="button" aria-label="시뮬레이션 일시정지" disabled><span>Ⅱ</span><b>Pause</b></button><button id="step-button" type="button" aria-label="한 step 실행"><span>↦</span><b>Step</b></button><button id="reset-button" type="button" aria-label="시뮬레이션 Reset"><span>↺</span><b>Reset</b></button></div>
-                <div class="toolbar-middle"><label for="speed-control"><span>속도</span><input id="speed-control" type="range" min="1" max="24" value="8" /><output id="speed-output">8 step/s</output></label></div>
+                <div class="toolbar-middle"><label for="speed-control"><span>속도</span><input id="speed-control" type="range" min="1" max="40" value="8" /><output id="speed-output">8 step/s</output></label></div>
                 <div class="view-controls"><button type="button" id="toggle-parameters" aria-label="실험 조건 열기 또는 닫기" aria-pressed="false"><span>☷</span><b>Parameters</b></button><button type="button" id="toggle-graph" aria-label="개체군 그래프 표시 또는 숨기기" aria-pressed="true"><span>⌁</span><b>Graph</b></button></div>
               </nav>
               <div class="challenge-copy" id="challenge-description" hidden>
@@ -474,8 +471,10 @@ function renderChallengePanel(): void {
   const statusMarkup = statuses.map((status) => `<li class="${status.present ? 'is-present' : 'is-collapsed'}"><span>${status.label}</span><b>${status.present ? '● 생존' : '○ 붕괴'}</b></li>`).join('');
   const bestMarkup = personalBest ? formatSteps(personalBest.score) : '아직 기록 없음';
   const result = state.phase === 'over' ? bestResult : null;
+  const designChanged = state.phase === 'over' && state.parameterSnapshot !== null
+    && Object.entries(state.parameterSnapshot).some(([key, value]) => parameters[key as keyof SimulationParameters] !== value);
   // Unchanged results keep their DOM, focus and one-shot animations across redraws.
-  const signature = JSON.stringify([state.phase, state.score, statuses, running, personalBest?.score, result, challengeMessage]);
+  const signature = JSON.stringify([state.phase, state.score, statuses, running, personalBest?.score, result, challengeMessage, designChanged]);
   if (signature === challengeSignature) return;
   challengeSignature = signature;
   const bestElapsed = result ? Math.max(0, performance.now() - bestEmphasisStartedAt) : 0;
@@ -483,7 +482,7 @@ function renderChallengePanel(): void {
   const collapseLabels = state.collapsedLevels.map((level) => statuses.find((status) => status.level === level)?.label ?? level).join(', ');
   const setupActions = '<button type="button" class="challenge-primary" data-challenge-action="start">도전 시작 · Start Challenge</button>';
   const activeActions = '<button type="button" class="challenge-secondary" data-challenge-action="abort">도전 중단</button>';
-  const overActions = '<button type="button" class="challenge-primary" data-challenge-action="retry">같은 설정으로 다시 도전</button><button type="button" class="challenge-secondary" data-challenge-action="edit">설정 수정하기</button>';
+  const overActions = `${designChanged ? '<button type="button" class="challenge-primary" data-challenge-action="start">변경한 설정으로 새 도전</button>' : ''}<button type="button" class="${designChanged ? 'challenge-secondary' : 'challenge-primary'}" data-challenge-action="retry">같은 설정으로 다시 도전</button>`;
   challengePanel.dataset.phase = state.phase;
   challengePanel.classList.toggle('is-new-best', result !== null);
   challengePanel.classList.toggle('best-emphasis', emphasizeBest);
@@ -502,6 +501,7 @@ function renderChallengePanel(): void {
     ${state.phase === 'over' ? `<p class="challenge-collapse">최초 붕괴 영양 단계 <b>${collapseLabels}</b><span>붕괴 step · ${state.collapseStep}</span></p>` : ''}
     <ul class="challenge-levels" aria-label="영양 단계별 생존 상태">${statusMarkup}</ul>
     <div class="challenge-actions">${state.phase === 'setup' ? setupActions : state.phase === 'active' ? activeActions : overActions}</div>
+      ${state.phase === 'over' ? '<p class="challenge-edit-note">Parameters에서 다음 도전의 조건을 바로 수정할 수 있습니다. 결과와 생태계는 새 도전 전까지 유지됩니다.</p>' : ''}
       ${challengeIsLocked() ? '<span class="challenge-lock">🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</span>' : ''}
       ${challengeMessage ? `<span class="challenge-message">${challengeMessage}</span>` : ''}
 `;
@@ -677,7 +677,6 @@ function updateStructuralUi(): void {
   document.querySelector<HTMLElement>('[data-species-group="quaternary"]')!.hidden = parameters.foodChainDepth < 4;
   const chain = chainLabels();
   element('#header-chain').innerHTML = chain.map((label, index) => `${index ? '<i>→</i>' : ''}<span>${label}</span>`).join('');
-  element('#current-chain').textContent = chain.join(' → ');
   element('#board-legend').innerHTML = `<span><i class="forest-key"></i>식생</span>${active.map((species) => `<span><canvas data-mini-icon="${species}" width="28" height="28"></canvas>${SPECIES_LABELS[species]}</span>`).join('')}`;
   element('#graph-legend').innerHTML = (['forest', ...active] as ChartSeries[]).map((series) => {
     const label = series === 'forest' ? '식생 %' : SPECIES_LABELS[series];
@@ -758,7 +757,7 @@ function renderPyramid(snapshot: SimulationSnapshot): void {
     ].reverse();
     const maximum = Math.max(...levels.map((level) => level.value), 1);
     pyramid.innerHTML = levels.map((level) => `<div class="pyramid-level" title="${level.label}: ${level.value.toLocaleString()} ${level.unit}"><div style="width:${pyramidWidth(level.value, maximum)}%;--level:${level.color}"><span>${level.label}</span><b>${level.value.toLocaleString()}</b><small>${level.unit}</small></div></div>`).join('');
-    element('#pyramid-note').textContent = '개체수 피라미드입니다. 식생은 개체가 아니라 격자의 성장 단계 합입니다. 폭은 작은 값을 보이기 위한 제곱근 척도입니다.';
+    element('#pyramid-note').textContent = '식생 = 성장 단계 합 · 막대 폭 = 제곱근 척도';
   } else {
     const flows = [...simulation.getEnergyFlow(20)].reverse();
     const maximum = Math.max(...flows.map((flow) => flow.rate), 1);
@@ -767,9 +766,10 @@ function renderPyramid(snapshot: SimulationSnapshot): void {
       const label = `${source} → ${SPECIES_LABELS[flow.target]}`;
       return `<div class="pyramid-level energy-level" title="최근 ${flow.window} step · ${label}: ${flow.rate.toFixed(1)} 모델 에너지/step"><div style="width:${pyramidWidth(flow.rate, maximum)}%;--level:${SERIES_COLORS[flow.target]}"><span>${label}</span><b>${flow.rate.toFixed(1)}</b><small>모델 에너지/step</small></div></div>`;
     }).join('');
-    element('#pyramid-note').textContent = '최근 20 step의 실제 섭식 사건에서 전달된 모델 에너지 합을 경과 step으로 나눈 값입니다. 폭은 제곱근 척도입니다.';
+    element('#pyramid-note').textContent = '최근 20 step 실제 전달량 / 경과 step · 모델 에너지/step · 폭 = 제곱근 척도';
   }
-  element('#chain-summary').textContent = `활성 영양 단계 ${parameters.foodChainDepth + 1} · 전달 효율 ${Math.round(parameters.transferEfficiency * 100)}%`;
+  const observedParameters = simulation.getParameters();
+  element('#chain-summary').textContent = `활성 영양 단계 ${observedParameters.foodChainDepth + 1} · 전달 효율 ${Math.round(observedParameters.transferEfficiency * 100)}%`;
 }
 
 function renderRemoval(snapshot: SimulationSnapshot): void {
@@ -852,6 +852,12 @@ function setRunning(nextRunning: boolean): void {
 function resetSimulation(): void {
   window.clearTimeout(resetTimer);
   setRunning(false);
+  // Completed results and their simulation remain an observation of the finished run.
+  // Controls now edit the next design; starting a new challenge applies that design.
+  if (appMode === 'apex' && apexSession.getState().phase === 'over') {
+    updateAllControls();
+    return;
+  }
   parameters = appMode === 'apex' ? apexParameters(parameters) : validateParameters(parameters);
   if (appMode === 'apex') apexDesignParameters = { ...parameters }; else freeParameters = { ...parameters };
   simulation = new ForestSimulation(parameters);
@@ -1078,10 +1084,6 @@ challengePanel.addEventListener('click', (event) => {
   if (action === 'retry') {
     const snapshot = apexSession.getState().parameterSnapshot;
     if (snapshot) beginApexChallenge({ ...snapshot });
-  }
-  if (action === 'edit') {
-    const snapshot = apexSession.getState().parameterSnapshot;
-    returnToApexSetup(snapshot ? { ...snapshot } : parameters);
   }
   if (action === 'abort') {
     const confirmed = window.confirm('현재 도전을 중단하시겠습니까? 이 기록은 Personal Best에 저장되지 않습니다.');

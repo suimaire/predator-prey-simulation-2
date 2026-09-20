@@ -10,7 +10,7 @@ import { personalBestFeedback, PERSONAL_BEST_FEEDBACK_MS } from '../src/feedback
 // Exercise the real rendering/lifecycle functions with a small DOM boundary.
 // TypeScript is already a project dependency; no browser or snapshot framework is needed.
 const source = ts.createSourceFile('main.ts', readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true);
-const names = new Set(['formatSteps', 'challengeIsLocked', 'renderChallengePanel', 'clearFinishedRecord', 'beginApexChallenge', 'switchMode', 'animationLoop']);
+const names = new Set(['formatSteps', 'challengeIsLocked', 'renderChallengePanel', 'clearFinishedRecord', 'beginApexChallenge', 'resetSimulation', 'switchMode', 'animationLoop']);
 const functions = source.statements.filter((node) => ts.isFunctionDeclaration(node) && names.has(node.name!.text));
 assert.equal(functions.length, names.size);
 const code = ts.transpile(functions.map((node) => node.getText(source)).join('\n'), { target: ts.ScriptTarget.ES2022 });
@@ -107,4 +107,60 @@ test('switching from a completed challenge to free exploration clears and hides 
   assert.equal(ui.panel.hidden, true);
   assert.equal(ui.classes.has('is-new-best'), false);
   assert.equal(ui.context.personalBest.score, 9);
+});
+
+test('completed settings unlock without clearing score, collapse, best or retry controls', () => {
+  const ui = completedPresentation(null);
+  ui.run('renderChallengePanel()');
+  assert.equal(ui.run('challengeIsLocked()'), false);
+  assert.equal(ui.panel.dataset.phase, 'over');
+  assert.match(ui.panel.innerHTML, /FINAL SCORE/u);
+  assert.match(ui.panel.innerHTML, /첫 기록 달성/u);
+  assert.match(ui.panel.innerHTML, /붕괴 step · 10/u);
+  assert.match(ui.panel.innerHTML, /같은 설정으로 다시 도전/u);
+  assert.doesNotMatch(ui.panel.innerHTML, /설정 수정하기|challenge-lock/u);
+});
+
+test('editing the next design preserves finished simulation and record until the next start', () => {
+  const ui = completedPresentation(4);
+  const finishedSimulation = ui.context.simulation;
+  const finishedRecord = ui.context.lastFinishedRecord;
+  const finishedState = ui.context.apexSession.getState();
+  ui.run('parameters = { ...parameters, initialRabbits: 80 }; resetSimulation(); renderChallengePanel()');
+  assert.equal(ui.context.simulation, finishedSimulation);
+  assert.equal(ui.context.lastFinishedRecord, finishedRecord);
+  assert.equal(ui.context.apexSession.getState(), finishedState);
+  assert.equal(ui.context.bestResult.finalScore, 9);
+  assert.match(ui.panel.innerHTML, /변경한 설정으로 새 도전/u);
+  assert.match(ui.panel.innerHTML, /같은 설정으로 다시 도전/u);
+  ui.run('beginApexChallenge()');
+  assert.equal(ui.run('challengeIsLocked()'), true);
+  assert.equal(ui.context.simulation.getParameters().initialRabbits, 80);
+  assert.equal(ui.context.lastFinishedRecord, null);
+  assert.equal(ui.context.personalBest.score, 9);
+});
+
+test('retry after editing still applies the completed parameter snapshot', () => {
+  const ui = completedPresentation(4);
+  const original = ui.context.apexSession.getState().parameterSnapshot.initialRabbits;
+  ui.run('parameters = { ...parameters, initialRabbits: 80 }; beginApexChallenge({ ...apexSession.getState().parameterSnapshot })');
+  assert.equal(ui.context.simulation.getParameters().initialRabbits, original);
+  assert.equal(ui.run('challengeIsLocked()'), true);
+});
+
+test('40 step/s scheduling advances 40 unchanged logical steps in one second', () => {
+  const simulation = new ForestSimulation({ ...DEFAULT_PARAMETERS });
+  const expected = new ForestSimulation({ ...DEFAULT_PARAMETERS });
+  const context = vm.createContext({
+    running: true, lastAnimationTime: 0, accumulatedTime: 0, speedControl: { value: '40' },
+    advanceLogicalStep() { simulation.step(); return false; }, render() {},
+    populationFeedbackUntil: new Map(), removalNeedsRedraw: false, bestEmphasisStartedAt: Infinity,
+    PERSONAL_BEST_FEEDBACK_MS, requestAnimationFrame() {},
+  });
+  vm.runInContext(code, context);
+  for (let time = 10; time <= 1000; time += 10) vm.runInContext(`animationLoop(${time})`, context);
+  for (let step = 0; step < 40; step += 1) expected.step();
+  assert.equal(simulation.getSnapshot().step, 40);
+  assert.deepEqual(simulation.getHistory(), expected.getHistory());
+  assert.deepEqual(simulation.getSnapshot(), expected.getSnapshot());
 });

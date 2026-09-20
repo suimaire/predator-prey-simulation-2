@@ -89,12 +89,16 @@ test('같은 step에 붕괴한 영양 단계를 모두 기록한다', () => {
   assert.equal(session.getState().score, 0);
 });
 
-test('active와 over에서는 설정이 잠기고 setup으로 돌아오면 해제된다', () => {
+test('진행 중에만 설정이 잠기고 종료 즉시 해제되며 새 도전에서 다시 잠긴다', () => {
   const session = new ApexChallengeSession();
   assert.equal(challengeSettingsLocked(session.getState()), false);
   session.start(apexParameters({ ...DEFAULT_PARAMETERS }), metric(0));
   assert.equal(challengeSettingsLocked(session.getState()), true);
   session.acceptStep(metric(1, { quaternary: 0 }));
+  assert.equal(challengeSettingsLocked(session.getState()), false);
+  assert.equal(session.getState().phase, 'over');
+  assert.equal(session.getState().collapseStep, 1);
+  session.start(apexParameters({ ...DEFAULT_PARAMETERS }), metric(0));
   assert.equal(challengeSettingsLocked(session.getState()), true);
   session.returnToSetup();
   assert.equal(challengeSettingsLocked(session.getState()), false);

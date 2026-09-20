@@ -95,7 +95,7 @@ export function evaluateApexLevels(metric: PopulationMetric): TrophicLevelStatus
 }
 
 export function challengeSettingsLocked(state: Readonly<ChallengeState>): boolean {
-  return state.phase === 'active' || state.phase === 'over';
+  return state.phase === 'active';
 }
 
 function initialState(): ChallengeState {
