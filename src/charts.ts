@@ -123,7 +123,7 @@ export function drawPopulationChart(canvas: HTMLCanvasElement, options: ChartOpt
     const x = xForStep(item.step);
     const emphasis = options.removalHighlights?.find((highlight) => highlight.species === item.species && highlight.step === item.step)?.emphasis ?? 0;
     ctx.save();
-    ctx.setLineDash([4, 4]); ctx.strokeStyle = SERIES_COLORS[item.species]; ctx.lineWidth = 1.5 + 2 * emphasis;
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = SERIES_COLORS[item.species]; ctx.lineWidth = 1.5 + 3 * emphasis;
     ctx.beginPath(); ctx.moveTo(x, g.top); ctx.lineTo(x, g.top + g.plotHeight); ctx.stroke();
     ctx.setLineDash([]);
     const label = `t=${item.step} ${SPECIES_LABELS[item.species]} 제거`;

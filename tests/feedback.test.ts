@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { captureRemovalFeedback, personalBestImprovement, populationChange, populationComparison, removalEmphasis } from '../src/feedback.ts';
+import { captureRemovalFeedback, personalBestFeedback, personalBestImprovement, populationChange, populationComparison, populationFeedbackDeadline, removalEmphasis, POPULATION_FEEDBACK_MS, REMOVAL_FEEDBACK_MS, REMOVAL_MARKER_MS } from '../src/feedback.ts';
 import { DEFAULT_PARAMETERS, ForestSimulation, type Species } from '../src/model.ts';
 import { drawPopulationChart, SERIES_COLORS } from '../src/charts.ts';
 
@@ -54,8 +54,10 @@ test('removal copies exact current count and positions without changing the mode
   assert.deepEqual(populationChange(simulation.getSnapshot().rabbits.length, 'rabbit', populationComparison(simulation.getHistory())), rabbitChange);
   for (const reduced of [false, true]) {
     assert.equal(removalEmphasis(feedback, 1000, reduced), 1);
-    assert.equal(removalEmphasis(feedback, 1300, reduced), reduced ? 1 : .5);
-    assert.equal(removalEmphasis(feedback, 1600, reduced), 0);
+    assert.equal(removalEmphasis(feedback, 1000 + REMOVAL_FEEDBACK_MS / 2, reduced), reduced ? 1 : .5);
+    assert.equal(removalEmphasis(feedback, 1000 + REMOVAL_FEEDBACK_MS, reduced), 0);
+    assert.ok(removalEmphasis(feedback, 1000 + REMOVAL_FEEDBACK_MS, reduced, REMOVAL_MARKER_MS) > 0);
+    assert.equal(removalEmphasis(feedback, 1000 + REMOVAL_MARKER_MS, reduced, REMOVAL_MARKER_MS), 0);
   }
   for (let step = 0; step < 20; step += 1) { simulation.step(); control.step(); }
   assert.deepEqual(simulation.getSnapshot(), control.getSnapshot());
@@ -101,8 +103,31 @@ test('chart emphasis reuses exactly one existing marker and restores its normal 
       history: simulation.getHistory(), depth: 2, visibleSeries: new Set(), interventions: simulation.getInterventions(),
       removalHighlights: [{ species: 'wolf', step: 1, emphasis }],
     });
-    assert.deepEqual(strokes.filter((stroke) => stroke.color === SERIES_COLORS.wolf), [{ color: SERIES_COLORS.wolf, width: 1.5 + 2 * emphasis }]);
+    assert.deepEqual(strokes.filter((stroke) => stroke.color === SERIES_COLORS.wolf), [{ color: SERIES_COLORS.wolf, width: 1.5 + 3 * emphasis }]);
     assert.deepEqual(labels.filter((label) => label.includes('제거')), ['t=1 늑대 제거']);
     assert.deepEqual(simulation.getHistory(), history);
   }
+});
+
+test('population effects finish at their original deadline and same-step redraws cannot replay them', () => {
+  const until = populationFeedbackDeadline(100, undefined, true, true, 8)!;
+  assert.equal(until, 100 + POPULATION_FEEDBACK_MS);
+  assert.equal(populationFeedbackDeadline(200, until, false, false, 8), until);
+  assert.equal(populationFeedbackDeadline(300, until, true, true, -2), until);
+  assert.equal(populationFeedbackDeadline(until, until, false, false, 8), undefined);
+  assert.equal(populationFeedbackDeadline(until + 100, undefined, false, true, 8), undefined);
+  assert.equal(populationFeedbackDeadline(400, until, true, true, 0), undefined);
+  assert.equal(populationFeedbackDeadline(until + 100, undefined, true, true, -2), until + 100 + POPULATION_FEEDBACK_MS);
+});
+
+test('completed best presentation preserves final, previous and improvement without a presentation clock', () => {
+  const first = personalBestFeedback(0, null)!;
+  assert.deepEqual(first, { finalScore: 0, previousBest: null, improvement: null, description: '첫 기록 달성' });
+  const improved = personalBestFeedback(1650, 1450)!;
+  assert.deepEqual(improved, { finalScore: 1650, previousBest: 1450, improvement: 200, description: '이전 최고보다 +200 step' });
+  assert.equal(personalBestFeedback(2, 0)!.improvement, 2);
+  assert.equal(personalBestFeedback(1450, 1450), null);
+  assert.equal(personalBestFeedback(1200, 1450), null);
+  assert.equal(first.previousBest, null);
+  assert.equal(improved.previousBest, 1450);
 });

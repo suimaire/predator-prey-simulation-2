@@ -38,7 +38,7 @@ import {
   type Species,
 } from './model.ts';
 import { createFreeExplorationSeed, createInitialFreeParameters } from './seed.ts';
-import { captureRemovalFeedback, personalBestImprovement, populationChange, populationComparison, removalEmphasis, REMOVAL_FEEDBACK_MS, type RemovalFeedback } from './feedback.ts';
+import { captureRemovalFeedback, personalBestFeedback, populationChange, populationComparison, populationFeedbackDeadline, removalEmphasis, REMOVAL_FEEDBACK_MS, REMOVAL_MARKER_MS, PERSONAL_BEST_FEEDBACK_MS, type PersonalBestFeedback, type RemovalFeedback } from './feedback.ts';
 
 type NumericParameterKey = Exclude<keyof SimulationParameters, 'toroidal' | 'seed' | 'foodChainDepth'>;
 type ParameterGroup = 'start' | 'forest' | 'rabbit' | 'wolf' | 'tertiary' | 'quaternary';
@@ -148,91 +148,105 @@ app.innerHTML = `
     </header>
 
     <div class="lab-layout">
-      <aside class="parameter-panel" aria-label="시뮬레이션 파라미터">
-        <div class="panel-title-row"><div><p class="section-kicker">EXPERIMENT SETUP</p><h2>실험 조건</h2></div><button type="button" class="icon-button close-parameters" aria-label="실험 조건 닫기">×</button></div>
-        <div class="parameter-scroll">
-          <section class="leaderboard-panel" id="leaderboard-panel" aria-label="Apex Survival 기록판" hidden>
-            <div class="leaderboard-heading">
-              <div class="leaderboard-tabs" role="tablist" aria-label="기록판 선택">
-                <button type="button" role="tab" id="leaderboard-tab-protector" data-board="protector" aria-controls="leaderboard-board-protector" aria-selected="true">${BOARD_TAB_MARKUP.protector}</button>
-                <button type="button" role="tab" id="leaderboard-tab-manipulator" data-board="manipulator" aria-controls="leaderboard-board-manipulator" aria-selected="false" tabindex="-1">${BOARD_TAB_MARKUP.manipulator}</button>
-              </div>
-              <button type="button" id="leaderboard-refresh" aria-label="기록판 새로고침" title="새로고침">↻</button>
-            </div>
-            <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
-            <div class="leaderboard-board" role="tabpanel" id="leaderboard-board-protector" aria-labelledby="leaderboard-tab-protector"></div>
-            <div class="leaderboard-board" role="tabpanel" id="leaderboard-board-manipulator" aria-labelledby="leaderboard-tab-manipulator" hidden></div>
-            <form class="leaderboard-form" id="leaderboard-form" hidden>
-              <label for="leaderboard-student-number"><span>학번</span><input id="leaderboard-student-number" maxlength="24" placeholder="예: 10935" autocomplete="off" /></label>
-              <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 박창현" autocomplete="off" /></label>
-              <button type="submit" class="challenge-primary" id="leaderboard-submit">이 기록 제출하기</button>
-              <p class="leaderboard-privacy">입력한 학번과 이름은 수업용 기록판에 공개되고 선생님이 관리하는 서버에 저장됩니다. 같은 학번으로 다시 제출하면 최고 기록 하나만 남습니다. 실명을 남기고 싶지 않다면 선생님과 약속한 표기를 사용하세요.</p>
-            </form>
-          </section>
-          <p class="parameter-lock-note" id="parameter-lock-note" hidden>🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</p>
-          <section class="special-controls chain-controls">
-            <label for="food-depth"><span><b>먹이사슬 단계</b><small>활성화할 최고 소비자 단계를 고릅니다.</small></span></label>
-            <select id="food-depth"><option value="2">2차 소비자까지 — 기본</option><option value="3">3차 소비자까지</option><option value="4">4차 소비자까지</option></select>
-            <label class="parameter-control efficiency-control" for="transfer-efficiency"><span class="parameter-heading"><b>에너지 전달 효율</b><output id="transfer-output">10%</output></span><span class="parameter-description">10%는 학습용 대표값이며 생태계와 생물에 따라 달라질 수 있습니다.</span><input id="transfer-efficiency" type="range" min="0.05" max="0.30" step="0.01" value="0.10" /></label>
-          </section>
-          ${parameterGroupMarkup('start', true)}
-          <section class="special-controls">
-            <label class="seed-control" for="seed-input"><span><b id="seed-label">Random seed</b><small id="seed-helper">같은 seed와 설정은 같은 결과를 재현합니다.</small></span></label>
-            <div class="seed-input-row"><input id="seed-input" maxlength="40" value="${initialFreeParameters.seed}" /><button type="button" id="random-seed" aria-label="새 랜덤 시드 만들기">↻</button></div>
-            <label class="toggle-control" for="toroidal-toggle"><span><b>토로이드 경계</b><small>가장자리가 반대쪽과 연결됩니다.</small></span><input id="toroidal-toggle" type="checkbox" checked /><i></i></label>
-          </section>
-          ${parameterGroupMarkup('forest', true)}
-          ${parameterGroupMarkup('rabbit', false)}
-          ${parameterGroupMarkup('wolf', false)}
-          ${parameterGroupMarkup('tertiary', false)}
-          ${parameterGroupMarkup('quaternary', false)}
-          <button type="button" class="restore-button" id="restore-defaults">기본 설정으로 복원</button>
-        </div>
-      </aside>
-
       <main class="workspace">
         <section class="mode-bar" aria-label="시뮬레이션 모드">
           <div class="mode-switch" role="group" aria-label="모드 선택"><button type="button" data-app-mode="free" aria-pressed="true">자유 탐구</button><button type="button" data-app-mode="apex" aria-pressed="false">Apex Survival</button></div>
           <p id="mode-summary">파라미터와 먹이사슬 단계를 자유롭게 바꾸며 탐구합니다.</p>
         </section>
-        <section class="challenge-panel" id="challenge-panel" aria-live="polite" hidden></section>
-        <nav class="sim-toolbar" aria-label="시뮬레이션 조작">
-          <div class="run-controls"><button class="run-button" id="run-button" type="button" aria-label="시뮬레이션 실행"><span>▶</span><b>Run</b></button><button id="pause-button" type="button" aria-label="시뮬레이션 일시정지" disabled><span>Ⅱ</span><b>Pause</b></button><button id="step-button" type="button" aria-label="한 step 실행"><span>↦</span><b>Step</b></button><button id="reset-button" type="button" aria-label="시뮬레이션 Reset"><span>↺</span><b>Reset</b></button></div>
-          <div class="toolbar-middle"><label for="speed-control"><span>속도</span><input id="speed-control" type="range" min="1" max="24" value="8" /><output id="speed-output">8 step/s</output></label></div>
-          <div class="view-controls"><button type="button" id="toggle-parameters" aria-label="실험 조건 열기 또는 닫기" aria-pressed="false"><span>☷</span><b>Parameters</b></button><button type="button" id="toggle-graph" aria-label="개체군 그래프 표시 또는 숨기기" aria-pressed="true"><span>⌁</span><b>Graph</b></button><div class="step-readout"><span>STEP</span><strong id="step-value">000</strong></div></div>
-        </nav>
 
-        <section class="simulation-grid">
+        <section class="ecosystem-dashboard" aria-label="현재 생태계 상태와 구조">
+          <section class="population-hud" aria-label="현재 실험 상태">
+            <div class="hud-readings">
+              <div class="step-readout"><span>STEP</span><strong id="step-value">000</strong></div>
+              <article class="mini-population forest-population"><i class="forest-key" aria-hidden="true"></i><span><small>식생량</small><b id="forest-population"></b><em>성장 단계 합</em></span></article>
+              <div class="population-strip" id="population-strip"></div>
+            </div>
+            <p class="population-comparison" id="population-comparison"></p>
+          </section>
+          <section class="pyramid-card ecological-pyramid--compact">
+            <div class="card-heading"><div><p class="section-kicker">LIVE ECOLOGICAL PYRAMID</p><h2>실시간 생태 피라미드</h2></div><span class="live-pill"><i></i> LIVE</span></div>
+            <div class="segmented-control" role="group" aria-label="피라미드 표현 방식"><button type="button" data-pyramid-mode="numbers" aria-pressed="true">개체수</button><button type="button" data-pyramid-mode="energy" aria-pressed="false">에너지 흐름</button></div>
+            <div class="pyramid" id="pyramid"></div>
+            <p class="pyramid-note" id="pyramid-note"></p>
+            <div class="chain-status"><small>현재 먹이사슬</small><b id="current-chain"></b><span id="chain-summary"></span></div>
+          </section>
+        </section>
+        <section class="simulation-stage" aria-label="시뮬레이션과 조작">
           <section class="board-card" aria-labelledby="forest-heading">
             <div class="board-heading"><div><p class="section-kicker">LIVE ECOSYSTEM</p><h2 id="forest-heading">숲 생태계</h2></div><div class="legend" id="board-legend"></div></div>
             <div class="canvas-frame"><canvas id="forest-board" tabindex="0" aria-label="격자형 숲 생태계. 칸을 선택하면 상태를 확인할 수 있습니다."></canvas><div class="board-status" id="board-status"><span></span><b>준비됨</b></div><div class="cell-inspector" id="cell-inspector" hidden></div></div>
             <div class="board-footnote"><span>칸을 클릭하거나 터치해 식생 단계와 개체 에너지를 확인하세요.</span><span><b>공간 규칙</b> 식생과 동물은 함께 존재 · 동물은 한 칸에 한 마리</span></div>
-            <div class="population-strip" id="population-strip"></div>
-            <p class="population-comparison" id="population-comparison"></p>
           </section>
 
-          <aside class="monitor-panel" aria-label="생태 피라미드와 종 제거 실험">
-            <section class="pyramid-card">
-              <div class="card-heading"><div><p class="section-kicker">LIVE ECOLOGICAL PYRAMID</p><h2>실시간 생태 피라미드</h2></div><span class="live-pill"><i></i> LIVE</span></div>
-              <div class="segmented-control" role="group" aria-label="피라미드 표현 방식"><button type="button" data-pyramid-mode="numbers" aria-pressed="true">개체수</button><button type="button" data-pyramid-mode="energy" aria-pressed="false">에너지 흐름</button></div>
-              <div class="pyramid" id="pyramid"></div>
-              <p class="pyramid-note" id="pyramid-note"></p>
-              <div class="chain-status"><small>현재 먹이사슬</small><b id="current-chain"></b><span id="chain-summary"></span></div>
-            </section>
-
+          <aside class="simulation-console" aria-label="Experiment Console" id="simulation-console">
+            <div class="console-heading" id="experiment-heading"><p class="section-kicker">EXPERIMENT CONSOLE</p><h2>자유 탐구</h2></div>
+            <section class="challenge-panel" id="challenge-panel" aria-live="polite" hidden></section>
+            <nav class="sim-toolbar" aria-label="시뮬레이션 조작">
+              <div class="run-controls"><button class="run-button" id="run-button" type="button" aria-label="시뮬레이션 실행"><span>▶</span><b>Run</b></button><button id="pause-button" type="button" aria-label="시뮬레이션 일시정지" disabled><span>Ⅱ</span><b>Pause</b></button><button id="step-button" type="button" aria-label="한 step 실행"><span>↦</span><b>Step</b></button><button id="reset-button" type="button" aria-label="시뮬레이션 Reset"><span>↺</span><b>Reset</b></button></div>
+              <div class="toolbar-middle"><label for="speed-control"><span>속도</span><input id="speed-control" type="range" min="1" max="24" value="8" /><output id="speed-output">8 step/s</output></label></div>
+              <div class="view-controls"><button type="button" id="toggle-parameters" aria-label="실험 조건 열기 또는 닫기" aria-pressed="false"><span>☷</span><b>Parameters</b></button><button type="button" id="toggle-graph" aria-label="개체군 그래프 표시 또는 숨기기" aria-pressed="true"><span>⌁</span><b>Graph</b></button></div>
+            </nav>
+            <div class="challenge-copy" id="challenge-description" hidden>
+              <h2>전체 먹이사슬을 가장 오래 유지하세요</h2>
+              <p>식생부터 4차 소비자까지 모든 영양 단계를 유지하는 조건을 탐색합니다. 도전을 시작하면 설정이 잠기며, 어느 한 단계라도 사라지는 순간 기록이 결정됩니다.</p>
+              <small>Challenge Seed <b>${APEX_CHALLENGE_CONFIG.seed}</b> · ${APEX_CHALLENGE_CONFIG.simulationVersion} · 같은 조건과 seed에서는 같은 결과가 재현됩니다.</small>
+            </div>
             <section class="removal-card">
               <div class="card-heading"><div><p class="section-kicker">SPECIES REMOVAL EXPERIMENT</p><h2>종 제거 실험</h2></div><span>Reset으로 복구</span></div>
               <p class="removal-restriction" id="removal-restriction" hidden>Apex Survival 중에는 종 제거 실험을 사용할 수 없습니다.</p>
               <div class="removal-list" id="removal-list"></div>
             </section>
+            <aside class="parameter-panel" aria-label="시뮬레이션 파라미터">
+              <div class="panel-title-row"><div><p class="section-kicker">EXPERIMENT SETUP</p><h2>실험 조건</h2></div><button type="button" class="icon-button close-parameters" aria-label="실험 조건 닫기">×</button></div>
+              <div class="parameter-scroll">
+                <p class="parameter-lock-note" id="parameter-lock-note" hidden>🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</p>
+                <section class="special-controls chain-controls">
+                  <label for="food-depth"><span><b>먹이사슬 단계</b><small>활성화할 최고 소비자 단계를 고릅니다.</small></span></label>
+                  <select id="food-depth"><option value="2">2차 소비자까지 — 기본</option><option value="3">3차 소비자까지</option><option value="4">4차 소비자까지</option></select>
+                  <label class="parameter-control efficiency-control" for="transfer-efficiency"><span class="parameter-heading"><b>에너지 전달 효율</b><output id="transfer-output">10%</output></span><span class="parameter-description">10%는 학습용 대표값이며 생태계와 생물에 따라 달라질 수 있습니다.</span><input id="transfer-efficiency" type="range" min="0.05" max="0.30" step="0.01" value="0.10" /></label>
+                </section>
+                ${parameterGroupMarkup('start', true)}
+                <section class="special-controls">
+                  <label class="seed-control" for="seed-input"><span><b id="seed-label">Random seed</b><small id="seed-helper">같은 seed와 설정은 같은 결과를 재현합니다.</small></span></label>
+                  <div class="seed-input-row"><input id="seed-input" maxlength="40" value="${initialFreeParameters.seed}" /><button type="button" id="random-seed" aria-label="새 랜덤 시드 만들기">↻</button></div>
+                  <label class="toggle-control" for="toroidal-toggle"><span><b>토로이드 경계</b><small>가장자리가 반대쪽과 연결됩니다.</small></span><input id="toroidal-toggle" type="checkbox" checked /><i></i></label>
+                </section>
+                ${parameterGroupMarkup('forest', true)}
+                ${parameterGroupMarkup('rabbit', false)}
+                ${parameterGroupMarkup('wolf', false)}
+                ${parameterGroupMarkup('tertiary', false)}
+                ${parameterGroupMarkup('quaternary', false)}
+                <button type="button" class="restore-button" id="restore-defaults">기본 설정으로 복원</button>
+              </div>
+            </aside>
           </aside>
         </section>
 
-        <section class="graph-card" id="graph-card">
-          <div class="card-heading"><div><p class="section-kicker">POPULATION GRAPH</p><h2>개체군 변화</h2></div><span class="live-pill"><i></i> LIVE</span></div>
-          <div class="graph-legend" id="graph-legend" aria-label="그래프 계열 표시 전환"></div>
-          <canvas id="population-chart" aria-label="시간에 따른 활성 영양 단계와 숲 밀도 그래프"></canvas>
-          <div class="graph-foot"><p><span>왼쪽 축: 소비자 개체 수</span><span>오른쪽 축: 숲 평균 밀도</span></p><div id="intervention-log"></div></div>
+        <section class="analysis-grid" aria-label="관찰과 분석">
+          <section class="graph-card" id="graph-card">
+            <div class="card-heading"><div><p class="section-kicker">POPULATION GRAPH</p><h2>개체군 변화</h2></div><span class="live-pill"><i></i> LIVE</span></div>
+            <div class="graph-legend" id="graph-legend" aria-label="그래프 계열 표시 전환"></div>
+            <canvas id="population-chart" aria-label="시간에 따른 활성 영양 단계와 숲 밀도 그래프"></canvas>
+            <div class="graph-foot"><p><span>왼쪽 축: 소비자 개체 수</span><span>오른쪽 축: 숲 평균 밀도</span></p><div id="intervention-log"></div></div>
+          </section>
+        </section>
+        <section class="leaderboard-panel" id="leaderboard-panel" aria-label="Apex Survival 기록판" hidden>
+          <div class="leaderboard-heading">
+            <div class="leaderboard-tabs" role="tablist" aria-label="기록판 선택">
+              <button type="button" role="tab" id="leaderboard-tab-protector" data-board="protector" aria-controls="leaderboard-board-protector" aria-selected="true">${BOARD_TAB_MARKUP.protector}</button>
+              <button type="button" role="tab" id="leaderboard-tab-manipulator" data-board="manipulator" aria-controls="leaderboard-board-manipulator" aria-selected="false" tabindex="-1">${BOARD_TAB_MARKUP.manipulator}</button>
+            </div>
+            <button type="button" id="leaderboard-refresh" aria-label="기록판 새로고침" title="새로고침">↻</button>
+          </div>
+          <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
+          <div class="leaderboard-board" role="tabpanel" id="leaderboard-board-protector" aria-labelledby="leaderboard-tab-protector"></div>
+          <div class="leaderboard-board" role="tabpanel" id="leaderboard-board-manipulator" aria-labelledby="leaderboard-tab-manipulator" hidden></div>
+          <form class="leaderboard-form" id="leaderboard-form" hidden>
+            <label for="leaderboard-student-number"><span>학번</span><input id="leaderboard-student-number" maxlength="24" placeholder="예: 10935" autocomplete="off" /></label>
+            <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 박창현" autocomplete="off" /></label>
+            <button type="submit" class="challenge-primary" id="leaderboard-submit">이 기록 제출하기</button>
+            <p class="leaderboard-privacy">입력한 학번과 이름은 수업용 기록판에 공개되고 선생님이 관리하는 서버에 저장됩니다. 같은 학번으로 다시 제출하면 최고 기록 하나만 남습니다. 실명을 남기고 싶지 않다면 선생님과 약속한 표기를 사용하세요.</p>
+          </form>
         </section>
 
         <section class="lower-grid">
@@ -295,9 +309,9 @@ let appMode: AppMode = 'free';
 let hasApexDesign = false;
 const apexSession = new ApexChallengeSession();
 let personalBest: ApexSurvivalRecord | null = loadApexPersonalBest(window.localStorage);
-let isNewPersonalBest = false;
-let bestImprovement: string | null = null;
+let bestResult: PersonalBestFeedback | null = null;
 let bestEmphasisStartedAt = -Infinity;
+let challengeSignature = '';
 const leaderboardTransport: LeaderboardTransport | null = createLeaderboardTransport({
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
@@ -425,9 +439,9 @@ function drawBoard(snapshot: SimulationSnapshot, now = performance.now()): void 
     const emphasis = removalEmphasis(feedback, now, reducedMotion.matches);
     if (emphasis === 0) continue;
     ctx.save();
-    ctx.globalAlpha = .75 * emphasis;
+    ctx.globalAlpha = .95 * emphasis;
     ctx.strokeStyle = SERIES_COLORS[feedback.species];
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 3;
     ctx.setLineDash([4, 3]);
     for (const { x, y } of feedback.positions) ctx.strokeRect(x * cellSize + 3, y * cellSize + 3, cellSize - 6, cellSize - 6);
     ctx.restore();
@@ -448,40 +462,47 @@ function formatSteps(value: number): string {
 
 function renderChallengePanel(): void {
   challengePanel.hidden = appMode !== 'apex';
+  element('#challenge-description').hidden = appMode !== 'apex';
   renderLeaderboardPanel();
   if (appMode !== 'apex') return;
   const state = apexSession.getState();
   const metric = simulation.getHistory().at(-1)!;
   const statuses = state.levelStatus.length > 0 ? state.levelStatus : evaluateApexLevels(metric);
   const phaseLabel = state.phase === 'setup' ? '생태계 설계' : state.phase === 'over' ? 'CHALLENGE OVER' : running ? 'CHALLENGE RUNNING' : '일시정지';
-  const statusMarkup = statuses.map((status) => `<li class="${status.present ? 'is-present' : 'is-collapsed'}"><span>${status.label}</span><b>${status.present ? '● 생존' : '○ 붕괴'}</b><small>${status.value.toLocaleString()} ${status.unit}</small></li>`).join('');
+  const statusMarkup = statuses.map((status) => `<li class="${status.present ? 'is-present' : 'is-collapsed'}"><span>${status.label}</span><b>${status.present ? '● 생존' : '○ 붕괴'}</b></li>`).join('');
   const bestMarkup = personalBest ? formatSteps(personalBest.score) : '아직 기록 없음';
-  const bestElapsed = performance.now() - bestEmphasisStartedAt;
-  const emphasizeBest = isNewPersonalBest && bestElapsed < 800;
-  const bestMotionStyle = emphasizeBest ? ` style="animation-delay:-${bestElapsed}ms"` : '';
+  const result = state.phase === 'over' ? bestResult : null;
+  // Unchanged results keep their DOM, focus and one-shot animations across redraws.
+  const signature = JSON.stringify([state.phase, state.score, statuses, running, personalBest?.score, result, challengeMessage]);
+  if (signature === challengeSignature) return;
+  challengeSignature = signature;
+  const bestElapsed = result ? Math.max(0, performance.now() - bestEmphasisStartedAt) : 0;
+  const emphasizeBest = result !== null && bestElapsed < PERSONAL_BEST_FEEDBACK_MS;
   const collapseLabels = state.collapsedLevels.map((level) => statuses.find((status) => status.level === level)?.label ?? level).join(', ');
   const setupActions = '<button type="button" class="challenge-primary" data-challenge-action="start">도전 시작 · Start Challenge</button>';
   const activeActions = '<button type="button" class="challenge-secondary" data-challenge-action="abort">도전 중단</button>';
   const overActions = '<button type="button" class="challenge-primary" data-challenge-action="retry">같은 설정으로 다시 도전</button><button type="button" class="challenge-secondary" data-challenge-action="edit">설정 수정하기</button>';
   challengePanel.dataset.phase = state.phase;
+  challengePanel.classList.toggle('is-new-best', result !== null);
+  challengePanel.classList.toggle('best-emphasis', emphasizeBest);
+  challengePanel.style.setProperty('--best-elapsed', `-${bestElapsed}ms`);
   challengePanel.innerHTML = `
-    <div class="challenge-copy">
-      <p class="section-kicker">APEX SURVIVAL · ${phaseLabel}</p>
-      <h2>전체 먹이사슬을 가장 오래 유지하세요</h2>
-      <p>식생부터 4차 소비자까지 모든 영양 단계를 유지하는 조건을 탐색합니다. 도전을 시작하면 설정이 잠기며, 어느 한 단계라도 사라지는 순간 기록이 결정됩니다.</p>
-      <small>Challenge Seed <b>${APEX_CHALLENGE_CONFIG.seed}</b> · ${APEX_CHALLENGE_CONFIG.simulationVersion} · 같은 조건과 seed에서는 같은 결과가 재현됩니다.</small>
+    <p class="section-kicker challenge-title">APEX SURVIVAL</p>
+    <div class="challenge-score">
+      ${result ? '<span class="new-best">NEW PERSONAL BEST</span>' : ''}
+      <strong>${state.score.toLocaleString()}</strong>
+      <span class="score-unit">${state.phase === 'over' ? 'FINAL SCORE' : 'SCORE'} · STEP</span>
+      ${result ? `<p class="best-improvement" aria-label="${result.description}">${result.improvement === null ? '첫 기록 달성' : `+${result.improvement.toLocaleString()} <span aria-hidden="true">↑</span><small>이전 최고보다 · step</small>`}</p>
+      ${result.previousBest === null ? '' : `<p class="best-comparison"><span>Previous Best</span><b>${result.previousBest.toLocaleString()} → ${result.finalScore.toLocaleString()}</b></p>`}`
+      : `<small>Personal Best <b>${bestMarkup}</b></small>`}
+    </div>
+    <p class="challenge-status">상태 <b>${phaseLabel}</b></p>
+    ${state.phase === 'over' ? `<p class="challenge-collapse">최초 붕괴 영양 단계 <b>${collapseLabels}</b><span>붕괴 step · ${state.collapseStep}</span></p>` : ''}
+    <ul class="challenge-levels" aria-label="영양 단계별 생존 상태">${statusMarkup}</ul>
+    <div class="challenge-actions">${state.phase === 'setup' ? setupActions : state.phase === 'active' ? activeActions : overActions}</div>
       ${challengeIsLocked() ? '<span class="challenge-lock">🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</span>' : ''}
       ${challengeMessage ? `<span class="challenge-message">${challengeMessage}</span>` : ''}
-    </div>
-    <div class="challenge-score">
-      ${isNewPersonalBest ? `<span class="new-best${emphasizeBest ? ' best-emphasis' : ''}"${bestMotionStyle}>NEW PERSONAL BEST</span>` : '<span>SCORE</span>'}
-      <strong>${formatSteps(state.score)}</strong>
-      <small>Personal Best <b>${bestMarkup}</b></small>
-      ${isNewPersonalBest && bestImprovement ? `<small class="${emphasizeBest ? 'best-emphasis' : ''}"${bestMotionStyle}>${bestImprovement}</small>` : ''}
-      ${state.phase === 'over' ? `<em>최초 붕괴 영양 단계 <b>${collapseLabels}</b> · t = ${state.collapseStep}</em>` : ''}
-    </div>
-    <ul class="challenge-levels">${statusMarkup}</ul>
-    <div class="challenge-actions">${state.phase === 'setup' ? setupActions : state.phase === 'active' ? activeActions : overActions}</div>`;
+`;
 }
 
 function readStoredParticipant(): Participant | null {
@@ -605,6 +626,10 @@ async function submitFinishedRecord(): Promise<void> {
 function clearFinishedRecord(): void {
   lastFinishedRecord = null;
   hasSubmittedFinishedRecord = false;
+  bestResult = null;
+  bestEmphasisStartedAt = -Infinity;
+  challengeSignature = '';
+  challengePanel.classList.remove('best-emphasis', 'is-new-best');
 }
 
 function updateControlAvailability(): void {
@@ -640,6 +665,8 @@ function updateControlAvailability(): void {
 function updateStructuralUi(): void {
   const active = activeSpecies(parameters.foodChainDepth);
   shell.classList.toggle('apex-mode', appMode === 'apex');
+  element('#experiment-heading').hidden = appMode === 'apex';
+  element('#simulation-console').setAttribute('aria-label', appMode === 'apex' ? 'Challenge Console' : 'Experiment Console');
   document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.appMode === appMode)));
   element('#mode-summary').textContent = appMode === 'apex'
     ? '이 모형에서 식생부터 4차 소비자까지 먹이사슬을 오래 유지하는 조건을 탐색합니다.'
@@ -668,6 +695,7 @@ function renderPopulationStrip(snapshot: SimulationSnapshot): void {
   const comparison = populationComparison(simulation.getHistory());
   const fromStep = comparison?.step ?? snapshot.step;
   element('#population-comparison').textContent = `순변화 · 최근 ${snapshot.step - fromStep} step (t=${fromStep} → ${snapshot.step}) · 종 제거는 제거 직전 기준`;
+  element('#forest-population').textContent = simulation.getHistory().at(-1)!.forestAbundance.toLocaleString();
   const strip = element('#population-strip');
   if (strip.dataset.depth !== String(parameters.foodChainDepth)) {
     strip.innerHTML = activeSpecies(parameters.foodChainDepth).map((species) => `<article data-population="${species}" class="mini-population ${speciesClass[species]}"><canvas data-mini-icon="${species}" width="38" height="38"></canvas><span><small>${SPECIES_LABELS[species]}</small><b></b><em></em></span></article>`).join('');
@@ -685,19 +713,19 @@ function renderPopulationStrip(snapshot: SimulationSnapshot): void {
     const delta = removed ? -(feedback?.count ?? 0) : change.delta;
     const label = item.querySelector<HTMLElement>('em')!;
     const signature = `${change.previous}:${current}`;
-    if (delta === 0) populationFeedbackUntil.delete(species);
-    // Retain the DOM and let each 600ms effect finish even at high simulation speeds.
-    if (!removed && lastPopulationStep >= 0 && snapshot.step !== lastPopulationStep && item.dataset.comparison !== signature && delta !== 0 && !populationFeedbackUntil.has(species)) {
-      populationFeedbackUntil.set(species, now + 600);
+    if (!removed) {
+      const until = populationFeedbackDeadline(now, populationFeedbackUntil.get(species), lastPopulationStep >= 0 && snapshot.step !== lastPopulationStep, item.dataset.comparison !== signature, delta);
+      if (until === undefined) populationFeedbackUntil.delete(species);
+      else populationFeedbackUntil.set(species, until);
     }
     item.dataset.comparison = signature;
-    item.querySelector('b')!.textContent = String(current);
+    item.querySelector('b')!.textContent = removing ? `${feedback.count} → ${current}` : String(current);
     item.querySelector('small')!.textContent = `${SPECIES_LABELS[species]}${removing && delta !== 0 ? ' · 실험적 제거' : ''}`;
     item.classList.toggle('is-removed', removed);
     item.classList.toggle('is-removal-feedback', removing);
     item.title = removed ? `실험적 제거 · ${feedback?.count ?? 0} → ${current} · t=${feedback?.step ?? snapshot.step}`
       : `t=${fromStep} → ${snapshot.step} · ${change.previous} → ${current} · ${change.text}`;
-    label.textContent = removed ? (removing && delta !== 0 ? String(delta) : '실험적 제거') : change.text;
+    label.textContent = removed ? (removing && delta !== 0 ? `${delta} ↓` : '실험적 제거') : `${change.text}${delta === 0 ? '' : delta > 0 ? ' ↑' : ' ↓'}`;
     label.classList.toggle('has-delta', (!removed || removing) && delta !== 0);
     label.classList.toggle('is-changing', delta !== 0 && (removing || !removed && populationFeedbackUntil.has(species)));
     label.title = item.title;
@@ -746,7 +774,7 @@ function renderRemoval(snapshot: SimulationSnapshot): void {
   element('#removal-list').innerHTML = activeSpecies(parameters.foodChainDepth).map((species) => {
     const removed = snapshot.removedSpecies.includes(species);
     const removalDisabled = appMode === 'apex' || removed;
-    const detail = removed ? '제거됨 · Reset 필요' : appMode === 'apex' ? 'Apex Survival에서 사용 불가' : `현재 ${snapshot.agents[species].length}개체`;
+    const detail = removed ? '제거됨 · Reset 필요' : appMode === 'apex' ? 'Apex Survival에서 사용 불가' : '전체 개체 제거 · Reset으로 복구';
     return `<div class="removal-row ${removed ? 'is-removed' : ''}"><canvas data-mini-icon="${species}" width="34" height="34"></canvas><span><b>${SPECIES_LABELS[species]}</b><small>${detail}</small></span><button type="button" data-remove="${species}" ${removalDisabled ? 'disabled' : ''}>${removed ? '제거됨' : '종 제거'}</button></div>`;
   }).join('');
   document.querySelectorAll<HTMLButtonElement>('[data-remove]').forEach((button) => button.addEventListener('click', () => openRemovalDialog(button.dataset.remove as Species)));
@@ -782,7 +810,7 @@ function drawChart(now = performance.now()): void {
     depth: parameters.foodChainDepth,
     visibleSeries,
     interventions: simulation.getInterventions(),
-    removalHighlights: [...removalFeedback.values()].map((feedback) => ({ ...feedback, emphasis: removalEmphasis(feedback, now, reducedMotion.matches) })),
+    removalHighlights: [...removalFeedback.values()].map((feedback) => ({ ...feedback, emphasis: removalEmphasis(feedback, now, reducedMotion.matches, REMOVAL_MARKER_MS) })),
     challengeCollapse: appMode === 'apex' && apexSession.getState().collapseStep !== null
       ? { step: apexSession.getState().collapseStep!, label: `Apex chain collapsed · t=${apexSession.getState().collapseStep}` }
       : null,
@@ -864,12 +892,11 @@ function finishApexChallenge(): void {
   try {
     const result = saveApexPersonalBest(window.localStorage, record);
     personalBest = result.best;
-    isNewPersonalBest = result.isNewBest;
-    bestImprovement = result.isNewBest ? personalBestImprovement(record.score, result.previousBest) : null;
+    bestResult = result.isNewBest ? personalBestFeedback(record.score, result.previousBest) : null;
     bestEmphasisStartedAt = result.isNewBest ? performance.now() : -Infinity;
   } catch {
     challengeMessage = '이 브라우저에서는 Personal Best를 저장할 수 없습니다.';
-    isNewPersonalBest = false;
+    bestResult = null;
   }
 }
 
@@ -892,11 +919,11 @@ function beginApexChallenge(parameterSource: SimulationParameters = parameters):
   simulation = new ForestSimulation(parameters);
   clearPopulationFeedback();
   inspector.hidden = true;
-  isNewPersonalBest = false;
   challengeMessage = '';
   clearFinishedRecord();
   const initialMetric = simulation.getHistory().at(-1)!;
   const started = apexSession.start(parameters, initialMetric);
+  if (started) toggleParameters(false);
   if (!started) {
     const missing = apexSession.getState().levelStatus.filter((level) => !level.present).map((level) => level.label).join(', ');
     challengeMessage = `도전을 시작하려면 모든 영양 단계가 존재해야 합니다. 확인: ${missing}`;
@@ -915,9 +942,9 @@ function returnToApexSetup(parameterSource: SimulationParameters = parameters): 
   simulation = new ForestSimulation(parameters);
   clearPopulationFeedback();
   inspector.hidden = true;
-  isNewPersonalBest = false;
   challengeMessage = '';
   clearFinishedRecord();
+  toggleParameters(true);
   updateAllControls();
   render();
 }
@@ -934,7 +961,6 @@ function switchMode(nextMode: AppMode): void {
   else apexDesignParameters = apexParameters(parameters);
   appMode = nextMode;
   apexSession.returnToSetup();
-  isNewPersonalBest = false;
   challengeMessage = '';
   clearFinishedRecord();
   if (nextMode === 'apex' && leaderboardStatusPhase === 'idle') void refreshLeaderboard();
@@ -1172,8 +1198,9 @@ function animationLoop(time: number): void {
     if (effects.some((feedback) => time - feedback.startedAt >= REMOVAL_FEEDBACK_MS && document.querySelector(`[data-population="${feedback.species}"]`)?.classList.contains('is-removal-feedback'))) {
       renderPopulationStrip(simulation.getSnapshot());
     }
-    removalNeedsRedraw = effects.some((feedback) => time - feedback.startedAt < REMOVAL_FEEDBACK_MS);
+    removalNeedsRedraw = effects.some((feedback) => time - feedback.startedAt < REMOVAL_MARKER_MS);
   }
+  if (time - bestEmphasisStartedAt >= PERSONAL_BEST_FEEDBACK_MS) challengePanel.classList.remove('best-emphasis');
   requestAnimationFrame(animationLoop);
 }
 

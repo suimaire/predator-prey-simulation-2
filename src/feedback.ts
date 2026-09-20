@@ -20,7 +20,10 @@ export interface RemovalFeedback {
   startedAt: number;
 }
 
-export const REMOVAL_FEEDBACK_MS = 600;
+export const POPULATION_FEEDBACK_MS = 900;
+export const REMOVAL_FEEDBACK_MS = 950;
+export const REMOVAL_MARKER_MS = 1300;
+export const PERSONAL_BEST_FEEDBACK_MS = 1200;
 
 // Snapshot agent arrays belong to the model: copy only presentation data before removal.
 export function captureRemovalFeedback(snapshot: SimulationSnapshot, species: Species, startedAt: number): RemovalFeedback {
@@ -28,10 +31,32 @@ export function captureRemovalFeedback(snapshot: SimulationSnapshot, species: Sp
   return { species, step: snapshot.step, count: agents.length, positions: agents.map(({ x, y }) => ({ x, y })), startedAt };
 }
 
-export function removalEmphasis(feedback: RemovalFeedback, now: number, reducedMotion: boolean): number {
+export function removalEmphasis(feedback: RemovalFeedback, now: number, reducedMotion: boolean, duration = REMOVAL_FEEDBACK_MS): number {
   const elapsed = now - feedback.startedAt;
-  if (elapsed < 0 || elapsed >= REMOVAL_FEEDBACK_MS) return 0;
-  return reducedMotion ? 1 : 1 - elapsed / REMOVAL_FEEDBACK_MS;
+  if (elapsed < 0 || elapsed >= duration) return 0;
+  return reducedMotion ? 1 : 1 - elapsed / duration;
+}
+
+// A completed result outlives its animation. Only a new run or mode clears it.
+export interface PersonalBestFeedback {
+  finalScore: number;
+  previousBest: number | null;
+  improvement: number | null;
+  description: string;
+}
+
+export function personalBestFeedback(finalScore: number, previousBest: number | null): PersonalBestFeedback | null {
+  const description = personalBestImprovement(finalScore, previousBest);
+  return description === null ? null : {
+    finalScore, previousBest, improvement: previousBest === null ? null : finalScore - previousBest, description,
+  };
+}
+
+// A re-render at the same step must neither start nor extend the current effect.
+export function populationFeedbackDeadline(now: number, until: number | undefined, changedStep: boolean, changedValue: boolean, delta: number): number | undefined {
+  if (delta === 0) return undefined;
+  if (until !== undefined && now < until) return until;
+  return changedStep && changedValue ? now + POPULATION_FEEDBACK_MS : undefined;
 }
 
 export function personalBestImprovement(finalScore: number, previousBest: number | null): string | null {
