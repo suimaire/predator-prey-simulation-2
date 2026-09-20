@@ -194,6 +194,9 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 .step-readout strong { color: #264433; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 
 .simulation-stage { display: grid; grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr); gap: 15px; align-items: start; }
+.simulation-main, .simulation-sidebar { display: grid; min-width: 0; align-content: start; }
+.simulation-main { position: sticky; top: 15px; gap: 10px; }
+.simulation-sidebar { gap: 12px; }
 .board-card, .pyramid-card, .removal-card, .graph-card, .statistics-card, .learning-card, .rule-card { border: 1px solid #d2ddd3; border-radius: 17px; background: #fff; box-shadow: 0 8px 25px rgba(29,59,38,.06); }
 .board-card { min-width: 0; padding: 17px; }
 .legend { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; color: #56645b; font-size: 9px; }
@@ -308,17 +311,16 @@ dialog form > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; wid
 dialog button { min-height: 42px; border: 1px solid #cfd9d1; border-radius: 10px; color: #55645b; background: #fff; font-size: 11px; font-weight: 700; }
 dialog .confirm-removal { color: #fff; border-color: #a65431; background: #a65431; }
 
-/* The same stage becomes an experiment or challenge console. */
-.ecosystem-dashboard { display: grid; grid-template-columns: minmax(0,2.5fr) minmax(300px,1fr); gap: 15px; align-items: center; margin-bottom: 15px; padding-block: 10px; border-block: 1px solid #ccd8ce; }
-.population-hud { min-width: 0; container-type: inline-size; }
-.hud-readings { display: grid; grid-template-columns: minmax(0,.65fr) repeat(3,minmax(0,1fr)); row-gap: 10px; }
-.apex-mode .hud-readings, .hud-readings:has(.population-strip[data-depth="4"]) { grid-template-columns: minmax(0,.65fr) repeat(5,minmax(0,1fr)); }
-.hud-readings:has(.population-strip[data-depth="3"]) { grid-template-columns: minmax(0,.65fr) repeat(4,minmax(0,1fr)); }
-.population-hud .step-readout { padding: 8px; }
-.population-hud .mini-population { gap: 6px; padding: 8px; }
+/* The HUD and forest stack independently of the pyramid and console. */
+.population-hud { min-width: 0; padding-block: 6px; border-block: 1px solid #ccd8ce; container-type: inline-size; }
+.hud-readings { display: grid; grid-template-columns: minmax(0,72px) repeat(3,minmax(0,140px)); row-gap: 4px; line-height: 1.3; }
+.apex-mode .hud-readings, .hud-readings:has(.population-strip[data-depth="4"]) { grid-template-columns: minmax(0,72px) repeat(5,minmax(0,140px)); }
+.hud-readings:has(.population-strip[data-depth="3"]) { grid-template-columns: minmax(0,72px) repeat(4,minmax(0,140px)); }
+.population-hud .step-readout { padding: 4px 6px; }
+.population-hud .mini-population { gap: 4px; padding: 4px 6px; }
 .population-hud .mini-population canvas { width: 28px; height: 28px; }
 .population-hud .mini-population small { min-height: 16px; }
-.population-hud .population-comparison { margin: 9px 8px 0; font-size: 10px; }
+.population-hud .population-comparison { margin: 5px 6px 0; font-size: 10px; }
 
 /* Keep the existing pyramid, its data and tabs; only tighten its presentation. */
 .ecological-pyramid--compact { min-width: 0; padding: 10px; background: #f8faf7; box-shadow: none; line-height: 1.3; }
@@ -342,7 +344,7 @@ dialog .confirm-removal { color: #fff; border-color: #a65431; background: #a6543
 .ecological-pyramid--compact .chain-status small, .ecological-pyramid--compact .chain-status span { font-size: 9px; }
 
 /* Respond to the HUD's own width, including free exploration at deeper levels. */
-@container (width > 480px) and (width <= 820px) {
+@container (width > 480px) and (width <= 760px) {
   .apex-mode .hud-readings, .hud-readings:has(.population-strip[data-depth="3"]), .hud-readings:has(.population-strip[data-depth="4"]) { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .hud-readings:has(.population-strip[data-depth="3"]) [data-population="wolf"], .hud-readings:has(.population-strip[data-depth="4"]) [data-population="wolf"] { border-left: 0; }
 }
@@ -354,7 +356,6 @@ dialog .confirm-removal { color: #fff; border-color: #a65431; background: #a6543
 .forest-population .forest-key { flex: 0 0 24px; }
 .forest-population em { font-size: 10px; font-weight: 500; }
 .mini-population.is-removal-feedback em { font-size: 15px; font-weight: 800; animation-duration: .95s; }
-.simulation-stage > .board-card { position: sticky; top: 15px; }
 .simulation-console { min-width: 0; padding: 18px; border: 1px solid #d2ddd3; border-radius: 17px; background: #fbfcf9; }
 .console-heading h2 { margin: 0; color: #1d402c; font-size: 18px; }
 .view-controls { grid-template-columns: 1fr 1fr; }
@@ -400,13 +401,16 @@ dialog .confirm-removal { color: #fff; border-color: #a65431; background: #a6543
 }
 
 @media (max-width: 1100px) {
-  .simulation-stage, .analysis-grid { grid-template-columns: 1fr; }
-  .simulation-stage > .board-card { position: static; }
   .challenge-score > strong { font-size: 52px; }
 }
 
 @media (max-width: 900px) {
-  .ecosystem-dashboard { grid-template-columns: minmax(0,1fr); align-items: start; }
+  .simulation-stage { grid-template-columns: minmax(0,1fr); gap: 12px; }
+  .simulation-main, .simulation-sidebar { display: contents; }
+  .simulation-stage .population-hud { order: 0; }
+  .simulation-stage .pyramid-card { order: 1; }
+  .simulation-stage .board-card { order: 2; }
+  .simulation-stage .simulation-console { order: 3; }
 }
 
 @media (max-width: 760px) {

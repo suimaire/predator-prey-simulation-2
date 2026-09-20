@@ -154,72 +154,74 @@ app.innerHTML = `
           <p id="mode-summary">파라미터와 먹이사슬 단계를 자유롭게 바꾸며 탐구합니다.</p>
         </section>
 
-        <section class="ecosystem-dashboard" aria-label="현재 생태계 상태와 구조">
-          <section class="population-hud" aria-label="현재 실험 상태">
-            <div class="hud-readings">
-              <div class="step-readout"><span>STEP</span><strong id="step-value">000</strong></div>
-              <article class="mini-population forest-population"><i class="forest-key" aria-hidden="true"></i><span><small>식생량</small><b id="forest-population"></b><em>성장 단계 합</em></span></article>
-              <div class="population-strip" id="population-strip"></div>
-            </div>
-            <p class="population-comparison" id="population-comparison"></p>
-          </section>
-          <section class="pyramid-card ecological-pyramid--compact">
-            <div class="card-heading"><div><p class="section-kicker">LIVE ECOLOGICAL PYRAMID</p><h2>실시간 생태 피라미드</h2></div><span class="live-pill"><i></i> LIVE</span></div>
-            <div class="segmented-control" role="group" aria-label="피라미드 표현 방식"><button type="button" data-pyramid-mode="numbers" aria-pressed="true">개체수</button><button type="button" data-pyramid-mode="energy" aria-pressed="false">에너지 흐름</button></div>
-            <div class="pyramid" id="pyramid"></div>
-            <p class="pyramid-note" id="pyramid-note"></p>
-            <div class="chain-status"><small>현재 먹이사슬</small><b id="current-chain"></b><span id="chain-summary"></span></div>
-          </section>
-        </section>
         <section class="simulation-stage" aria-label="시뮬레이션과 조작">
-          <section class="board-card" aria-labelledby="forest-heading">
-            <div class="board-heading"><div><p class="section-kicker">LIVE ECOSYSTEM</p><h2 id="forest-heading">숲 생태계</h2></div><div class="legend" id="board-legend"></div></div>
-            <div class="canvas-frame"><canvas id="forest-board" tabindex="0" aria-label="격자형 숲 생태계. 칸을 선택하면 상태를 확인할 수 있습니다."></canvas><div class="board-status" id="board-status"><span></span><b>준비됨</b></div><div class="cell-inspector" id="cell-inspector" hidden></div></div>
-            <div class="board-footnote"><span>칸을 클릭하거나 터치해 식생 단계와 개체 에너지를 확인하세요.</span><span><b>공간 규칙</b> 식생과 동물은 함께 존재 · 동물은 한 칸에 한 마리</span></div>
-          </section>
-
-          <aside class="simulation-console" aria-label="Experiment Console" id="simulation-console">
-            <div class="console-heading" id="experiment-heading"><p class="section-kicker">EXPERIMENT CONSOLE</p><h2>자유 탐구</h2></div>
-            <section class="challenge-panel" id="challenge-panel" aria-live="polite" hidden></section>
-            <nav class="sim-toolbar" aria-label="시뮬레이션 조작">
-              <div class="run-controls"><button class="run-button" id="run-button" type="button" aria-label="시뮬레이션 실행"><span>▶</span><b>Run</b></button><button id="pause-button" type="button" aria-label="시뮬레이션 일시정지" disabled><span>Ⅱ</span><b>Pause</b></button><button id="step-button" type="button" aria-label="한 step 실행"><span>↦</span><b>Step</b></button><button id="reset-button" type="button" aria-label="시뮬레이션 Reset"><span>↺</span><b>Reset</b></button></div>
-              <div class="toolbar-middle"><label for="speed-control"><span>속도</span><input id="speed-control" type="range" min="1" max="24" value="8" /><output id="speed-output">8 step/s</output></label></div>
-              <div class="view-controls"><button type="button" id="toggle-parameters" aria-label="실험 조건 열기 또는 닫기" aria-pressed="false"><span>☷</span><b>Parameters</b></button><button type="button" id="toggle-graph" aria-label="개체군 그래프 표시 또는 숨기기" aria-pressed="true"><span>⌁</span><b>Graph</b></button></div>
-            </nav>
-            <div class="challenge-copy" id="challenge-description" hidden>
-              <h2>전체 먹이사슬을 가장 오래 유지하세요</h2>
-              <p>식생부터 4차 소비자까지 모든 영양 단계를 유지하는 조건을 탐색합니다. 도전을 시작하면 설정이 잠기며, 어느 한 단계라도 사라지는 순간 기록이 결정됩니다.</p>
-              <small>Challenge Seed <b>${APEX_CHALLENGE_CONFIG.seed}</b> · ${APEX_CHALLENGE_CONFIG.simulationVersion} · 같은 조건과 seed에서는 같은 결과가 재현됩니다.</small>
-            </div>
-            <section class="removal-card">
-              <div class="card-heading"><div><p class="section-kicker">SPECIES REMOVAL EXPERIMENT</p><h2>종 제거 실험</h2></div><span>Reset으로 복구</span></div>
-              <p class="removal-restriction" id="removal-restriction" hidden>Apex Survival 중에는 종 제거 실험을 사용할 수 없습니다.</p>
-              <div class="removal-list" id="removal-list"></div>
-            </section>
-            <aside class="parameter-panel" aria-label="시뮬레이션 파라미터">
-              <div class="panel-title-row"><div><p class="section-kicker">EXPERIMENT SETUP</p><h2>실험 조건</h2></div><button type="button" class="icon-button close-parameters" aria-label="실험 조건 닫기">×</button></div>
-              <div class="parameter-scroll">
-                <p class="parameter-lock-note" id="parameter-lock-note" hidden>🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</p>
-                <section class="special-controls chain-controls">
-                  <label for="food-depth"><span><b>먹이사슬 단계</b><small>활성화할 최고 소비자 단계를 고릅니다.</small></span></label>
-                  <select id="food-depth"><option value="2">2차 소비자까지 — 기본</option><option value="3">3차 소비자까지</option><option value="4">4차 소비자까지</option></select>
-                  <label class="parameter-control efficiency-control" for="transfer-efficiency"><span class="parameter-heading"><b>에너지 전달 효율</b><output id="transfer-output">10%</output></span><span class="parameter-description">10%는 학습용 대표값이며 생태계와 생물에 따라 달라질 수 있습니다.</span><input id="transfer-efficiency" type="range" min="0.05" max="0.30" step="0.01" value="0.10" /></label>
-                </section>
-                ${parameterGroupMarkup('start', true)}
-                <section class="special-controls">
-                  <label class="seed-control" for="seed-input"><span><b id="seed-label">Random seed</b><small id="seed-helper">같은 seed와 설정은 같은 결과를 재현합니다.</small></span></label>
-                  <div class="seed-input-row"><input id="seed-input" maxlength="40" value="${initialFreeParameters.seed}" /><button type="button" id="random-seed" aria-label="새 랜덤 시드 만들기">↻</button></div>
-                  <label class="toggle-control" for="toroidal-toggle"><span><b>토로이드 경계</b><small>가장자리가 반대쪽과 연결됩니다.</small></span><input id="toroidal-toggle" type="checkbox" checked /><i></i></label>
-                </section>
-                ${parameterGroupMarkup('forest', true)}
-                ${parameterGroupMarkup('rabbit', false)}
-                ${parameterGroupMarkup('wolf', false)}
-                ${parameterGroupMarkup('tertiary', false)}
-                ${parameterGroupMarkup('quaternary', false)}
-                <button type="button" class="restore-button" id="restore-defaults">기본 설정으로 복원</button>
+          <div class="simulation-main">
+            <section class="population-hud" aria-label="현재 실험 상태">
+              <div class="hud-readings">
+                <div class="step-readout"><span>STEP</span><strong id="step-value">000</strong></div>
+                <article class="mini-population forest-population"><i class="forest-key" aria-hidden="true"></i><span><small>식생량</small><b id="forest-population"></b><em>성장 단계 합</em></span></article>
+                <div class="population-strip" id="population-strip"></div>
               </div>
+              <p class="population-comparison" id="population-comparison"></p>
+            </section>
+            <section class="board-card" aria-labelledby="forest-heading">
+              <div class="board-heading"><div><p class="section-kicker">LIVE ECOSYSTEM</p><h2 id="forest-heading">숲 생태계</h2></div><div class="legend" id="board-legend"></div></div>
+              <div class="canvas-frame"><canvas id="forest-board" tabindex="0" aria-label="격자형 숲 생태계. 칸을 선택하면 상태를 확인할 수 있습니다."></canvas><div class="board-status" id="board-status"><span></span><b>준비됨</b></div><div class="cell-inspector" id="cell-inspector" hidden></div></div>
+              <div class="board-footnote"><span>칸을 클릭하거나 터치해 식생 단계와 개체 에너지를 확인하세요.</span><span><b>공간 규칙</b> 식생과 동물은 함께 존재 · 동물은 한 칸에 한 마리</span></div>
+            </section>
+          </div>
+
+          <div class="simulation-sidebar">
+            <section class="pyramid-card ecological-pyramid--compact">
+              <div class="card-heading"><div><p class="section-kicker">LIVE ECOLOGICAL PYRAMID</p><h2>실시간 생태 피라미드</h2></div><span class="live-pill"><i></i> LIVE</span></div>
+              <div class="segmented-control" role="group" aria-label="피라미드 표현 방식"><button type="button" data-pyramid-mode="numbers" aria-pressed="true">개체수</button><button type="button" data-pyramid-mode="energy" aria-pressed="false">에너지 흐름</button></div>
+              <div class="pyramid" id="pyramid"></div>
+              <p class="pyramid-note" id="pyramid-note"></p>
+              <div class="chain-status"><small>현재 먹이사슬</small><b id="current-chain"></b><span id="chain-summary"></span></div>
+            </section>
+            <aside class="simulation-console" aria-label="Experiment Console" id="simulation-console">
+              <div class="console-heading" id="experiment-heading"><p class="section-kicker">EXPERIMENT CONSOLE</p><h2>자유 탐구</h2></div>
+              <section class="challenge-panel" id="challenge-panel" aria-live="polite" hidden></section>
+              <nav class="sim-toolbar" aria-label="시뮬레이션 조작">
+                <div class="run-controls"><button class="run-button" id="run-button" type="button" aria-label="시뮬레이션 실행"><span>▶</span><b>Run</b></button><button id="pause-button" type="button" aria-label="시뮬레이션 일시정지" disabled><span>Ⅱ</span><b>Pause</b></button><button id="step-button" type="button" aria-label="한 step 실행"><span>↦</span><b>Step</b></button><button id="reset-button" type="button" aria-label="시뮬레이션 Reset"><span>↺</span><b>Reset</b></button></div>
+                <div class="toolbar-middle"><label for="speed-control"><span>속도</span><input id="speed-control" type="range" min="1" max="24" value="8" /><output id="speed-output">8 step/s</output></label></div>
+                <div class="view-controls"><button type="button" id="toggle-parameters" aria-label="실험 조건 열기 또는 닫기" aria-pressed="false"><span>☷</span><b>Parameters</b></button><button type="button" id="toggle-graph" aria-label="개체군 그래프 표시 또는 숨기기" aria-pressed="true"><span>⌁</span><b>Graph</b></button></div>
+              </nav>
+              <div class="challenge-copy" id="challenge-description" hidden>
+                <h2>전체 먹이사슬을 가장 오래 유지하세요</h2>
+                <p>식생부터 4차 소비자까지 모든 영양 단계를 유지하는 조건을 탐색합니다. 도전을 시작하면 설정이 잠기며, 어느 한 단계라도 사라지는 순간 기록이 결정됩니다.</p>
+                <small>Challenge Seed <b>${APEX_CHALLENGE_CONFIG.seed}</b> · ${APEX_CHALLENGE_CONFIG.simulationVersion} · 같은 조건과 seed에서는 같은 결과가 재현됩니다.</small>
+              </div>
+              <section class="removal-card">
+                <div class="card-heading"><div><p class="section-kicker">SPECIES REMOVAL EXPERIMENT</p><h2>종 제거 실험</h2></div><span>Reset으로 복구</span></div>
+                <p class="removal-restriction" id="removal-restriction" hidden>Apex Survival 중에는 종 제거 실험을 사용할 수 없습니다.</p>
+                <div class="removal-list" id="removal-list"></div>
+              </section>
+              <aside class="parameter-panel" aria-label="시뮬레이션 파라미터">
+                <div class="panel-title-row"><div><p class="section-kicker">EXPERIMENT SETUP</p><h2>실험 조건</h2></div><button type="button" class="icon-button close-parameters" aria-label="실험 조건 닫기">×</button></div>
+                <div class="parameter-scroll">
+                  <p class="parameter-lock-note" id="parameter-lock-note" hidden>🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</p>
+                  <section class="special-controls chain-controls">
+                    <label for="food-depth"><span><b>먹이사슬 단계</b><small>활성화할 최고 소비자 단계를 고릅니다.</small></span></label>
+                    <select id="food-depth"><option value="2">2차 소비자까지 — 기본</option><option value="3">3차 소비자까지</option><option value="4">4차 소비자까지</option></select>
+                    <label class="parameter-control efficiency-control" for="transfer-efficiency"><span class="parameter-heading"><b>에너지 전달 효율</b><output id="transfer-output">10%</output></span><span class="parameter-description">10%는 학습용 대표값이며 생태계와 생물에 따라 달라질 수 있습니다.</span><input id="transfer-efficiency" type="range" min="0.05" max="0.30" step="0.01" value="0.10" /></label>
+                  </section>
+                  ${parameterGroupMarkup('start', true)}
+                  <section class="special-controls">
+                    <label class="seed-control" for="seed-input"><span><b id="seed-label">Random seed</b><small id="seed-helper">같은 seed와 설정은 같은 결과를 재현합니다.</small></span></label>
+                    <div class="seed-input-row"><input id="seed-input" maxlength="40" value="${initialFreeParameters.seed}" /><button type="button" id="random-seed" aria-label="새 랜덤 시드 만들기">↻</button></div>
+                    <label class="toggle-control" for="toroidal-toggle"><span><b>토로이드 경계</b><small>가장자리가 반대쪽과 연결됩니다.</small></span><input id="toroidal-toggle" type="checkbox" checked /><i></i></label>
+                  </section>
+                  ${parameterGroupMarkup('forest', true)}
+                  ${parameterGroupMarkup('rabbit', false)}
+                  ${parameterGroupMarkup('wolf', false)}
+                  ${parameterGroupMarkup('tertiary', false)}
+                  ${parameterGroupMarkup('quaternary', false)}
+                  <button type="button" class="restore-button" id="restore-defaults">기본 설정으로 복원</button>
+                </div>
+              </aside>
             </aside>
-          </aside>
+          </div>
         </section>
 
         <section class="analysis-grid" aria-label="관찰과 분석">
