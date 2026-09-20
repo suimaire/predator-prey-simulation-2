@@ -38,6 +38,7 @@ import {
   type Species,
 } from './model.ts';
 import { createFreeExplorationSeed, createInitialFreeParameters } from './seed.ts';
+import { captureRemovalFeedback, personalBestImprovement, populationChange, populationComparison, removalEmphasis, REMOVAL_FEEDBACK_MS, type RemovalFeedback } from './feedback.ts';
 
 type NumericParameterKey = Exclude<keyof SimulationParameters, 'toroidal' | 'seed' | 'foodChainDepth'>;
 type ParameterGroup = 'start' | 'forest' | 'rabbit' | 'wolf' | 'tertiary' | 'quaternary';
@@ -207,6 +208,7 @@ app.innerHTML = `
             <div class="canvas-frame"><canvas id="forest-board" tabindex="0" aria-label="격자형 숲 생태계. 칸을 선택하면 상태를 확인할 수 있습니다."></canvas><div class="board-status" id="board-status"><span></span><b>준비됨</b></div><div class="cell-inspector" id="cell-inspector" hidden></div></div>
             <div class="board-footnote"><span>칸을 클릭하거나 터치해 식생 단계와 개체 에너지를 확인하세요.</span><span><b>공간 규칙</b> 식생과 동물은 함께 존재 · 동물은 한 칸에 한 마리</span></div>
             <div class="population-strip" id="population-strip"></div>
+            <p class="population-comparison" id="population-comparison"></p>
           </section>
 
           <aside class="monitor-panel" aria-label="생태 피라미드와 종 제거 실험">
@@ -294,6 +296,8 @@ let hasApexDesign = false;
 const apexSession = new ApexChallengeSession();
 let personalBest: ApexSurvivalRecord | null = loadApexPersonalBest(window.localStorage);
 let isNewPersonalBest = false;
+let bestImprovement: string | null = null;
+let bestEmphasisStartedAt = -Infinity;
 const leaderboardTransport: LeaderboardTransport | null = createLeaderboardTransport({
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
@@ -319,6 +323,11 @@ let accumulatedTime = 0;
 let resetTimer = 0;
 let pyramidMode: PyramidMode = 'numbers';
 let pendingRemoval: Species | null = null;
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const removalFeedback = new Map<Species, RemovalFeedback>();
+const populationFeedbackUntil = new Map<Species, number>();
+let lastPopulationStep = -1;
+let removalNeedsRedraw = false;
 const visibleSeries = new Set<ChartSeries>(['forest', 'rabbit', 'wolf', 'tertiary', 'quaternary']);
 
 const speciesClass: Record<Species, string> = { rabbit: 'rabbit', wolf: 'wolf', tertiary: 'tertiary', quaternary: 'quaternary' };
@@ -385,7 +394,7 @@ function initializeIconCanvases(): void {
   });
 }
 
-function drawBoard(snapshot: SimulationSnapshot): void {
+function drawBoard(snapshot: SimulationSnapshot, now = performance.now()): void {
   const cellSize = 24;
   const logicalWidth = snapshot.width * cellSize;
   const logicalHeight = snapshot.height * cellSize;
@@ -412,6 +421,17 @@ function drawBoard(snapshot: SimulationSnapshot): void {
   for (const species of activeSpecies(parameters.foodChainDepth)) {
     for (const agent of snapshot.agents[species]) drawSpecies(ctx, species, (agent.x + 0.5) * cellSize, (agent.y + 0.54) * cellSize, cellSize, simple);
   }
+  for (const feedback of removalFeedback.values()) {
+    const emphasis = removalEmphasis(feedback, now, reducedMotion.matches);
+    if (emphasis === 0) continue;
+    ctx.save();
+    ctx.globalAlpha = .75 * emphasis;
+    ctx.strokeStyle = SERIES_COLORS[feedback.species];
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    for (const { x, y } of feedback.positions) ctx.strokeRect(x * cellSize + 3, y * cellSize + 3, cellSize - 6, cellSize - 6);
+    ctx.restore();
+  }
 }
 
 function chainLabels(): string[] {
@@ -436,6 +456,9 @@ function renderChallengePanel(): void {
   const phaseLabel = state.phase === 'setup' ? '생태계 설계' : state.phase === 'over' ? 'CHALLENGE OVER' : running ? 'CHALLENGE RUNNING' : '일시정지';
   const statusMarkup = statuses.map((status) => `<li class="${status.present ? 'is-present' : 'is-collapsed'}"><span>${status.label}</span><b>${status.present ? '● 생존' : '○ 붕괴'}</b><small>${status.value.toLocaleString()} ${status.unit}</small></li>`).join('');
   const bestMarkup = personalBest ? formatSteps(personalBest.score) : '아직 기록 없음';
+  const bestElapsed = performance.now() - bestEmphasisStartedAt;
+  const emphasizeBest = isNewPersonalBest && bestElapsed < 800;
+  const bestMotionStyle = emphasizeBest ? ` style="animation-delay:-${bestElapsed}ms"` : '';
   const collapseLabels = state.collapsedLevels.map((level) => statuses.find((status) => status.level === level)?.label ?? level).join(', ');
   const setupActions = '<button type="button" class="challenge-primary" data-challenge-action="start">도전 시작 · Start Challenge</button>';
   const activeActions = '<button type="button" class="challenge-secondary" data-challenge-action="abort">도전 중단</button>';
@@ -451,9 +474,10 @@ function renderChallengePanel(): void {
       ${challengeMessage ? `<span class="challenge-message">${challengeMessage}</span>` : ''}
     </div>
     <div class="challenge-score">
-      ${isNewPersonalBest ? '<span class="new-best">NEW PERSONAL BEST</span>' : '<span>SCORE</span>'}
+      ${isNewPersonalBest ? `<span class="new-best${emphasizeBest ? ' best-emphasis' : ''}"${bestMotionStyle}>NEW PERSONAL BEST</span>` : '<span>SCORE</span>'}
       <strong>${formatSteps(state.score)}</strong>
       <small>Personal Best <b>${bestMarkup}</b></small>
+      ${isNewPersonalBest && bestImprovement ? `<small class="${emphasizeBest ? 'best-emphasis' : ''}"${bestMotionStyle}>${bestImprovement}</small>` : ''}
       ${state.phase === 'over' ? `<em>최초 붕괴 영양 단계 <b>${collapseLabels}</b> · t = ${state.collapseStep}</em>` : ''}
     </div>
     <ul class="challenge-levels">${statusMarkup}</ul>
@@ -640,22 +664,53 @@ function updateStructuralUi(): void {
   updateControlAvailability();
 }
 
-function trendText(current: number, previous: number): string {
-  const difference = current - previous;
-  if (Math.abs(difference) < 0.5) return '안정';
-  return `${difference > 0 ? '↑' : '↓'} ${Math.abs(difference).toFixed(0)}`;
+function renderPopulationStrip(snapshot: SimulationSnapshot): void {
+  const comparison = populationComparison(simulation.getHistory());
+  const fromStep = comparison?.step ?? snapshot.step;
+  element('#population-comparison').textContent = `순변화 · 최근 ${snapshot.step - fromStep} step (t=${fromStep} → ${snapshot.step}) · 종 제거는 제거 직전 기준`;
+  const strip = element('#population-strip');
+  if (strip.dataset.depth !== String(parameters.foodChainDepth)) {
+    strip.innerHTML = activeSpecies(parameters.foodChainDepth).map((species) => `<article data-population="${species}" class="mini-population ${speciesClass[species]}"><canvas data-mini-icon="${species}" width="38" height="38"></canvas><span><small>${SPECIES_LABELS[species]}</small><b></b><em></em></span></article>`).join('');
+    strip.dataset.depth = String(parameters.foodChainDepth);
+    initializeIconCanvases();
+  }
+  const now = performance.now();
+  for (const species of activeSpecies(parameters.foodChainDepth)) {
+    const item = element<HTMLElement>(`[data-population="${species}"]`);
+    const current = snapshot.agents[species].length;
+    const change = populationChange(current, species, comparison);
+    const removed = snapshot.removedSpecies.includes(species);
+    const feedback = removalFeedback.get(species);
+    const removing = feedback !== undefined && removalEmphasis(feedback, now, reducedMotion.matches) > 0;
+    const delta = removed ? -(feedback?.count ?? 0) : change.delta;
+    const label = item.querySelector<HTMLElement>('em')!;
+    const signature = `${change.previous}:${current}`;
+    if (delta === 0) populationFeedbackUntil.delete(species);
+    // Retain the DOM and let each 600ms effect finish even at high simulation speeds.
+    if (!removed && lastPopulationStep >= 0 && snapshot.step !== lastPopulationStep && item.dataset.comparison !== signature && delta !== 0 && !populationFeedbackUntil.has(species)) {
+      populationFeedbackUntil.set(species, now + 600);
+    }
+    item.dataset.comparison = signature;
+    item.querySelector('b')!.textContent = String(current);
+    item.querySelector('small')!.textContent = `${SPECIES_LABELS[species]}${removing && delta !== 0 ? ' · 실험적 제거' : ''}`;
+    item.classList.toggle('is-removed', removed);
+    item.classList.toggle('is-removal-feedback', removing);
+    item.title = removed ? `실험적 제거 · ${feedback?.count ?? 0} → ${current} · t=${feedback?.step ?? snapshot.step}`
+      : `t=${fromStep} → ${snapshot.step} · ${change.previous} → ${current} · ${change.text}`;
+    label.textContent = removed ? (removing && delta !== 0 ? String(delta) : '실험적 제거') : change.text;
+    label.classList.toggle('has-delta', (!removed || removing) && delta !== 0);
+    label.classList.toggle('is-changing', delta !== 0 && (removing || !removed && populationFeedbackUntil.has(species)));
+    label.title = item.title;
+  }
+  lastPopulationStep = snapshot.step;
 }
 
-function renderPopulationStrip(snapshot: SimulationSnapshot): void {
-  const history = simulation.getHistory();
-  const comparison = history[Math.max(0, history.length - 6)] ?? history[0];
-  element('#population-strip').innerHTML = activeSpecies(parameters.foodChainDepth).map((species) => {
-    const current = snapshot.agents[species].length;
-    const old = species === 'rabbit' ? comparison?.rabbits : species === 'wolf' ? comparison?.wolves : species === 'tertiary' ? comparison?.tertiary : comparison?.quaternary;
-    const removed = snapshot.removedSpecies.includes(species);
-    return `<article class="mini-population ${speciesClass[species]} ${removed ? 'is-removed' : ''}"><canvas data-mini-icon="${species}" width="38" height="38"></canvas><span><small>${SPECIES_LABELS[species]}</small><b>${current}</b><em>${removed ? '제거됨' : trendText(current, old ?? current)}</em></span></article>`;
-  }).join('');
-  initializeIconCanvases();
+function clearPopulationFeedback(): void {
+  removalFeedback.clear();
+  populationFeedbackUntil.clear();
+  removalNeedsRedraw = false;
+  lastPopulationStep = -1;
+  delete element('#population-strip').dataset.depth;
 }
 
 function pyramidWidth(value: number, maximum: number): number {
@@ -721,18 +776,23 @@ function renderInterventions(snapshot: SimulationSnapshot): void {
   element('#intervention-log').innerHTML = completeMarkup || '<span>종 제거 기록 없음</span>';
 }
 
-function render(): void {
-  const snapshot = simulation.getSnapshot();
-  drawBoard(snapshot);
+function drawChart(now = performance.now()): void {
   drawPopulationChart(chart, {
     history: simulation.getHistory(),
     depth: parameters.foodChainDepth,
     visibleSeries,
     interventions: simulation.getInterventions(),
+    removalHighlights: [...removalFeedback.values()].map((feedback) => ({ ...feedback, emphasis: removalEmphasis(feedback, now, reducedMotion.matches) })),
     challengeCollapse: appMode === 'apex' && apexSession.getState().collapseStep !== null
       ? { step: apexSession.getState().collapseStep!, label: `Apex chain collapsed · t=${apexSession.getState().collapseStep}` }
       : null,
   });
+}
+
+function render(): void {
+  const snapshot = simulation.getSnapshot();
+  drawBoard(snapshot);
+  drawChart();
   element('#step-value').textContent = String(snapshot.step).padStart(3, '0');
   renderPopulationStrip(snapshot);
   renderPyramid(snapshot);
@@ -765,6 +825,7 @@ function resetSimulation(): void {
   parameters = appMode === 'apex' ? apexParameters(parameters) : validateParameters(parameters);
   if (appMode === 'apex') apexDesignParameters = { ...parameters }; else freeParameters = { ...parameters };
   simulation = new ForestSimulation(parameters);
+  clearPopulationFeedback();
   inspector.hidden = true;
   updateStructuralUi();
   render();
@@ -804,6 +865,8 @@ function finishApexChallenge(): void {
     const result = saveApexPersonalBest(window.localStorage, record);
     personalBest = result.best;
     isNewPersonalBest = result.isNewBest;
+    bestImprovement = result.isNewBest ? personalBestImprovement(record.score, result.previousBest) : null;
+    bestEmphasisStartedAt = result.isNewBest ? performance.now() : -Infinity;
   } catch {
     challengeMessage = '이 브라우저에서는 Personal Best를 저장할 수 없습니다.';
     isNewPersonalBest = false;
@@ -827,6 +890,7 @@ function beginApexChallenge(parameterSource: SimulationParameters = parameters):
   parameters = apexParameters(parameterSource);
   apexDesignParameters = { ...parameters };
   simulation = new ForestSimulation(parameters);
+  clearPopulationFeedback();
   inspector.hidden = true;
   isNewPersonalBest = false;
   challengeMessage = '';
@@ -849,6 +913,7 @@ function returnToApexSetup(parameterSource: SimulationParameters = parameters): 
   parameters = apexParameters(parameterSource);
   apexDesignParameters = { ...parameters };
   simulation = new ForestSimulation(parameters);
+  clearPopulationFeedback();
   inspector.hidden = true;
   isNewPersonalBest = false;
   challengeMessage = '';
@@ -884,6 +949,7 @@ function switchMode(nextMode: AppMode): void {
     parameters = validateParameters(freeParameters);
   }
   simulation = new ForestSimulation(parameters);
+  clearPopulationFeedback();
   updateAllControls();
   render();
 }
@@ -959,7 +1025,16 @@ document.querySelectorAll<HTMLButtonElement>('[data-pyramid-mode]').forEach((but
 removalDialog.addEventListener('close', () => {
   if (appMode === 'free' && removalDialog.returnValue === 'confirm' && pendingRemoval) {
     setRunning(false);
-    simulation.removeSpecies(pendingRemoval);
+    const feedback = captureRemovalFeedback(simulation.getSnapshot(), pendingRemoval, performance.now());
+    if (simulation.removeSpecies(pendingRemoval)) {
+      removalFeedback.set(pendingRemoval, feedback);
+      populationFeedbackUntil.delete(pendingRemoval);
+      const label = element<HTMLElement>(`[data-population="${pendingRemoval}"] em`);
+      label.classList.remove('is-changing');
+      void label.offsetWidth; // Start the removal effect afresh if a natural delta is still fading.
+      removalNeedsRedraw = true;
+      inspector.hidden = true;
+    }
     render();
   }
   pendingRemoval = null;
@@ -1083,6 +1158,21 @@ function animationLoop(time: number): void {
       if (advanceLogicalStep()) break;
     }
     if (steps > 0) render();
+  }
+  // Presentation clocks never advance logical steps or alter simulation data.
+  for (const [species, until] of populationFeedbackUntil) {
+    if (time < until) continue;
+    populationFeedbackUntil.delete(species);
+    document.querySelector(`[data-population="${species}"] em`)?.classList.remove('is-changing');
+  }
+  if (removalNeedsRedraw) {
+    drawBoard(simulation.getSnapshot(), time);
+    drawChart(time);
+    const effects = [...removalFeedback.values()];
+    if (effects.some((feedback) => time - feedback.startedAt >= REMOVAL_FEEDBACK_MS && document.querySelector(`[data-population="${feedback.species}"]`)?.classList.contains('is-removal-feedback'))) {
+      renderPopulationStrip(simulation.getSnapshot());
+    }
+    removalNeedsRedraw = effects.some((feedback) => time - feedback.startedAt < REMOVAL_FEEDBACK_MS);
   }
   requestAnimationFrame(animationLoop);
 }

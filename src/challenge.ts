@@ -203,9 +203,10 @@ export function loadApexPersonalBest(storage: KeyValueStorage): ApexSurvivalReco
 export function saveApexPersonalBest(
   storage: KeyValueStorage,
   record: ApexSurvivalRecord,
-): { best: ApexSurvivalRecord; isNewBest: boolean } {
+): { best: ApexSurvivalRecord; isNewBest: boolean; previousBest: number | null } {
   const previous = loadApexPersonalBest(storage);
-  if (previous && previous.score >= record.score) return { best: previous, isNewBest: false };
+  const previousBest = previous?.score ?? null;
+  if (previous && previous.score >= record.score) return { best: previous, isNewBest: false, previousBest };
   storage.setItem(personalBestStorageKey(), JSON.stringify(record));
-  return { best: record, isNewBest: true };
+  return { best: record, isNewBest: true, previousBest };
 }

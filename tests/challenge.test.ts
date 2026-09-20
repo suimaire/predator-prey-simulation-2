@@ -148,10 +148,36 @@ test('낮은 점수는 Personal Best를 덮어쓰지 않고 높은 점수는 par
     achievedAt: `2026-09-03T00:00:0${score % 10}.000Z`,
   });
   assert.equal(saveApexPersonalBest(storage, record(100, 40)).isNewBest, true);
+  const tied = saveApexPersonalBest(storage, record(100, 60));
+  assert.equal(tied.isNewBest, false);
+  assert.equal(tied.previousBest, 100);
   assert.equal(saveApexPersonalBest(storage, record(80, 20)).isNewBest, false);
   assert.equal(loadApexPersonalBest(storage)!.score, 100);
   assert.equal(loadApexPersonalBest(storage)!.parameterSnapshot.initialRabbits, 40);
   assert.equal(saveApexPersonalBest(storage, record(120, 90)).isNewBest, true);
   assert.equal(loadApexPersonalBest(storage)!.score, 120);
   assert.equal(loadApexPersonalBest(storage)!.parameterSnapshot.initialRabbits, 90);
+});
+
+test('완료된 점수의 저장 직전 최고기록을 보존하며 붕괴 step은 증분에도 포함하지 않는다', () => {
+  const storage = new MemoryStorage();
+  const session = new ApexChallengeSession();
+  session.start(apexParameters({ ...DEFAULT_PARAMETERS }), metric(0));
+  session.acceptStep(metric(1, { wolves: 0 }));
+  const first = saveApexPersonalBest(storage, createApexRecord(session.getState()));
+  assert.equal(first.previousBest, null);
+  assert.equal(first.best.score, 0);
+  assert.equal(first.isNewBest, true);
+  session.returnToSetup();
+  session.start(apexParameters({ ...DEFAULT_PARAMETERS }), metric(0));
+  session.acceptStep(metric(1));
+  session.acceptStep(metric(2));
+  assert.equal(loadApexPersonalBest(storage)!.score, 0);
+  session.acceptStep(metric(3, { quaternary: 0 }));
+  const improved = saveApexPersonalBest(storage, createApexRecord(session.getState()));
+  assert.equal(improved.previousBest, 0);
+  assert.equal(improved.best.score, 2);
+  assert.equal(improved.isNewBest, true);
+  assert.equal(improved.best.score - improved.previousBest!, 2);
+  assert.equal(first.best.score, 0);
 });
