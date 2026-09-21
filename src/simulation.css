@@ -468,6 +468,11 @@ html { scrollbar-gutter: stable; }
 .challenge-collapse { display: block; padding: 4px 6px; font-size: 11px; line-height: 1.5; }
 .challenge-collapse b { font-size: 12px; display: block; }
 .challenge-actions { min-width: 0; }
+.challenge-panel[data-phase="over"] .challenge-actions { grid-template-columns: 1fr 1fr; gap: 8px; }
+.challenge-panel[data-phase="over"] .challenge-actions button { min-height: 44px; }
+@media (max-width: 480px) {
+  .challenge-panel[data-phase="over"] .challenge-actions { grid-template-columns: 1fr; }
+}
 .challenge-actions button, .submit-record-link { min-height: 36px; padding: 5px 7px; font-size: 12px; border-radius: 8px; }
 .challenge-lock, .challenge-message { margin: 0; font-size: 11px; }
 .challenge-edit-note { font-size: 11px; line-height: 1.4; }

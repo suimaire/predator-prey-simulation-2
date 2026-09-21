@@ -50,12 +50,13 @@ npm run dev
 - 도전 설정은 먹이사슬 깊이를 4차 소비자까지로 고정하고 `APEX_CHALLENGE_CONFIG`의 seed `260903`을 사용합니다.
 - `Start Challenge`를 누르면 현재 파라미터의 snapshot을 저장하고 step 0에서 새 simulation을 시작합니다.
 - 매 logical step 직후 식생의 `forestAbundance`와 네 소비자 population을 확인합니다. 어느 하나라도 처음 0이 된 step은 점수에 포함하지 않습니다.
-- 진행 중에는 결과에 영향을 주는 설정을 잠그고, 종료 즉시 자동 해제합니다. Parameters에서 다음 도전의 조건을 수정해도 최종 결과와 숲·그래프는 새 도전 전까지 유지됩니다. 조건을 바꾸면 재도전 버튼은 `변경한 설정으로 도전`, 그대로면 `같은 설정으로 다시 도전`으로 표시됩니다.
+- 진행 중에는 결과에 영향을 주는 설정을 잠그고, 종료 즉시 자동 해제합니다. Parameters에서 다음 도전의 조건을 수정해도 최종 결과와 숲·그래프는 새 도전 전까지 유지됩니다. 종료 후에는 primary `수정 후 도전`과 secondary `같은 조건 재현`을 표시합니다. 데스크톱에서는 같은 행에, 좁은 모바일에서는 위아래로 배치합니다.
 - 화면 진행 속도는 1~40 step/s(기본 8)이며 score 계산에는 사용되지 않습니다.
 - 종 제거 실험은 Apex Survival에서 비활성화되고 자유 탐구에서는 기존대로 동작합니다.
 - 종료 시 마지막 숲, 그래프, 생태 피라미드와 설정을 보존하며 붕괴 step을 그래프에 표시합니다.
 - Personal Best는 브라우저 `localStorage`에 score, parameter snapshot, challenge seed, simulation version, 달성 시각을 함께 저장합니다.
-- 결과의 `같은 설정으로 다시 도전`은 동일 파라미터와 동일 seed를 사용합니다.
+- 결과의 `수정 후 도전`은 Parameters를 `edit-and-start-challenge` 목적으로 열고, `설정 적용 및 도전 시작`에서 검증 후 기존 도전 시작 경로로 한 번 초기화합니다. 값 변경 없이도 시작할 수 있으며, 취소하면 결과를 유지하고 원래 버튼으로 포커스를 복귀합니다. 모달을 닫으면 일반 `edit` 목적으로 되돌립니다.
+- 결과의 `같은 조건 재현`은 완료된 도전의 `parameterSnapshot`에 저장된 모든 파라미터와 동일 seed를 사용합니다. 다음 도전용 설정을 편집했어도 완료 도전의 조건으로 즉시 시작합니다.
 
 record schema는 `ChallengeRecord<SimulationParameters>`와 `ApexSurvivalRecord`로 정의되어 있으며, 아래 중앙 기록판의 제출 payload가 이 구조를 그대로 재사용합니다.
 

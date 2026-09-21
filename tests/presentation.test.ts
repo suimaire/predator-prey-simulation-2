@@ -117,7 +117,7 @@ test('completed settings unlock without clearing score, collapse, best or retry 
   assert.match(ui.panel.innerHTML, /FINAL SCORE/u);
   assert.match(ui.panel.innerHTML, /첫 기록 달성/u);
   assert.match(ui.panel.innerHTML, /붕괴 step · 10/u);
-  assert.match(ui.panel.innerHTML, /같은 설정으로 다시 도전/u);
+  assert.ok(ui.panel.innerHTML.includes('class="challenge-primary" data-challenge-action="edit-and-start" aria-haspopup="dialog" aria-controls="parameters-dialog">수정 후 도전</button><button type="button" class="challenge-secondary" data-challenge-action="retry">같은 조건 재현</button>'));
   assert.doesNotMatch(ui.panel.innerHTML, /설정 수정하기|challenge-lock/u);
 });
 
@@ -131,7 +131,7 @@ test('editing the next design preserves finished simulation and record until the
   assert.equal(ui.context.lastFinishedRecord, finishedRecord);
   assert.equal(ui.context.apexSession.getState(), finishedState);
   assert.equal(ui.context.bestResult.finalScore, 9);
-  assert.match(ui.panel.innerHTML, /변경한 설정으로 도전/u);
+  assert.match(ui.panel.innerHTML, /같은 조건 재현/u);
   assert.doesNotMatch(ui.panel.innerHTML, /같은 설정으로 다시 도전/u);
   ui.run('beginApexChallenge()');
   assert.equal(ui.run('challengeIsLocked()'), true);

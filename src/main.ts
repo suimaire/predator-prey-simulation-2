@@ -297,10 +297,17 @@ const applyParametersButton = element<HTMLButtonElement>('#apply-parameters');
 const dialogs = new DialogController();
 let parameterDraft: ParameterDraft | null = null;
 let parameterDraftError = '';
-dialogs.register(parametersDialog, { onClose: () => {
+type ParameterIntent = 'edit' | 'edit-and-start-challenge';
+let parameterIntent: ParameterIntent = 'edit';
+
+function clearParameterDraft(): void {
   parameterDraft = null;
+  parameterDraftError = '';
+  parameterIntent = 'edit';
+  applyParametersButton.textContent = '설정 적용';
   parameterToggle.setAttribute('aria-expanded', 'false');
-} });
+}
+dialogs.register(parametersDialog, { onClose: clearParameterDraft });
 dialogs.register(leaderboardDialog, { backdrop: true });
 dialogs.register(removalDialog);
 const leaderboardBoards: Readonly<Record<BoardGroup, HTMLDivElement>> = {
@@ -491,10 +498,8 @@ function renderChallengePanel(): void {
 
   const bestMarkup = personalBest ? formatSteps(personalBest.score) : '아직 기록 없음';
   const result = state.phase === 'over' ? bestResult : null;
-  const designChanged = state.phase === 'over' && state.parameterSnapshot !== null
-    && Object.entries(state.parameterSnapshot).some(([key, value]) => parameters[key as keyof SimulationParameters] !== value);
   // Unchanged results keep their DOM, focus and one-shot animations across redraws.
-  const signature = JSON.stringify([state.phase, state.score, statuses, running, personalBest?.score, result, challengeMessage, designChanged]);
+  const signature = JSON.stringify([state.phase, state.score, statuses, running, personalBest?.score, result, challengeMessage]);
   if (signature === challengeSignature) return;
   challengeSignature = signature;
   const bestElapsed = result ? Math.max(0, performance.now() - bestEmphasisStartedAt) : 0;
@@ -502,7 +507,7 @@ function renderChallengePanel(): void {
   const collapseLabels = state.collapsedLevels.map((level) => statuses.find((status) => status.level === level)?.label ?? level).join(', ');
   const setupActions = '<button type="button" class="challenge-primary" data-challenge-action="start">도전 시작 · Start Challenge</button>';
   const activeActions = '<button type="button" class="challenge-secondary" data-challenge-action="abort">도전 중단</button>';
-  const overActions = `<button type="button" class="challenge-primary" data-challenge-action="start">${designChanged ? '변경한 설정으로 도전' : '같은 설정으로 다시 도전'}</button>`;
+  const overActions = '<button type="button" class="challenge-primary" data-challenge-action="edit-and-start" aria-haspopup="dialog" aria-controls="parameters-dialog">수정 후 도전</button><button type="button" class="challenge-secondary" data-challenge-action="retry">같은 조건 재현</button>';
   challengePanel.dataset.phase = state.phase;
   challengePanel.classList.toggle('is-new-best', result !== null);
   challengePanel.classList.toggle('best-emphasis', emphasizeBest);
@@ -522,7 +527,7 @@ function renderChallengePanel(): void {
     ${state.phase === 'over' ? `<p class="challenge-collapse">최초 붕괴 영양 단계 <b>${collapseLabels}</b><span>붕괴 step · ${state.collapseStep}</span></p>` : ''}
 
     <div class="challenge-actions">${state.phase === 'setup' ? setupActions : state.phase === 'active' ? activeActions : overActions}</div>
-      ${state.phase === 'over' ? `<p class="challenge-edit-note">${designChanged ? '다음 도전 설정 변경됨' : 'Parameters에서 다음 도전 조건 편집 가능'}</p><button type="button" class="challenge-secondary submit-record-link" data-open-ranking>기록판 / 이 기록 제출</button>` : ''}
+      ${state.phase === 'over' ? `<p class="challenge-edit-note">설정을 수정해 새로운 조건으로 도전하거나, 같은 조건을 다시 재현할 수 있습니다.</p><button type="button" class="challenge-secondary submit-record-link" data-open-ranking>기록판 / 이 기록 제출</button>` : ''}
       ${challengeIsLocked() ? '<span class="challenge-lock">🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</span>' : ''}
       ${challengeMessage ? `<span class="challenge-message">${challengeMessage}</span>` : ''}
 `;
@@ -670,8 +675,10 @@ function updateControlAvailability(): void {
   element<HTMLButtonElement>('#restore-defaults').disabled = locked;
   element('#parameter-lock-note').hidden = !locked;
   const prepared = parameterDraft?.prepare(parameters, appMode, state.phase);
-  applyParametersButton.disabled = prepared?.status !== 'apply';
-  element('#parameter-edit-note').textContent = locked ? '도전 진행 중·일시정지 중에는 읽기 전용입니다.' : appMode === 'apex' && state.phase === 'over' ? '다음 도전 설정을 편집합니다. 종료 결과와 숲은 그대로 유지됩니다.' : '설정 적용 시 새 조건으로 한 번 초기화됩니다. 자동 실행하지 않습니다.';
+  const startsChallenge = parameterIntent === 'edit-and-start-challenge' && appMode === 'apex' && state.phase === 'over';
+  applyParametersButton.textContent = startsChallenge ? '설정 적용 및 도전 시작' : '설정 적용';
+  applyParametersButton.disabled = prepared?.status !== 'apply' && !(startsChallenge && prepared?.status === 'unchanged');
+  element('#parameter-edit-note').textContent = locked ? '도전 진행 중·일시정지 중에는 읽기 전용입니다.' : startsChallenge ? '설정을 적용하면 새 도전을 시작합니다. 취소하면 종료 결과로 돌아갑니다.' : appMode === 'apex' && state.phase === 'over' ? '다음 도전 설정을 편집합니다. 종료 결과와 숲은 그대로 유지됩니다.' : '설정 적용 시 새 조건으로 한 번 초기화됩니다. 자동 실행하지 않습니다.';
   element('#parameter-error').textContent = parameterDraftError;
   element('#seed-label').textContent = appMode === 'apex' ? 'Challenge Seed' : 'Random seed';
   element('#seed-helper').textContent = appMode === 'apex' ? '공정한 비교를 위해 이 도전에서는 고정됩니다.' : '같은 seed와 설정은 같은 결과를 재현합니다.';
@@ -1051,6 +1058,12 @@ element('#restore-defaults').addEventListener('click', () => {
 function applyParameterDraft(): void {
   if (!parameterDraft) return;
   const result = parameterDraft.prepare(parameters, appMode, apexSession.getState().phase);
+  if (parameterIntent === 'edit-and-start-challenge' && appMode === 'apex' && apexSession.getState().phase === 'over'
+    && (result.status === 'apply' || result.status === 'unchanged')) {
+    // The canonical start owns the single initialization and completed-result reset.
+    beginApexChallenge(result.status === 'apply' ? result.parameters : parameters);
+    return;
+  }
   if (result.status !== 'apply') {
     parameterDraftError = result.status === 'invalid' ? result.message ?? '설정을 확인하세요.' : result.status === 'locked' ? '도전 진행 중에는 설정을 변경할 수 없습니다.' : '';
     updateControlAvailability(); return;
@@ -1093,12 +1106,15 @@ removalDialog.addEventListener('close', () => {
 
 document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach((button) => button.addEventListener('click', () => switchMode(button.dataset.appMode as AppMode)));
 
-challengePanel.addEventListener('click', (event) => {
+function handleChallengeAction(event: MouseEvent): void {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-challenge-action]');
   if (!button) return;
   const action = button.dataset.challengeAction;
   if (action === 'start') beginApexChallenge();
-  if (action === 'retry') {
+  if (action === 'edit-and-start' && apexSession.getState().phase === 'over') {
+    toggleParameters(true, 'edit-and-start-challenge', button);
+  }
+  if (action === 'retry' && apexSession.getState().phase === 'over') {
     const snapshot = apexSession.getState().parameterSnapshot;
     if (snapshot) beginApexChallenge({ ...snapshot });
   }
@@ -1106,7 +1122,8 @@ challengePanel.addEventListener('click', (event) => {
     const confirmed = window.confirm('현재 도전을 중단하시겠습니까? 이 기록은 Personal Best에 저장되지 않습니다.');
     if (confirmed) returnToApexSetup(parameters);
   }
-});
+}
+challengePanel.addEventListener('click', handleChallengeAction);
 
 function openLeaderboard(opener: HTMLElement, board: BoardGroup = activeLeaderboardBoard): void {
   selectLeaderboardBoard(board);
@@ -1161,16 +1178,17 @@ resetButton.addEventListener('click', () => {
 });
 speedControl.addEventListener('input', () => { speedOutput.value = `${speedControl.value} step/s`; });
 
-function toggleParameters(force?: boolean): void {
+function toggleParameters(force?: boolean, intent: ParameterIntent = 'edit', opener: HTMLElement = parameterToggle): void {
   if (force === false) { if (parametersDialog.open) parametersDialog.close(); return; }
   if (parametersDialog.open || leaderboardDialog.open || removalDialog.open) return;
+  parameterIntent = intent;
   parameterDraft = new ParameterDraft(parameters);
   parameterDraftError = '';
   updateAllControls();
-  if (dialogs.open(parametersDialog, parameterToggle, element('.close-parameters'))) {
+  if (dialogs.open(parametersDialog, opener, element('.close-parameters'))) {
     parameterToggle.setAttribute('aria-expanded', 'true');
     element('.parameter-scroll').scrollTop = 0;
-  }
+  } else clearParameterDraft();
 }
 parameterToggle.addEventListener('click', () => toggleParameters());
 element('.close-parameters').addEventListener('click', () => parametersDialog.close());

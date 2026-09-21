@@ -63,7 +63,7 @@ function commitUi(mode: 'free' | 'apex', phase: 'setup' | 'active' | 'over') {
   const context = vm.createContext({
     parameters, parameterDraft: new ParameterDraft(parameters), appMode: mode,
     apexSession: { getState: () => ({ phase }), returnToSetup() {} },
-    parameterDraftError: '', challengeMessage: '', freeParameters: parameters, apexDesignParameters: parameters,
+    parameterIntent: 'edit', parameterDraftError: '', challengeMessage: '', freeParameters: parameters, apexDesignParameters: parameters,
     updateControlAvailability() {}, renderChallengePanel() {}, resetSimulation() { resets++; },
     parametersDialog: { close() { closes++; context.parameterDraft = null; } },
   });
