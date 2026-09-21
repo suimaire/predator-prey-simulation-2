@@ -177,24 +177,24 @@ app.innerHTML = `
   <div class="app-shell" id="app-shell">
     <header class="topbar">
       <div class="header-intro">
+        <div class="brand-row"><div class="brand-mark" aria-hidden="true"><span></span></div><div class="brand-copy"><p class="eyebrow">통합과학 2 · 생태계 상호작용</p><div class="brand-title"><h1>Rabbits <span>&</span> Wolves</h1><p>Extended forest population lab</p></div></div></div>
         <nav class="portal-nav" aria-label="과학 수업 포털 안내"><a class="portal-link" href="https://suimaire.github.io/" aria-label="과학 수업 포털로 돌아가기">← 과학 수업 포털</a><span class="lesson-chip">탐구 02 · 영양 단계와 생태계 변화</span></nav>
-        <div class="brand-row"><div class="brand-mark" aria-hidden="true"><span></span></div><div class="brand-copy"><p class="eyebrow">통합과학 2 · 생태계 상호작용</p><h1>Rabbits <span>&</span> Wolves</h1><p>Extended forest population lab</p></div></div>
-        <div class="food-chain" id="header-chain" aria-label="현재 먹이 관계"></div>
       </div>
 
     </header>
 
     <div class="lab-layout">
       <main class="workspace">
-        <section class="mode-bar" aria-label="시뮬레이션 모드">
-          <div class="mode-switch" role="group" aria-label="모드 선택"><button type="button" data-app-mode="free" aria-pressed="true">자유 탐구</button><button type="button" data-app-mode="apex" aria-pressed="false">Apex Survival</button></div>
-          <p id="mode-summary">파라미터와 먹이사슬 단계를 자유롭게 바꾸며 탐구합니다.</p>
-        </section>
-
         <section class="simulation-stage" aria-label="시뮬레이션과 조작">
           <div class="simulation-main">
             <section class="board-card" aria-labelledby="forest-heading">
-              <div class="board-heading"><div><p class="section-kicker">LIVE ECOSYSTEM</p><h2 id="forest-heading">숲 생태계</h2></div><div class="legend" id="board-legend"></div></div>
+              <header class="board-heading">
+                <div><p class="section-kicker">LIVE ECOSYSTEM</p><h2 id="forest-heading">숲 생태계</h2></div>
+                <div class="board-heading-actions">
+                  <div class="mode-switch" role="group" aria-label="모드 선택"><button type="button" data-app-mode="free" aria-pressed="true">자유 탐구</button><button type="button" data-app-mode="apex" aria-pressed="false">Apex Survival</button></div>
+                  <div class="legend" id="board-legend"></div>
+                </div>
+              </header>
               <section class="population-hud" aria-label="현재 실험 상태">
                 <div class="hud-readings">
                   <div class="step-readout"><span>STEP</span><strong id="step-value">000</strong></div>
@@ -520,10 +520,6 @@ function drawBoard(snapshot: SimulationSnapshot, now = performance.now()): void 
   }
 }
 
-function chainLabels(): string[] {
-  return ['식생', ...activeSpecies(parameters.foodChainDepth).map((species) => SPECIES_LABELS[species])];
-}
-
 function challengeIsLocked(): boolean {
   return appMode === 'apex' && challengeSettingsLocked(apexSession.getState());
 }
@@ -753,11 +749,6 @@ function updateStructuralUi(): void {
   element('#experiment-heading').hidden = appMode === 'apex';
   element('#simulation-console').setAttribute('aria-label', appMode === 'apex' ? 'Challenge Console' : 'Experiment Console');
   document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.appMode === appMode)));
-  element('#mode-summary').textContent = appMode === 'apex'
-    ? '이 모형에서 식생부터 4차 소비자까지 먹이사슬을 오래 유지하는 조건을 탐색합니다.'
-    : '파라미터와 먹이사슬 단계를 자유롭게 바꾸며 탐구합니다.';
-  const chain = chainLabels();
-  element('#header-chain').innerHTML = chain.map((label, index) => `${index ? '<i>→</i>' : ''}<span>${label}</span>`).join('');
   element('#board-legend').innerHTML = `<span><i class="forest-key"></i>식생</span>${active.map((species) => `<span><canvas data-mini-icon="${species}" width="28" height="28"></canvas>${SPECIES_LABELS[species]}</span>`).join('')}`;
   element('#graph-legend').innerHTML = (['forest', ...active] as ChartSeries[]).map((series) => {
     const label = series === 'forest' ? '식생 %' : SPECIES_LABELS[series];
