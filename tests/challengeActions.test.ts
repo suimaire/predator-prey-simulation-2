@@ -39,7 +39,7 @@ function completedUi() {
     leaderboardDialog: { open: false }, removalDialog: { open: false },
     dialogs: { open(_dialog: unknown, opener: unknown) { opens++; context.opener = opener; context.parametersDialog.open = true; return true; } },
     parameterToggle: element('#toggle-parameters'), applyParametersButton: element('#apply-parameters'),
-    parameterDefinitions: [], transferControl: {}, toroidalToggle: {}, depthSelect: {}, seedInput: {},
+    parameterDefinitions: [], updateParameterNavigation() {}, transferControl: {}, toroidalToggle: {}, depthSelect: {}, seedInput: {},
     runButton: {}, pauseButton: {}, stepButton: {}, element,
     updateAllControls() { run('updateControlAvailability()'); },
     setRunning(value: boolean) { context.running = value; run('updateControlAvailability()'); },

@@ -61,9 +61,9 @@ interface ParameterDefinition {
 
 const parameterDefinitions: ParameterDefinition[] = [
   { key: 'gridColumns', label: '격자 크기', description: '열 수에 따라 행 수도 비례해 바뀝니다.', min: 20, max: 48, step: 4, group: 'start', format: 'integer', suffix: '열' },
-  { key: 'initialRabbits', label: '초기 토끼 수', description: '실험을 시작할 때 배치할 토끼 수', min: 0, max: 400, step: 2, group: 'start', format: 'integer', suffix: '마리' },
-  { key: 'initialWolves', label: '초기 늑대 수', description: '실험을 시작할 때 배치할 늑대 수', min: 0, max: 160, step: 2, group: 'start', format: 'integer', suffix: '마리' },
-  { key: 'initialForestDensity', label: '초기 숲 밀도', description: '처음 격자에 자란 숲의 평균 정도', min: 0, max: 100, step: 2, group: 'start', format: 'integer', suffix: '%' },
+  { key: 'initialRabbits', label: '초기 토끼 수', description: '실험을 시작할 때 배치할 토끼 수', min: 0, max: 400, step: 2, group: 'rabbit', format: 'integer', suffix: '마리' },
+  { key: 'initialWolves', label: '초기 늑대 수', description: '실험을 시작할 때 배치할 늑대 수', min: 0, max: 160, step: 2, group: 'wolf', format: 'integer', suffix: '마리' },
+  { key: 'initialForestDensity', label: '초기 숲 밀도', description: '처음 격자에 자란 숲의 평균 정도', min: 0, max: 100, step: 2, group: 'forest', format: 'integer', suffix: '%' },
   { key: 'forestRegrowth', label: '숲 재생 속도', description: '각 칸의 숲 단계가 한 단계 회복될 확률', min: 0, max: 0.25, step: 0.005, group: 'forest', format: 'percent' },
   { key: 'forestMaxStage', label: '숲 최대 밀도', description: '각 칸이 도달할 수 있는 최고 성장 단계', min: 1, max: 4, step: 1, group: 'forest', format: 'integer', suffix: '단계' },
   { key: 'rabbitMoveProbability', label: '이동 확률', description: '토끼가 숲이 많은 이웃 칸으로 움직일 확률', min: 0, max: 1, step: 0.02, group: 'rabbit', format: 'percent' },
@@ -99,10 +99,10 @@ const parameterDefinitions: ParameterDefinition[] = [
 ];
 
 const groupInfo: Record<ParameterGroup, { title: string; subtitle: string; icon: string }> = {
-  start: { title: '시작 조건', subtitle: '격자와 초기 분포', icon: '◎' },
-  forest: { title: '숲', subtitle: '성장과 최대 밀도', icon: '♣' },
-  rabbit: { title: '토끼', subtitle: '이동·먹이·번식·사망', icon: '♙' },
-  wolf: { title: '늑대', subtitle: '탐색·사냥·번식·사망', icon: '◆' },
+  start: { title: '공통 환경', subtitle: '공간 · 먹이사슬 · 시작 환경', icon: '⚙' },
+  forest: { title: '생산자 · 식생', subtitle: '재생 · 성장과 최대 밀도', icon: '♣' },
+  rabbit: { title: '1차 소비자 · 토끼', subtitle: '이동 · 먹이 · 번식 · 사망', icon: '♙' },
+  wolf: { title: '2차 소비자 · 늑대', subtitle: '탐색 · 사냥 · 번식 · 사망', icon: '◆' },
   tertiary: { title: '3차 소비자', subtitle: '늑대를 먹는 상위 포식자', icon: '▲' },
   quaternary: { title: '4차 소비자', subtitle: '최상위 영양 단계', icon: '⬟' },
 };
@@ -113,21 +113,57 @@ function formatParameter(definition: ParameterDefinition, value: number): string
   return `${Math.round(value)}${definition.suffix ? ` ${definition.suffix}` : ''}`;
 }
 
-function parameterMarkup(group: ParameterGroup): string {
-  return parameterDefinitions.filter((definition) => definition.group === group).map((definition) => `
+// Fixed trophic order, independent of population/density values and their different units.
+const initialStages: { group: Exclude<ParameterGroup, 'start'>; key: NumericParameterKey }[] = [
+  { group: 'quaternary', key: 'initialQuaternary' },
+  { group: 'tertiary', key: 'initialTertiary' },
+  { group: 'wolf', key: 'initialWolves' },
+  { group: 'rabbit', key: 'initialRabbits' },
+  { group: 'forest', key: 'initialForestDensity' },
+];
+
+function parameterGroupActive(group: ParameterGroup, depth: FoodChainDepth): boolean {
+  return group !== 'quaternary' && group !== 'tertiary' || depth >= (group === 'quaternary' ? 4 : 3);
+}
+
+function parameterInputMarkup(definition: ParameterDefinition): string {
+  return `<input id="param-${definition.key}" data-parameter="${definition.key}" type="range" min="${definition.min}" max="${definition.max}" step="${definition.step}" value="${DEFAULT_PARAMETERS[definition.key]}" aria-valuetext="${formatParameter(definition, DEFAULT_PARAMETERS[definition.key])}" />`;
+}
+
+function parameterMarkup(definitions: ParameterDefinition[]): string {
+  return definitions.map((definition) => `
     <label class="parameter-control" for="param-${definition.key}">
-      <span class="parameter-heading"><b>${definition.label}</b><output id="output-${definition.key}">${formatParameter(definition, DEFAULT_PARAMETERS[definition.key])}</output></span>
+      <span class="parameter-heading"><b>${definition.label}</b><output id="output-${definition.key}" for="param-${definition.key}">${formatParameter(definition, DEFAULT_PARAMETERS[definition.key])}</output></span>
       <span class="parameter-description">${definition.description}</span>
-      <input id="param-${definition.key}" data-parameter="${definition.key}" type="range" min="${definition.min}" max="${definition.max}" step="${definition.step}" value="${DEFAULT_PARAMETERS[definition.key]}" />
+      ${parameterInputMarkup(definition)}
     </label>`).join('');
 }
 
-function parameterGroupMarkup(group: ParameterGroup, open: boolean): string {
+function initialEcosystemMarkup(): string {
+  return initialStages.map(({ group, key }) => {
+    const info = groupInfo[group];
+    const definition = parameterDefinitions.find((item) => item.key === key)!;
+    return `<article class="initial-stage" data-initial-stage="${group}">
+      <button type="button" class="stage-select" data-parameter-section="${group}" aria-controls="parameter-panel-${group}" aria-pressed="${group === 'wolf'}" aria-label="${info.title} 상세 설정">
+        <span class="group-icon ${group}" aria-hidden="true">${info.icon}</span><span class="stage-name">${info.title}<small id="stage-status-${group}" class="stage-status" hidden>비활성</small></span>
+        <output id="output-${key}" for="param-${key}" aria-hidden="true">${formatParameter(definition, DEFAULT_PARAMETERS[key])}</output><span class="selection-mark" aria-hidden="true">◀</span>
+      </button>
+      <div class="initial-stage-control"><label class="visually-hidden" for="param-${key}">${info.title} · ${definition.label}</label>${parameterInputMarkup(definition)}</div>
+    </article>`;
+  }).join('');
+}
+
+function parameterGroupMarkup(group: ParameterGroup, content?: string): string {
   const info = groupInfo[group];
-  return `<details class="parameter-group" data-species-group="${group}" ${open ? 'open' : ''}>
-    <summary><span class="group-icon ${group}">${info.icon}</span><span><b>${info.title}</b><small>${info.subtitle}</small></span><i>⌄</i></summary>
-    <div class="parameter-group-content">${parameterMarkup(group)}</div>
-  </details>`;
+  const definitions = parameterDefinitions.filter((definition) => definition.group === group && !initialStages.some((stage) => stage.key === definition.key));
+  const categories: [string, RegExp][] = group === 'forest'
+    ? [['재생 · 성장', /forest/]]
+    : [['이동 · 탐색', /Move/], [group === 'rabbit' ? '먹이 · 에너지' : '사냥 · 에너지', /FoodEnergy|EnergyCost/], ['번식', /Breed/], ['사망', /MaxAge/]];
+  return `<section class="parameter-detail" id="parameter-panel-${group}" data-parameter-panel="${group}" aria-labelledby="parameter-title-${group}" ${group === 'wolf' ? '' : 'hidden'}>
+    <header class="parameter-detail-heading"><span class="group-icon ${group}" aria-hidden="true">${info.icon}</span><div><h3 id="parameter-title-${group}">${info.title}</h3><p>${info.subtitle}</p></div></header>
+    ${group === 'tertiary' || group === 'quaternary' ? `<p class="inactive-detail-note" id="inactive-note-${group}" hidden>현재 먹이사슬에서 비활성입니다. 공통 환경에서 먹이사슬 단계를 높이면 편집할 수 있습니다.</p>` : ''}
+    ${content ?? categories.map(([title, pattern]) => `<section class="parameter-category"><h4>${title}</h4>${parameterMarkup(definitions.filter((definition) => pattern.test(definition.key)))}</section>`).join('')}
+  </section>`;
 }
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -225,27 +261,37 @@ app.innerHTML = `
 
               <dialog id="parameters-dialog" class="dashboard-dialog parameters-dialog" aria-labelledby="parameters-title" aria-describedby="parameter-edit-note">
                 <div class="dialog-heading panel-title-row"><div><p class="section-kicker">EXPERIMENT SETUP</p><h2 id="parameters-title">실험 조건</h2></div><button type="button" class="icon-button close-parameters" aria-label="실험 조건 닫기">×</button></div>
-                <p id="parameter-edit-note" class="dialog-notice"></p><div class="parameter-scroll dialog-body" tabindex="0" aria-label="실험 조건 입력 영역">
-                  <p class="parameter-lock-note" id="parameter-lock-note" hidden>🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</p>
+                <p id="parameter-edit-note" class="dialog-notice"></p>
+                <p class="parameter-lock-note" id="parameter-lock-note" hidden>🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</p>
+                <div class="parameter-workspace">
+                  <section class="initial-ecosystem" aria-labelledby="initial-ecosystem-title">
+                    <div class="initial-ecosystem-heading"><h3 id="initial-ecosystem-title">초기 생태계 구성</h3><p>초기값을 조절하고, 생물군을 선택하세요.</p></div>
+                    <div class="initial-stages">${initialEcosystemMarkup()}</div>
+                    <p class="initial-hierarchy-note">카드 폭은 영양 단계만 나타냅니다. 밀도(%)와 개체수(마리)는 비교하지 않습니다.</p>
+                    <button type="button" class="environment-select" data-parameter-section="start" aria-controls="parameter-panel-start" aria-pressed="false"><span><b>⚙ 공통 환경</b><span class="selection-mark" aria-hidden="true">◀</span></span><small id="environment-summary"></small></button>
+                  </section>
+                  <div class="parameter-scroll dialog-body" tabindex="0" aria-label="선택한 생물군의 세부 설정">
+                    <p class="detail-kicker">선택한 항목의 세부 설정</p>
+                    ${parameterGroupMarkup('start', `
                   <section class="special-controls chain-controls">
                     <label for="food-depth"><span><b>먹이사슬 단계</b><small>활성화할 최고 소비자 단계를 고릅니다.</small></span></label>
                     <select id="food-depth"><option value="2">2차 소비자까지 — 기본</option><option value="3">3차 소비자까지</option><option value="4">4차 소비자까지</option></select>
                     <label class="parameter-control efficiency-control" for="transfer-efficiency"><span class="parameter-heading"><b>에너지 전달 효율</b><output id="transfer-output">10%</output></span><span class="parameter-description">10%는 학습용 대표값이며 생태계와 생물에 따라 달라질 수 있습니다.</span><input id="transfer-efficiency" type="range" min="0.05" max="0.30" step="0.01" value="0.10" /></label>
                   </section>
-                  ${parameterGroupMarkup('start', true)}
+                  <section class="parameter-category"><h4>공간</h4>${parameterMarkup(parameterDefinitions.filter((definition) => definition.group === 'start'))}</section>
                   <section class="special-controls">
                     <label class="seed-control" for="seed-input"><span><b id="seed-label">Random seed</b><small id="seed-helper">같은 seed와 설정은 같은 결과를 재현합니다.</small></span></label>
                     <div class="seed-input-row"><input id="seed-input" maxlength="40" value="${initialFreeParameters.seed}" /><button type="button" id="random-seed" aria-label="새 랜덤 시드 만들기">↻</button></div>
                     <label class="toggle-control" for="toroidal-toggle"><span><b>토로이드 경계</b><small>가장자리가 반대쪽과 연결됩니다.</small></span><input id="toroidal-toggle" type="checkbox" checked /><i></i></label>
-                  </section>
-                  ${parameterGroupMarkup('forest', true)}
-                  ${parameterGroupMarkup('rabbit', false)}
-                  ${parameterGroupMarkup('wolf', false)}
-                  ${parameterGroupMarkup('tertiary', false)}
-                  ${parameterGroupMarkup('quaternary', false)}
-                  <button type="button" class="restore-button" id="restore-defaults">기본 설정으로 복원</button>
+                  </section>`)}
+                  ${parameterGroupMarkup('forest')}
+                  ${parameterGroupMarkup('rabbit')}
+                  ${parameterGroupMarkup('wolf')}
+                  ${parameterGroupMarkup('tertiary')}
+                  ${parameterGroupMarkup('quaternary')}
+                  </div>
                 </div>
-              <div class="dialog-footer"><p id="parameter-error" role="alert"></p><div><button type="button" id="cancel-parameters">취소</button><button type="button" id="apply-parameters" class="challenge-primary" disabled>설정 적용</button></div></div></dialog>
+              <div class="dialog-footer"><p id="parameter-error" role="alert"></p><div><button type="button" class="restore-button" id="restore-defaults">기본 설정으로 복원</button><button type="button" id="cancel-parameters">취소</button><button type="button" id="apply-parameters" class="challenge-primary" disabled>설정 적용</button></div></div></dialog>
         <dialog id="leaderboard-dialog" class="dashboard-dialog leaderboard-dialog" aria-labelledby="leaderboard-title"><div class="dialog-heading"><h2 id="leaderboard-title">HAFS 랭킹 · Top 10</h2><button type="button" id="close-leaderboard" aria-label="랭킹 닫기">×</button></div><section class="leaderboard-panel" id="leaderboard-panel" aria-label="Apex Survival 기록판">
           <div class="leaderboard-heading">
             <div class="leaderboard-tabs" role="tablist" aria-label="기록판 선택">
@@ -666,7 +712,9 @@ function clearFinishedRecord(): void {
 function updateControlAvailability(): void {
   const state = apexSession.getState();
   const locked = challengeIsLocked();
-  for (const definition of parameterDefinitions) element<HTMLInputElement>(`#param-${definition.key}`).disabled = locked;
+  const values = parameterDraft?.value ?? parameters;
+  for (const definition of parameterDefinitions) element<HTMLInputElement>(`#param-${definition.key}`).disabled = locked || !parameterGroupActive(definition.group, values.foodChainDepth);
+  updateParameterNavigation(values);
   transferControl.disabled = locked;
   toroidalToggle.disabled = locked;
   depthSelect.disabled = appMode === 'apex' || locked;
@@ -708,8 +756,6 @@ function updateStructuralUi(): void {
   element('#mode-summary').textContent = appMode === 'apex'
     ? '이 모형에서 식생부터 4차 소비자까지 먹이사슬을 오래 유지하는 조건을 탐색합니다.'
     : '파라미터와 먹이사슬 단계를 자유롭게 바꾸며 탐구합니다.';
-  document.querySelector<HTMLElement>('[data-species-group="tertiary"]')!.hidden = parameters.foodChainDepth < 3;
-  document.querySelector<HTMLElement>('[data-species-group="quaternary"]')!.hidden = parameters.foodChainDepth < 4;
   const chain = chainLabels();
   element('#header-chain').innerHTML = chain.map((label, index) => `${index ? '<i>→</i>' : ''}<span>${label}</span>`).join('');
   element('#board-legend').innerHTML = `<span><i class="forest-key"></i>식생</span>${active.map((species) => `<span><canvas data-mini-icon="${species}" width="28" height="28"></canvas>${SPECIES_LABELS[species]}</span>`).join('')}`;
@@ -910,6 +956,7 @@ function updateAllControls(): void {
   const values = parameterDraft.value;
   for (const definition of parameterDefinitions) {
     element<HTMLInputElement>(`#param-${definition.key}`).value = String(values[definition.key]);
+    element<HTMLInputElement>(`#param-${definition.key}`).setAttribute('aria-valuetext', formatParameter(definition, values[definition.key]));
     element<HTMLOutputElement>(`#output-${definition.key}`).value = formatParameter(definition, values[definition.key]);
   }
   seedInput.value = values.seed;
@@ -917,10 +964,39 @@ function updateAllControls(): void {
   depthSelect.value = String(values.foodChainDepth);
   transferControl.value = String(values.transferEfficiency);
   element<HTMLOutputElement>('#transfer-output').value = `${Math.round(values.transferEfficiency * 100)}%`;
-  document.querySelector<HTMLElement>('[data-species-group="tertiary"]')!.hidden = values.foodChainDepth < 3;
-  document.querySelector<HTMLElement>('[data-species-group="quaternary"]')!.hidden = values.foodChainDepth < 4;
+  transferControl.setAttribute('aria-valuetext', `${Math.round(values.transferEfficiency * 100)}%`);
   updateControlAvailability();
 }
+
+function updateParameterNavigation(values: SimulationParameters): void {
+  for (const { group, key } of initialStages) {
+    const inactive = !parameterGroupActive(group, values.foodChainDepth);
+    element(`[data-initial-stage="${group}"]`).classList.toggle('is-inactive', inactive);
+    element(`#stage-status-${group}`).textContent = inactive ? '비활성' : '활성';
+    element(`#stage-status-${group}`).hidden = !inactive;
+    element(`#param-${key}`).setAttribute('aria-describedby', `stage-status-${group}`);
+    if (group === 'tertiary' || group === 'quaternary') element(`#inactive-note-${group}`).hidden = !inactive;
+  }
+  element('#environment-summary').textContent = `격자 ${values.gridColumns}열 · 전달 ${Math.round(values.transferEfficiency * 100)}% · ${values.foodChainDepth}차까지\nSeed ${values.seed} · 토로이드 ${values.toroidal ? 'ON' : 'OFF'}`;
+}
+
+function selectParameterGroup(group: ParameterGroup): void {
+  // Selection only hides/shows existing nodes: draft, slider focus and listeners stay intact.
+  document.querySelectorAll<HTMLButtonElement>('[data-parameter-section]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.parameterSection === group));
+  });
+  document.querySelectorAll<HTMLElement>('[data-parameter-panel]').forEach((panel) => {
+    panel.hidden = panel.dataset.parameterPanel !== group;
+  });
+  element('.parameter-scroll').scrollTop = 0;
+}
+
+document.querySelectorAll<HTMLButtonElement>('[data-parameter-section]').forEach((button) => {
+  button.addEventListener('click', () => {
+    selectParameterGroup(button.dataset.parameterSection as ParameterGroup);
+    if (window.matchMedia('(max-width: 760px)').matches) element('.parameter-scroll').scrollIntoView({ block: 'start' });
+  });
+});
 
 function finishApexChallenge(): void {
   const record = createApexRecord(apexSession.getState());
@@ -1031,8 +1107,10 @@ function editDraft(edit: (value: SimulationParameters) => void): void {
 for (const definition of parameterDefinitions) {
   const input = element<HTMLInputElement>(`#param-${definition.key}`);
   input.addEventListener('input', () => editDraft((draft) => {
+    if (!parameterGroupActive(definition.group, draft.foodChainDepth)) return;
     draft[definition.key] = Number(input.value);
     element<HTMLOutputElement>(`#output-${definition.key}`).value = formatParameter(definition, draft[definition.key]);
+    input.setAttribute('aria-valuetext', formatParameter(definition, draft[definition.key]));
   }));
 }
 depthSelect.addEventListener('change', () => {
@@ -1043,6 +1121,7 @@ depthSelect.addEventListener('change', () => {
 transferControl.addEventListener('input', () => editDraft((draft) => {
   draft.transferEfficiency = Number(transferControl.value);
   element<HTMLOutputElement>('#transfer-output').value = `${Math.round(draft.transferEfficiency * 100)}%`;
+  transferControl.setAttribute('aria-valuetext', `${Math.round(draft.transferEfficiency * 100)}%`);
 }));
 seedInput.addEventListener('input', () => {
   if (appMode !== 'apex') editDraft((draft) => { draft.seed = seedInput.value; });
@@ -1188,6 +1267,7 @@ function toggleParameters(force?: boolean, intent: ParameterIntent = 'edit', ope
   if (dialogs.open(parametersDialog, opener, element('.close-parameters'))) {
     parameterToggle.setAttribute('aria-expanded', 'true');
     element('.parameter-scroll').scrollTop = 0;
+    element('.parameter-workspace').scrollTop = 0;
   } else clearParameterDraft();
 }
 parameterToggle.addEventListener('click', () => toggleParameters());
