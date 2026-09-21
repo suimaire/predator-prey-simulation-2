@@ -45,7 +45,7 @@ function completedPresentation(previousBest: number | null) {
     ForestSimulation, apexParameters, challengeSettingsLocked, evaluateApexLevels, PERSONAL_BEST_FEEDBACK_MS,
     performance: { now: () => now }, window: { clearTimeout() {} }, resetTimer: 0,
     inspector: { hidden: false }, element: () => ({ hidden: false }),
-    renderLeaderboardPanel() {}, clearPopulationFeedback() {}, toggleParameters() {}, updateAllControls() {},
+    renderLeaderboardPanel() {}, clearPopulationFeedback() {}, toggleParameters() {}, updateAllControls() {}, updateStructuralUi() {},
     setRunning(value: boolean) { context.running = value; },
     render() { vm.runInContext('renderChallengePanel()', context); },
     lastAnimationTime: 0, accumulatedTime: 0, populationFeedbackUntil: new Map(), removalNeedsRedraw: false,
@@ -131,8 +131,8 @@ test('editing the next design preserves finished simulation and record until the
   assert.equal(ui.context.lastFinishedRecord, finishedRecord);
   assert.equal(ui.context.apexSession.getState(), finishedState);
   assert.equal(ui.context.bestResult.finalScore, 9);
-  assert.match(ui.panel.innerHTML, /변경한 설정으로 새 도전/u);
-  assert.match(ui.panel.innerHTML, /같은 설정으로 다시 도전/u);
+  assert.match(ui.panel.innerHTML, /변경한 설정으로 도전/u);
+  assert.doesNotMatch(ui.panel.innerHTML, /같은 설정으로 다시 도전/u);
   ui.run('beginApexChallenge()');
   assert.equal(ui.run('challengeIsLocked()'), true);
   assert.equal(ui.context.simulation.getParameters().initialRabbits, 80);

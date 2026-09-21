@@ -52,6 +52,8 @@ function verificationMarkup(entry: LeaderboardEntry): string {
 }
 
 export interface BoardMarkupOptions {
+  limit?: number;
+  compact?: boolean;
   highlightedParticipant?: string | null;
   /** 목록을 아직 받지 못했거나 오류가 난 동안에는 빈 상태 문구를 띄우지 않습니다. */
   showEmptyState?: boolean;
@@ -64,9 +66,9 @@ export interface BoardMarkupOptions {
 export function boardMarkup(
   board: BoardGroup,
   ranked: readonly RankedLeaderboardEntry[],
-  { highlightedParticipant = null, showEmptyState = true }: BoardMarkupOptions = {},
+  { highlightedParticipant = null, showEmptyState = true, limit, compact = false }: BoardMarkupOptions = {},
 ): string {
-  const description = BOARD_DESCRIPTIONS[board]
+  const description = !compact && BOARD_DESCRIPTIONS[board]
     ? `<p class="leaderboard-board-note">${escapeHtml(BOARD_DESCRIPTIONS[board])}</p>`
     : '';
   if (ranked.length === 0) {
@@ -74,12 +76,13 @@ export function boardMarkup(
       ? `${description}<p class="leaderboard-empty">${escapeHtml(BOARD_EMPTY_MESSAGES[board])}</p>`
       : description;
   }
-  const items = ranked.map((entry) => `
+  // Presentation limits never re-sort or renumber ties from rankBoards().
+  const items = ranked.slice(0, limit).map((entry) => `
       <li class="${[rankAccentClass(entry.rank), participantKey(entry) === highlightedParticipant ? 'is-mine' : ''].filter(Boolean).join(' ')}">
         <b>${entry.rank}</b>
-        <span class="leaderboard-who"><strong>${escapeHtml(entry.studentName)}</strong></span>
+        <span class="leaderboard-who"><strong title="${escapeHtml(entry.studentName)}">${escapeHtml(entry.studentName)}</strong></span>
         <span class="leaderboard-score">${entry.score.toLocaleString()} step</span>
-        <span class="leaderboard-meta"><small>${escapeHtml(entry.studentNumber)}</small><time datetime="${escapeHtml(entry.submittedAt)}">${escapeHtml(formatSubmittedAt(entry.submittedAt))}</time>${verificationMarkup(entry)}</span>
+        ${compact ? '' : `<span class="leaderboard-meta"><small>${escapeHtml(entry.studentNumber)}</small><time datetime="${escapeHtml(entry.submittedAt)}">${escapeHtml(formatSubmittedAt(entry.submittedAt))}</time>${verificationMarkup(entry)}</span>`}
       </li>`).join('');
-  return `${description}<ol class="leaderboard-list" tabindex="0" aria-label="${escapeHtml(BOARD_LABELS[board])} 상위 기록">${items}</ol>`;
+  return `${description}<ol class="leaderboard-list${compact ? ' leaderboard-list--compact' : ''}" aria-label="${escapeHtml(BOARD_LABELS[board])} 상위 기록">${items}</ol>`;
 }

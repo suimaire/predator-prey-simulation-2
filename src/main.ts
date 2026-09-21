@@ -1,4 +1,6 @@
 import './simulation.css';
+import { DialogController } from './dialog.ts';
+import { ParameterDraft } from './parameterDraft.ts';
 import { drawPopulationChart, SERIES_COLORS, type ChartSeries } from './charts.ts';
 import {
   APEX_CHALLENGE_CONFIG,
@@ -136,19 +138,14 @@ if (!app) throw new Error('앱을 표시할 요소를 찾을 수 없습니다.')
 const initialFreeParameters = createInitialFreeParameters();
 
 app.innerHTML = `
-  <div class="app-shell parameters-hidden" id="app-shell">
+  <div class="app-shell" id="app-shell">
     <header class="topbar">
       <div class="header-intro">
         <nav class="portal-nav" aria-label="과학 수업 포털 안내"><a class="portal-link" href="https://suimaire.github.io/" aria-label="과학 수업 포털로 돌아가기">← 과학 수업 포털</a><span class="lesson-chip">탐구 02 · 영양 단계와 생태계 변화</span></nav>
         <div class="brand-row"><div class="brand-mark" aria-hidden="true"><span></span></div><div class="brand-copy"><p class="eyebrow">통합과학 2 · 생태계 상호작용</p><h1>Rabbits <span>&</span> Wolves</h1><p>Extended forest population lab</p></div></div>
         <div class="food-chain" id="header-chain" aria-label="현재 먹이 관계"></div>
       </div>
-      <section class="pyramid-card ecological-pyramid--header" aria-label="실시간 생태 피라미드">
-        <div class="pyramid-toolbar"><h2>실시간 생태 피라미드</h2><div class="segmented-control" role="group" aria-label="피라미드 표현 방식"><button type="button" data-pyramid-mode="numbers" aria-pressed="true">개체수</button><button type="button" data-pyramid-mode="energy" aria-pressed="false">에너지 흐름</button></div></div>
-        <div class="pyramid" id="pyramid" aria-describedby="pyramid-note"></div>
-        <p class="pyramid-note" id="pyramid-note"></p>
-        <p class="chain-summary" id="chain-summary"></p>
-      </section>
+
     </header>
 
     <div class="lab-layout">
@@ -179,12 +176,24 @@ app.innerHTML = `
             <aside class="simulation-console" aria-label="Experiment Console" id="simulation-console">
               <div class="console-heading" id="experiment-heading"><p class="section-kicker">EXPERIMENT CONSOLE</p><h2>자유 탐구</h2></div>
               <section class="challenge-panel" id="challenge-panel" aria-live="polite" hidden></section>
+      <section class="pyramid-card ecological-pyramid--dashboard" aria-label="실시간 생태 피라미드">
+        <div class="pyramid-toolbar"><h2>실시간 생태 피라미드</h2><div class="segmented-control" role="group" aria-label="피라미드 표현 방식"><button type="button" data-pyramid-mode="numbers" aria-pressed="true">개체수</button><button type="button" data-pyramid-mode="energy" aria-pressed="false">에너지 흐름</button></div></div>
+        <div class="pyramid" id="pyramid" aria-describedby="pyramid-note"></div>
+        <p class="pyramid-note" id="pyramid-note"></p>
+        <details class="pyramid-help"><summary>척도와 단위 안내</summary><p>소비자는 실제 개체수이며 식생은 모든 칸의 성장 단계 합입니다. 막대 폭은 제곱근 척도와 최소 가시 폭을 적용합니다. 에너지 흐름은 최근 20 step의 실제 섭식 전달량을 경과 step으로 나눈 모델 에너지/step이며 실제 Joule이 아닙니다.</p></details><p class="chain-summary" id="chain-summary"></p>
+      </section>
+              <section class="leaderboard-summary" aria-labelledby="ranking-summary-title"><div class="card-heading"><h2 id="ranking-summary-title">HAFS 랭킹 <small>Top 3</small></h2></div><p id="leaderboard-summary-status" class="leaderboard-status" aria-live="polite"></p><div class="ranking-mini-grid">${BOARD_GROUPS.map((board) => `<section><button type="button" class="ranking-board-button" data-open-board="${board}">${BOARD_TAB_MARKUP[board]}</button><div id="leaderboard-summary-${board}"></div></section>`).join('')}</div><button type="button" id="open-leaderboard" aria-haspopup="dialog" aria-controls="leaderboard-dialog">전체 순위 보기</button></section>
               <nav class="sim-toolbar" aria-label="시뮬레이션 조작">
                 <div class="run-controls"><button class="run-button" id="run-button" type="button" aria-label="시뮬레이션 실행"><span>▶</span><b>Run</b></button><button id="pause-button" type="button" aria-label="시뮬레이션 일시정지" disabled><span>Ⅱ</span><b>Pause</b></button><button id="step-button" type="button" aria-label="한 step 실행"><span>↦</span><b>Step</b></button><button id="reset-button" type="button" aria-label="시뮬레이션 Reset"><span>↺</span><b>Reset</b></button></div>
                 <div class="toolbar-middle"><label for="speed-control"><span>속도</span><input id="speed-control" type="range" min="1" max="40" value="8" /><output id="speed-output">8 step/s</output></label></div>
-                <div class="view-controls"><button type="button" id="toggle-parameters" aria-label="실험 조건 열기 또는 닫기" aria-pressed="false"><span>☷</span><b>Parameters</b></button><button type="button" id="toggle-graph" aria-label="개체군 그래프 표시 또는 숨기기" aria-pressed="true"><span>⌁</span><b>Graph</b></button></div>
+                <div class="view-controls"><button type="button" id="toggle-parameters" aria-label="실험 조건 열기" aria-haspopup="dialog" aria-controls="parameters-dialog" aria-expanded="false"><span>☷</span><b>Parameters</b></button><button type="button" id="toggle-graph" aria-label="개체군 그래프 표시 또는 숨기기" aria-pressed="true"><span>⌁</span><b>Graph</b></button></div>
               </nav>
-              <div class="challenge-copy" id="challenge-description" hidden>
+
+            </aside>
+          </div>
+        </section>
+
+        <section class="support-grid" aria-label="도전 안내와 종 제거">              <div class="challenge-copy" id="challenge-description" hidden>
                 <h2>전체 먹이사슬을 가장 오래 유지하세요</h2>
                 <p>식생부터 4차 소비자까지 모든 영양 단계를 유지하는 조건을 탐색합니다. 도전을 시작하면 설정이 잠기며, 어느 한 단계라도 사라지는 순간 기록이 결정됩니다.</p>
                 <small>Challenge Seed <b>${APEX_CHALLENGE_CONFIG.seed}</b> · ${APEX_CHALLENGE_CONFIG.simulationVersion} · 같은 조건과 seed에서는 같은 결과가 재현됩니다.</small>
@@ -194,9 +203,29 @@ app.innerHTML = `
                 <p class="removal-restriction" id="removal-restriction" hidden>Apex Survival 중에는 종 제거 실험을 사용할 수 없습니다.</p>
                 <div class="removal-list" id="removal-list"></div>
               </section>
-              <aside class="parameter-panel" aria-label="시뮬레이션 파라미터">
-                <div class="panel-title-row"><div><p class="section-kicker">EXPERIMENT SETUP</p><h2>실험 조건</h2></div><button type="button" class="icon-button close-parameters" aria-label="실험 조건 닫기">×</button></div>
-                <div class="parameter-scroll">
+</section>
+        <section class="analysis-grid" aria-label="관찰과 분석">
+          <section class="graph-card" id="graph-card">
+            <div class="card-heading"><div><p class="section-kicker">POPULATION GRAPH</p><h2>개체군 변화</h2></div><span class="live-pill"><i></i> LIVE</span></div>
+            <div class="graph-legend" id="graph-legend" aria-label="그래프 계열 표시 전환"></div>
+            <canvas id="population-chart" aria-label="시간에 따른 활성 영양 단계와 숲 밀도 그래프"></canvas>
+            <div class="graph-foot"><p><span>왼쪽 축: 소비자 개체 수</span><span>오른쪽 축: 숲 평균 밀도</span></p><div id="intervention-log"></div></div>
+          </section>
+        </section>
+
+
+        <section class="lower-grid">
+          <section class="statistics-card"><div class="card-heading"><div><p class="section-kicker">CUMULATIVE RECORD</p><h2>누적 통계</h2></div><span>현재 실험</span></div><div class="stat-grid" id="stat-grid"></div></section>
+          <section class="learning-card"><div class="card-heading"><div><p class="section-kicker">MODEL ASSUMPTIONS</p><h2>모형의 가정과 한계</h2></div><span class="model-badge">확률적 모형</span></div><ul><li>학습을 위해 먹이 관계를 <b>직선형 먹이사슬</b>로 단순화했습니다. 실제 생태계는 대부분 먹이그물입니다.</li><li>영양 단계가 높을수록 이용 가능한 에너지가 제한되는 경향이 있습니다.</li><li><b>10%</b>는 보편 법칙이 아닌 교육적 대표값이며 실제 효율은 생태계와 종에 따라 다릅니다.</li><li>에너지는 실제 Joule 측정치가 아닌 <b>모델 내부 값</b>입니다.</li></ul><p class="model-limit">종 제거 뒤의 변화와 Apex Survival 점수는 실제 생태계의 안정성을 직접 측정하지 않으며, 이 단순화된 모형과 사용자가 고른 파라미터에서 나타난 결과입니다.</p></section>
+        </section>
+
+        <details class="rule-card"><summary><span><b>이 모델은 한 step을 어떻게 계산할까요?</b><small>행동 순서와 에너지 규칙 보기</small></span><i>⌄</i></summary><div class="rule-content"><ol><li><b>식생 성장</b><span>확률에 따라 한 단계 회복</span></li><li><b>토끼 행동</b><span>이동·식생 섭취·번식·사망</span></li><li><b>늑대 행동</b><span>토끼 탐색·사냥·번식·사망</span></li><li><b>상위 소비자</b><span>활성 단계별 동일 규칙 적용</span></li><li><b>기록</b><span>개체수·섭식 에너지·개입 저장</span></li></ol><p>한 번의 섭식에서 먹이의 가용 모델 에너지에 전달 효율을 정확히 한 번 적용합니다. 10%에서 기존 토끼·늑대의 획득량이 유지되며, 효율을 바꾸면 모든 영양 단계의 섭식 획득량이 같은 규칙으로 변합니다.</p></div></details>
+      </main>
+    </div>
+
+              <dialog id="parameters-dialog" class="dashboard-dialog parameters-dialog" aria-labelledby="parameters-title" aria-describedby="parameter-edit-note">
+                <div class="dialog-heading panel-title-row"><div><p class="section-kicker">EXPERIMENT SETUP</p><h2 id="parameters-title">실험 조건</h2></div><button type="button" class="icon-button close-parameters" aria-label="실험 조건 닫기">×</button></div>
+                <p id="parameter-edit-note" class="dialog-notice"></p><div class="parameter-scroll dialog-body" tabindex="0" aria-label="실험 조건 입력 영역">
                   <p class="parameter-lock-note" id="parameter-lock-note" hidden>🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</p>
                   <section class="special-controls chain-controls">
                     <label for="food-depth"><span><b>먹이사슬 단계</b><small>활성화할 최고 소비자 단계를 고릅니다.</small></span></label>
@@ -216,20 +245,8 @@ app.innerHTML = `
                   ${parameterGroupMarkup('quaternary', false)}
                   <button type="button" class="restore-button" id="restore-defaults">기본 설정으로 복원</button>
                 </div>
-              </aside>
-            </aside>
-          </div>
-        </section>
-
-        <section class="analysis-grid" aria-label="관찰과 분석">
-          <section class="graph-card" id="graph-card">
-            <div class="card-heading"><div><p class="section-kicker">POPULATION GRAPH</p><h2>개체군 변화</h2></div><span class="live-pill"><i></i> LIVE</span></div>
-            <div class="graph-legend" id="graph-legend" aria-label="그래프 계열 표시 전환"></div>
-            <canvas id="population-chart" aria-label="시간에 따른 활성 영양 단계와 숲 밀도 그래프"></canvas>
-            <div class="graph-foot"><p><span>왼쪽 축: 소비자 개체 수</span><span>오른쪽 축: 숲 평균 밀도</span></p><div id="intervention-log"></div></div>
-          </section>
-        </section>
-        <section class="leaderboard-panel" id="leaderboard-panel" aria-label="Apex Survival 기록판" hidden>
+              <div class="dialog-footer"><p id="parameter-error" role="alert"></p><div><button type="button" id="cancel-parameters">취소</button><button type="button" id="apply-parameters" class="challenge-primary" disabled>설정 적용</button></div></div></dialog>
+        <dialog id="leaderboard-dialog" class="dashboard-dialog leaderboard-dialog" aria-labelledby="leaderboard-title"><div class="dialog-heading"><h2 id="leaderboard-title">HAFS 랭킹 · Top 10</h2><button type="button" id="close-leaderboard" aria-label="랭킹 닫기">×</button></div><section class="leaderboard-panel" id="leaderboard-panel" aria-label="Apex Survival 기록판">
           <div class="leaderboard-heading">
             <div class="leaderboard-tabs" role="tablist" aria-label="기록판 선택">
               <button type="button" role="tab" id="leaderboard-tab-protector" data-board="protector" aria-controls="leaderboard-board-protector" aria-selected="true">${BOARD_TAB_MARKUP.protector}</button>
@@ -238,26 +255,16 @@ app.innerHTML = `
             <button type="button" id="leaderboard-refresh" aria-label="기록판 새로고침" title="새로고침">↻</button>
           </div>
           <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
-          <div class="leaderboard-board" role="tabpanel" id="leaderboard-board-protector" aria-labelledby="leaderboard-tab-protector"></div>
+          <div class="dialog-body ranking-body" tabindex="0" aria-label="상세 랭킹 목록"><div class="leaderboard-board" role="tabpanel" id="leaderboard-board-protector" aria-labelledby="leaderboard-tab-protector"></div>
           <div class="leaderboard-board" role="tabpanel" id="leaderboard-board-manipulator" aria-labelledby="leaderboard-tab-manipulator" hidden></div>
-          <form class="leaderboard-form" id="leaderboard-form" hidden>
+          </div><form class="leaderboard-form" id="leaderboard-form" hidden>
             <label for="leaderboard-student-number"><span>학번</span><input id="leaderboard-student-number" maxlength="24" placeholder="예: 10935" autocomplete="off" /></label>
             <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 박창현" autocomplete="off" /></label>
             <button type="submit" class="challenge-primary" id="leaderboard-submit">이 기록 제출하기</button>
             <p class="leaderboard-privacy">입력한 학번과 이름은 수업용 기록판에 공개되고 선생님이 관리하는 서버에 저장됩니다. 같은 학번으로 다시 제출하면 최고 기록 하나만 남습니다. 실명을 남기고 싶지 않다면 선생님과 약속한 표기를 사용하세요.</p>
           </form>
-        </section>
-
-        <section class="lower-grid">
-          <section class="statistics-card"><div class="card-heading"><div><p class="section-kicker">CUMULATIVE RECORD</p><h2>누적 통계</h2></div><span>현재 실험</span></div><div class="stat-grid" id="stat-grid"></div></section>
-          <section class="learning-card"><div class="card-heading"><div><p class="section-kicker">MODEL ASSUMPTIONS</p><h2>모형의 가정과 한계</h2></div><span class="model-badge">확률적 모형</span></div><ul><li>학습을 위해 먹이 관계를 <b>직선형 먹이사슬</b>로 단순화했습니다. 실제 생태계는 대부분 먹이그물입니다.</li><li>영양 단계가 높을수록 이용 가능한 에너지가 제한되는 경향이 있습니다.</li><li><b>10%</b>는 보편 법칙이 아닌 교육적 대표값이며 실제 효율은 생태계와 종에 따라 다릅니다.</li><li>에너지는 실제 Joule 측정치가 아닌 <b>모델 내부 값</b>입니다.</li></ul><p class="model-limit">종 제거 뒤의 변화와 Apex Survival 점수는 실제 생태계의 안정성을 직접 측정하지 않으며, 이 단순화된 모형과 사용자가 고른 파라미터에서 나타난 결과입니다.</p></section>
-        </section>
-
-        <details class="rule-card"><summary><span><b>이 모델은 한 step을 어떻게 계산할까요?</b><small>행동 순서와 에너지 규칙 보기</small></span><i>⌄</i></summary><div class="rule-content"><ol><li><b>식생 성장</b><span>확률에 따라 한 단계 회복</span></li><li><b>토끼 행동</b><span>이동·식생 섭취·번식·사망</span></li><li><b>늑대 행동</b><span>토끼 탐색·사냥·번식·사망</span></li><li><b>상위 소비자</b><span>활성 단계별 동일 규칙 적용</span></li><li><b>기록</b><span>개체수·섭식 에너지·개입 저장</span></li></ol><p>한 번의 섭식에서 먹이의 가용 모델 에너지에 전달 효율을 정확히 한 번 적용합니다. 10%에서 기존 토끼·늑대의 획득량이 유지되며, 효율을 바꾸면 모든 영양 단계의 섭식 획득량이 같은 규칙으로 변합니다.</p></div></details>
-      </main>
-    </div>
-
-    <dialog id="removal-dialog"><form method="dialog"><span class="dialog-icon">↯</span><h2 id="dialog-title">종을 제거할까요?</h2><p id="dialog-copy"></p><div><button value="cancel">취소</button><button value="confirm" class="confirm-removal" id="confirm-removal">제거</button></div></form></dialog>
+        </section></dialog>
+    <dialog id="removal-dialog" aria-labelledby="dialog-title"><form method="dialog"><span class="dialog-icon">↯</span><h2 id="dialog-title">종을 제거할까요?</h2><p id="dialog-copy"></p><div><button value="cancel">취소</button><button value="confirm" class="confirm-removal" id="confirm-removal">제거</button></div></form></dialog>
   </div>`;
 
 function element<T extends HTMLElement>(selector: string): T {
@@ -284,7 +291,18 @@ const transferControl = element<HTMLInputElement>('#transfer-efficiency');
 const inspector = element<HTMLDivElement>('#cell-inspector');
 const removalDialog = element<HTMLDialogElement>('#removal-dialog');
 const challengePanel = element<HTMLElement>('#challenge-panel');
-const leaderboardPanel = element<HTMLElement>('#leaderboard-panel');
+const parametersDialog = element<HTMLDialogElement>('#parameters-dialog');
+const leaderboardDialog = element<HTMLDialogElement>('#leaderboard-dialog');
+const applyParametersButton = element<HTMLButtonElement>('#apply-parameters');
+const dialogs = new DialogController();
+let parameterDraft: ParameterDraft | null = null;
+let parameterDraftError = '';
+dialogs.register(parametersDialog, { onClose: () => {
+  parameterDraft = null;
+  parameterToggle.setAttribute('aria-expanded', 'false');
+} });
+dialogs.register(leaderboardDialog, { backdrop: true });
+dialogs.register(removalDialog);
 const leaderboardBoards: Readonly<Record<BoardGroup, HTMLDivElement>> = {
   protector: element<HTMLDivElement>('#leaderboard-board-protector'),
   manipulator: element<HTMLDivElement>('#leaderboard-board-manipulator'),
@@ -320,6 +338,7 @@ const leaderboardTransport: LeaderboardTransport | null = createLeaderboardTrans
 type LeaderboardStatus = 'disabled' | 'idle' | 'loading' | 'ready' | 'error';
 let leaderboardStatusPhase: LeaderboardStatus = leaderboardTransport ? 'idle' : 'disabled';
 let leaderboardEntries: readonly LeaderboardEntry[] = [];
+let rankedLeaderboard = rankBoards(leaderboardEntries);
 let leaderboardMessage = '';
 let leaderboardSubmitting = false;
 let leaderboardRequestId = 0;
@@ -333,7 +352,7 @@ let challengeMessage = '';
 let running = false;
 let lastAnimationTime = performance.now();
 let accumulatedTime = 0;
-let resetTimer = 0;
+
 let pyramidMode: PyramidMode = 'numbers';
 let pendingRemoval: Species | null = null;
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -415,6 +434,7 @@ function drawBoard(snapshot: SimulationSnapshot, now = performance.now()): void 
   if (board.width !== logicalWidth * ratio || board.height !== logicalHeight * ratio) {
     board.width = logicalWidth * ratio; board.height = logicalHeight * ratio;
     board.style.aspectRatio = `${logicalWidth} / ${logicalHeight}`;
+    board.parentElement!.style.setProperty('--forest-ratio', String(logicalWidth / logicalHeight));
   }
   const ctx = board.getContext('2d');
   if (!ctx) return;
@@ -468,7 +488,7 @@ function renderChallengePanel(): void {
   const metric = simulation.getHistory().at(-1)!;
   const statuses = state.levelStatus.length > 0 ? state.levelStatus : evaluateApexLevels(metric);
   const phaseLabel = state.phase === 'setup' ? '생태계 설계' : state.phase === 'over' ? 'CHALLENGE OVER' : running ? 'CHALLENGE RUNNING' : '일시정지';
-  const statusMarkup = statuses.map((status) => `<li class="${status.present ? 'is-present' : 'is-collapsed'}"><span>${status.label}</span><b>${status.present ? '● 생존' : '○ 붕괴'}</b></li>`).join('');
+
   const bestMarkup = personalBest ? formatSteps(personalBest.score) : '아직 기록 없음';
   const result = state.phase === 'over' ? bestResult : null;
   const designChanged = state.phase === 'over' && state.parameterSnapshot !== null
@@ -482,7 +502,7 @@ function renderChallengePanel(): void {
   const collapseLabels = state.collapsedLevels.map((level) => statuses.find((status) => status.level === level)?.label ?? level).join(', ');
   const setupActions = '<button type="button" class="challenge-primary" data-challenge-action="start">도전 시작 · Start Challenge</button>';
   const activeActions = '<button type="button" class="challenge-secondary" data-challenge-action="abort">도전 중단</button>';
-  const overActions = `${designChanged ? '<button type="button" class="challenge-primary" data-challenge-action="start">변경한 설정으로 새 도전</button>' : ''}<button type="button" class="${designChanged ? 'challenge-secondary' : 'challenge-primary'}" data-challenge-action="retry">같은 설정으로 다시 도전</button>`;
+  const overActions = `<button type="button" class="challenge-primary" data-challenge-action="start">${designChanged ? '변경한 설정으로 도전' : '같은 설정으로 다시 도전'}</button>`;
   challengePanel.dataset.phase = state.phase;
   challengePanel.classList.toggle('is-new-best', result !== null);
   challengePanel.classList.toggle('best-emphasis', emphasizeBest);
@@ -496,12 +516,13 @@ function renderChallengePanel(): void {
       ${result ? `<p class="best-improvement" aria-label="${result.description}">${result.improvement === null ? '첫 기록 달성' : `+${result.improvement.toLocaleString()} <span aria-hidden="true">↑</span><small>이전 최고보다 · step</small>`}</p>
       ${result.previousBest === null ? '' : `<p class="best-comparison"><span>Previous Best</span><b>${result.previousBest.toLocaleString()} → ${result.finalScore.toLocaleString()}</b></p>`}`
       : `<small>Personal Best <b>${bestMarkup}</b></small>`}
+      ${result ? `<small>Personal Best <b>${bestMarkup}</b></small>` : ''}
     </div>
     <p class="challenge-status">상태 <b>${phaseLabel}</b></p>
     ${state.phase === 'over' ? `<p class="challenge-collapse">최초 붕괴 영양 단계 <b>${collapseLabels}</b><span>붕괴 step · ${state.collapseStep}</span></p>` : ''}
-    <ul class="challenge-levels" aria-label="영양 단계별 생존 상태">${statusMarkup}</ul>
+
     <div class="challenge-actions">${state.phase === 'setup' ? setupActions : state.phase === 'active' ? activeActions : overActions}</div>
-      ${state.phase === 'over' ? '<p class="challenge-edit-note">Parameters에서 다음 도전의 조건을 바로 수정할 수 있습니다. 결과와 생태계는 새 도전 전까지 유지됩니다.</p>' : ''}
+      ${state.phase === 'over' ? `<p class="challenge-edit-note">${designChanged ? '다음 도전 설정 변경됨' : 'Parameters에서 다음 도전 조건 편집 가능'}</p><button type="button" class="challenge-secondary submit-record-link" data-open-ranking>기록판 / 이 기록 제출</button>` : ''}
       ${challengeIsLocked() ? '<span class="challenge-lock">🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</span>' : ''}
       ${challengeMessage ? `<span class="challenge-message">${challengeMessage}</span>` : ''}
 `;
@@ -540,16 +561,13 @@ function leaderboardStatusText(entryCount: number): string {
 }
 
 function renderLeaderboardPanel(): void {
-  leaderboardPanel.hidden = appMode !== 'apex';
-  if (appMode !== 'apex') return;
-
-  const boards = rankBoards(leaderboardEntries);
+  const boards = rankedLeaderboard;
   const signature = JSON.stringify([
     leaderboardStatusPhase,
     leaderboardMessage,
     highlightedParticipant,
     activeLeaderboardBoard,
-    BOARD_GROUPS.map((board) => boards[board].map((entry) => [entry.id, entry.rank, entry.score, entry.verification])),
+    BOARD_GROUPS.map((board) => boards[board]),
   ]);
   if (signature !== leaderboardSignature) {
     leaderboardSignature = signature;
@@ -559,16 +577,21 @@ function renderLeaderboardPanel(): void {
       leaderboardTabs[board].tabIndex = isActive ? 0 : -1;
       leaderboardBoards[board].hidden = !isActive;
       leaderboardBoards[board].innerHTML = boardMarkup(board, boards[board], {
+        limit: 10,
         highlightedParticipant,
         showEmptyState: leaderboardStatusPhase === 'ready',
       });
+      element(`#leaderboard-summary-${board}`).innerHTML = boardMarkup(board, boards[board], {
+        limit: 3, compact: true, highlightedParticipant, showEmptyState: leaderboardStatusPhase === 'ready',
+      });
     }
-    leaderboardStatus.textContent = leaderboardStatusText(boards[activeLeaderboardBoard].length);
+    leaderboardStatus.textContent = leaderboardStatusText(Math.min(10, boards[activeLeaderboardBoard].length));
+    element('#leaderboard-summary-status').textContent = leaderboardStatusPhase === 'ready' ? '' : leaderboardStatusText(0);
     leaderboardStatus.dataset.tone = leaderboardStatusPhase === 'error' ? 'error' : 'normal';
   }
 
   const phase = apexSession.getState().phase;
-  const canSubmit = Boolean(leaderboardTransport) && phase === 'over' && lastFinishedRecord !== null && !hasSubmittedFinishedRecord;
+  const canSubmit = appMode === 'apex' && Boolean(leaderboardTransport) && phase === 'over' && lastFinishedRecord !== null && !hasSubmittedFinishedRecord;
   leaderboardForm.hidden = !canSubmit;
   leaderboardSubmitButton.disabled = leaderboardSubmitting;
   leaderboardSubmitButton.textContent = leaderboardSubmitting ? '제출 중…' : '이 기록 제출하기';
@@ -586,6 +609,7 @@ async function refreshLeaderboard(): Promise<void> {
     const entries = await leaderboardTransport.list();
     if (requestId !== leaderboardRequestId) return;
     leaderboardEntries = entries;
+    rankedLeaderboard = rankBoards(leaderboardEntries);
     leaderboardStatusPhase = 'ready';
   } catch (error) {
     if (requestId !== leaderboardRequestId) return;
@@ -645,6 +669,10 @@ function updateControlAvailability(): void {
   element<HTMLButtonElement>('#random-seed').disabled = appMode === 'apex' || locked;
   element<HTMLButtonElement>('#restore-defaults').disabled = locked;
   element('#parameter-lock-note').hidden = !locked;
+  const prepared = parameterDraft?.prepare(parameters, appMode, state.phase);
+  applyParametersButton.disabled = prepared?.status !== 'apply';
+  element('#parameter-edit-note').textContent = locked ? '도전 진행 중·일시정지 중에는 읽기 전용입니다.' : appMode === 'apex' && state.phase === 'over' ? '다음 도전 설정을 편집합니다. 종료 결과와 숲은 그대로 유지됩니다.' : '설정 적용 시 새 조건으로 한 번 초기화됩니다. 자동 실행하지 않습니다.';
+  element('#parameter-error').textContent = parameterDraftError;
   element('#seed-label').textContent = appMode === 'apex' ? 'Challenge Seed' : 'Random seed';
   element('#seed-helper').textContent = appMode === 'apex' ? '공정한 비교를 위해 이 도전에서는 고정됩니다.' : '같은 seed와 설정은 같은 결과를 재현합니다.';
   element('#removal-restriction').hidden = appMode !== 'apex';
@@ -772,7 +800,11 @@ function renderPyramid(snapshot: SimulationSnapshot): void {
   element('#chain-summary').textContent = `활성 영양 단계 ${observedParameters.foodChainDepth + 1} · 전달 효율 ${Math.round(observedParameters.transferEfficiency * 100)}%`;
 }
 
+let removalSignature = '';
 function renderRemoval(snapshot: SimulationSnapshot): void {
+  const signature = JSON.stringify([appMode, parameters.foodChainDepth, snapshot.removedSpecies]);
+  if (signature === removalSignature) return;
+  removalSignature = signature;
   element('#removal-list').innerHTML = activeSpecies(parameters.foodChainDepth).map((species) => {
     const removed = snapshot.removedSpecies.includes(species);
     const removalDisabled = appMode === 'apex' || removed;
@@ -850,7 +882,6 @@ function setRunning(nextRunning: boolean): void {
 }
 
 function resetSimulation(): void {
-  window.clearTimeout(resetTimer);
   setRunning(false);
   // Completed results and their simulation remain an observation of the finished run.
   // Controls now edit the next design; starting a new challenge applies that design.
@@ -867,29 +898,21 @@ function resetSimulation(): void {
   render();
 }
 
-function scheduleReset(): void {
-  setRunning(false);
-  if (appMode === 'apex' && apexSession.getState().phase === 'setup') {
-    apexSession.returnToSetup();
-    challengeMessage = '';
-  }
-  window.clearTimeout(resetTimer);
-  resetTimer = window.setTimeout(resetSimulation, 120);
-}
-
 function updateAllControls(): void {
+  if (!parameterDraft) return;
+  const values = parameterDraft.value;
   for (const definition of parameterDefinitions) {
-    const input = element<HTMLInputElement>(`#param-${definition.key}`);
-    const value = parameters[definition.key];
-    input.value = String(value);
-    element<HTMLOutputElement>(`#output-${definition.key}`).value = formatParameter(definition, value);
+    element<HTMLInputElement>(`#param-${definition.key}`).value = String(values[definition.key]);
+    element<HTMLOutputElement>(`#output-${definition.key}`).value = formatParameter(definition, values[definition.key]);
   }
-  seedInput.value = parameters.seed;
-  toroidalToggle.checked = parameters.toroidal;
-  depthSelect.value = String(parameters.foodChainDepth);
-  transferControl.value = String(parameters.transferEfficiency);
-  element<HTMLOutputElement>('#transfer-output').value = `${Math.round(parameters.transferEfficiency * 100)}%`;
-  updateStructuralUi();
+  seedInput.value = values.seed;
+  toroidalToggle.checked = values.toroidal;
+  depthSelect.value = String(values.foodChainDepth);
+  transferControl.value = String(values.transferEfficiency);
+  element<HTMLOutputElement>('#transfer-output').value = `${Math.round(values.transferEfficiency * 100)}%`;
+  document.querySelector<HTMLElement>('[data-species-group="tertiary"]')!.hidden = values.foodChainDepth < 3;
+  document.querySelector<HTMLElement>('[data-species-group="quaternary"]')!.hidden = values.foodChainDepth < 4;
+  updateControlAvailability();
 }
 
 function finishApexChallenge(): void {
@@ -920,7 +943,6 @@ function advanceLogicalStep(): boolean {
 }
 
 function beginApexChallenge(parameterSource: SimulationParameters = parameters): void {
-  window.clearTimeout(resetTimer);
   running = false;
   parameters = apexParameters(parameterSource);
   apexDesignParameters = { ...parameters };
@@ -937,12 +959,11 @@ function beginApexChallenge(parameterSource: SimulationParameters = parameters):
     challengeMessage = `도전을 시작하려면 모든 영양 단계가 존재해야 합니다. 확인: ${missing}`;
   }
   setRunning(started);
-  updateAllControls();
+  updateStructuralUi();
   render();
 }
 
 function returnToApexSetup(parameterSource: SimulationParameters = parameters): void {
-  window.clearTimeout(resetTimer);
   setRunning(false);
   apexSession.returnToSetup();
   parameters = apexParameters(parameterSource);
@@ -952,8 +973,7 @@ function returnToApexSetup(parameterSource: SimulationParameters = parameters): 
   inspector.hidden = true;
   challengeMessage = '';
   clearFinishedRecord();
-  toggleParameters(true);
-  updateAllControls();
+  updateStructuralUi();
   render();
 }
 
@@ -963,7 +983,6 @@ function switchMode(nextMode: AppMode): void {
     const confirmed = window.confirm('현재 도전을 포기하고 자유 탐구로 돌아가시겠습니까? 이 기록은 Personal Best에 저장되지 않습니다.');
     if (!confirmed) return;
   }
-  window.clearTimeout(resetTimer);
   setRunning(false);
   if (appMode === 'free') freeParameters = { ...parameters };
   else apexDesignParameters = apexParameters(parameters);
@@ -978,13 +997,12 @@ function switchMode(nextMode: AppMode): void {
       hasApexDesign = true;
     }
     parameters = apexParameters(apexDesignParameters);
-    toggleParameters(true);
   } else {
     parameters = validateParameters(freeParameters);
   }
   simulation = new ForestSimulation(parameters);
   clearPopulationFeedback();
-  updateAllControls();
+  updateStructuralUi();
   render();
 }
 
@@ -994,61 +1012,60 @@ function openRemovalDialog(species: Species): void {
   element('#dialog-title').textContent = `${SPECIES_LABELS[species]}를 생태계에서 제거하시겠습니까?`;
   element('#dialog-copy').textContent = '현재 모든 개체가 즉시 사라지고 이 실험을 Reset하기 전까지 번식하거나 다시 생성되지 않습니다. 이후 먹이사슬 전체의 변화를 관찰할 수 있습니다.';
   element<HTMLButtonElement>('#confirm-removal').textContent = `${SPECIES_LABELS[species]} 제거`;
-  removalDialog.showModal();
+  dialogs.open(removalDialog, element(`[data-remove="${species}"]`));
 }
 
+function editDraft(edit: (value: SimulationParameters) => void): void {
+  if (!parameterDraft || challengeIsLocked()) return;
+  edit(parameterDraft.value);
+  parameterDraftError = '';
+  updateControlAvailability();
+}
 for (const definition of parameterDefinitions) {
   const input = element<HTMLInputElement>(`#param-${definition.key}`);
-  input.addEventListener('input', () => {
-    if (challengeIsLocked()) return;
-    const value = Number(input.value);
-    parameters = { ...parameters, [definition.key]: value };
-    if (appMode === 'apex') apexDesignParameters = apexParameters(parameters); else freeParameters = { ...parameters };
-    element<HTMLOutputElement>(`#output-${definition.key}`).value = formatParameter(definition, value);
-    scheduleReset();
-  });
+  input.addEventListener('input', () => editDraft((draft) => {
+    draft[definition.key] = Number(input.value);
+    element<HTMLOutputElement>(`#output-${definition.key}`).value = formatParameter(definition, draft[definition.key]);
+  }));
 }
-
 depthSelect.addEventListener('change', () => {
   if (appMode === 'apex') return;
-  parameters = { ...parameters, foodChainDepth: Number(depthSelect.value) as FoodChainDepth };
-  freeParameters = { ...parameters };
-  resetSimulation();
+  editDraft((draft) => { draft.foodChainDepth = Number(depthSelect.value) as FoodChainDepth; });
+  updateAllControls();
 });
-
-transferControl.addEventListener('input', () => {
-  if (challengeIsLocked()) return;
-  parameters = { ...parameters, transferEfficiency: Number(transferControl.value) };
-  if (appMode === 'apex') apexDesignParameters = apexParameters(parameters); else freeParameters = { ...parameters };
-  element<HTMLOutputElement>('#transfer-output').value = `${Math.round(parameters.transferEfficiency * 100)}%`;
-  scheduleReset();
+transferControl.addEventListener('input', () => editDraft((draft) => {
+  draft.transferEfficiency = Number(transferControl.value);
+  element<HTMLOutputElement>('#transfer-output').value = `${Math.round(draft.transferEfficiency * 100)}%`;
+}));
+seedInput.addEventListener('input', () => {
+  if (appMode !== 'apex') editDraft((draft) => { draft.seed = seedInput.value; });
 });
-
-seedInput.addEventListener('change', () => {
+toroidalToggle.addEventListener('change', () => editDraft((draft) => { draft.toroidal = toroidalToggle.checked; }));
+element('#random-seed').addEventListener('click', () => {
   if (appMode === 'apex') return;
-  parameters = { ...parameters, seed: seedInput.value };
-  freeParameters = { ...parameters };
-  resetSimulation();
+  editDraft((draft) => { draft.seed = createFreeExplorationSeed(); }); updateAllControls();
 });
-toroidalToggle.addEventListener('change', () => {
-  if (challengeIsLocked()) return;
-  parameters = { ...parameters, toroidal: toroidalToggle.checked };
-  if (appMode === 'apex') apexDesignParameters = apexParameters(parameters); else freeParameters = { ...parameters };
-  resetSimulation();
+element('#restore-defaults').addEventListener('click', () => {
+  editDraft((draft) => Object.assign(draft, appMode === 'apex' ? apexParameters({ ...DEFAULT_PARAMETERS }) : initialFreeParameters)); updateAllControls();
 });
-
-element<HTMLButtonElement>('#random-seed').addEventListener('click', () => {
-  parameters = { ...parameters, seed: createFreeExplorationSeed() };
-  freeParameters = { ...parameters };
-  updateAllControls(); resetSimulation();
-});
-
-element<HTMLButtonElement>('#restore-defaults').addEventListener('click', () => {
-  if (challengeIsLocked()) return;
-  parameters = appMode === 'apex' ? apexParameters({ ...DEFAULT_PARAMETERS }) : { ...initialFreeParameters };
+function applyParameterDraft(): void {
+  if (!parameterDraft) return;
+  const result = parameterDraft.prepare(parameters, appMode, apexSession.getState().phase);
+  if (result.status !== 'apply') {
+    parameterDraftError = result.status === 'invalid' ? result.message ?? '설정을 확인하세요.' : result.status === 'locked' ? '도전 진행 중에는 설정을 변경할 수 없습니다.' : '';
+    updateControlAvailability(); return;
+  }
+  parameters = { ...result.parameters };
   if (appMode === 'apex') apexDesignParameters = { ...parameters }; else freeParameters = { ...parameters };
-  updateAllControls(); resetSimulation();
-});
+  if (result.preserveResult) renderChallengePanel();
+  else {
+    if (appMode === 'apex') { apexSession.returnToSetup(); challengeMessage = ''; }
+    resetSimulation();
+  }
+  parametersDialog.close();
+}
+applyParametersButton.addEventListener('click', applyParameterDraft);
+element('#cancel-parameters').addEventListener('click', () => parametersDialog.close());
 
 document.querySelectorAll<HTMLButtonElement>('[data-pyramid-mode]').forEach((button) => button.addEventListener('click', () => {
   pyramidMode = button.dataset.pyramidMode as PyramidMode;
@@ -1091,6 +1108,17 @@ challengePanel.addEventListener('click', (event) => {
   }
 });
 
+function openLeaderboard(opener: HTMLElement, board: BoardGroup = activeLeaderboardBoard): void {
+  selectLeaderboardBoard(board);
+  dialogs.open(leaderboardDialog, opener, element('#close-leaderboard'));
+}
+element('#open-leaderboard').addEventListener('click', (event) => openLeaderboard(event.currentTarget as HTMLElement));
+element('#close-leaderboard').addEventListener('click', () => leaderboardDialog.close());
+document.querySelectorAll<HTMLElement>('[data-open-board]').forEach((button) => button.addEventListener('click', () => openLeaderboard(button, button.dataset.openBoard as BoardGroup)));
+challengePanel.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLElement>('[data-open-ranking]');
+  if (button) openLeaderboard(button);
+});
 leaderboardRefreshButton.addEventListener('click', () => { void refreshLeaderboard(); });
 function selectLeaderboardBoard(board: BoardGroup, focus = false): void {
   activeLeaderboardBoard = board;
@@ -1134,14 +1162,18 @@ resetButton.addEventListener('click', () => {
 speedControl.addEventListener('input', () => { speedOutput.value = `${speedControl.value} step/s`; });
 
 function toggleParameters(force?: boolean): void {
-  const nextVisible = force ?? shell.classList.contains('parameters-hidden');
-  shell.classList.toggle('parameters-hidden', !nextVisible);
-  parameterToggle.setAttribute('aria-pressed', String(nextVisible));
-  window.setTimeout(render, 220);
+  if (force === false) { if (parametersDialog.open) parametersDialog.close(); return; }
+  if (parametersDialog.open || leaderboardDialog.open || removalDialog.open) return;
+  parameterDraft = new ParameterDraft(parameters);
+  parameterDraftError = '';
+  updateAllControls();
+  if (dialogs.open(parametersDialog, parameterToggle, element('.close-parameters'))) {
+    parameterToggle.setAttribute('aria-expanded', 'true');
+    element('.parameter-scroll').scrollTop = 0;
+  }
 }
-
 parameterToggle.addEventListener('click', () => toggleParameters());
-document.querySelectorAll<HTMLButtonElement>('.close-parameters').forEach((button) => button.addEventListener('click', () => toggleParameters(false)));
+element('.close-parameters').addEventListener('click', () => parametersDialog.close());
 graphToggle.addEventListener('click', () => {
   const hidden = shell.classList.toggle('graph-hidden');
   graphToggle.setAttribute('aria-pressed', String(!hidden));
@@ -1214,6 +1246,7 @@ if (storedParticipant) {
   leaderboardNameInput.value = storedParticipant.studentName;
 }
 
-updateAllControls();
+updateStructuralUi();
 render();
+void refreshLeaderboard();
 requestAnimationFrame(animationLoop);

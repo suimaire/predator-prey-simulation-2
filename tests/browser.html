@@ -1,0 +1,31 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>격리된 대시보드 검증</title><div id="app"></div>
+<script type="module">
+  // This Vite-only test entry is excluded from the production build. Nothing reaches a ranking service.
+  const storage = new Map();
+  Object.defineProperty(window, 'localStorage', { value: {
+    getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value),
+  } });
+  let gets = 0, posts = 0;
+  const fetchOriginal = window.fetch;
+  const mode = new URL(location.href).searchParams.get('records') ?? '13';
+  window.fetch = async (input, init) => {
+    const url = String(input);
+    if (!url.includes('/fixture/rest/v1/')) return fetchOriginal(input, init);
+    if (init?.method === 'POST') { posts++; throw new Error('Fixture submissions are blocked'); }
+    gets++;
+    if (mode === 'error') return new Response(JSON.stringify({ message: 'Fixture read failure' }), { status: 503 });
+    if (mode === 'loading') return new Promise(() => {});
+    const board = url.includes('eq.manipulator') ? 'manipulator' : 'protector';
+    return new Response(JSON.stringify(Array.from({ length: Number(mode) }, (_, i) => ({
+      id: `${board}-${i}`, challenge_id: 'apex-survival', simulation_version: 'apex-v1', seed: 260903,
+      student_number: `${board}-${i}`, student_name: i === 1 ? '아주긴표시이름의검증참가자' : `검증용 ${i + 1}`,
+      score: 5000 - Math.floor(i / 2) * 100, submitted_at: `2026-09-01T00:00:${String(i).padStart(2,'0')}.000Z`, board_group: board,
+    }))), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  await import('../src/main.ts');
+  const report = document.createElement('output'); report.id = 'fixture-report';
+  report.style.cssText = 'display:block;padding:12px;background:#fff3c9;font:14px system-ui';
+  document.body.append(report);
+  setInterval(() => { report.textContent = `격리된 검증 데이터 · GET ${gets} · POST ${posts} · PB ${storage.size}`; }, 200);
+</script></html>
