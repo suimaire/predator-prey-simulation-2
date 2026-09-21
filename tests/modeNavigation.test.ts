@@ -52,6 +52,7 @@ function setup() {
     shell: { classList: { toggle() {} } }, element,
     document: { querySelectorAll: (selector: string) => selector === '[data-app-mode]' ? buttons : [] },
     window: { confirm: () => context.confirmed }, confirmed: false,
+    modeEffects: { sync() {} },
     initializeIconCanvases() {}, updateControlAvailability() {}, clearFinishedRecord() {},
     clearPopulationFeedback() {}, setRunning() {}, render() {},
   });

@@ -79,54 +79,86 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 .restore-button { width: 100%; min-height: 42px; padding: 11px; border: 1px solid #cfd9d1; border-radius: 11px; color: #3e5b4b; background: #f7faf7; font-size: 11px; font-weight: 700; }
 
 .workspace { min-width: 0; padding: 18px clamp(15px, 2.4vw, 32px) 42px; }
-.mode-switch { display: inline-grid; grid-template-columns: 1fr 1fr; flex: 0 0 auto; padding: 3px; border: 1px solid #cdd9cf; border-radius: 11px; background: #e6ece6; }
-.mode-switch button { min-height: 34px; padding: 0 12px; border: 0; border-radius: 8px; color: #66756c; background: transparent; font-size: 12px; font-weight: 750; white-space: nowrap; }
-.mode-switch button[aria-pressed=true] { color: #194d32; background: #fff; box-shadow: 0 2px 8px rgba(28,62,38,.1); }
-/* Apex tab only: tune the glow and two top-edge flames here; no particles. */
-.mode-switch button[data-app-mode=apex] {
-  --apex-tab-glow-opacity: .16;
-  --apex-tab-glow-blur: 9px;
-  --apex-tab-flame-opacity: .46;
-  --apex-tab-flame-size: 7px;
-  --apex-tab-flicker-duration: 2.6s;
+/* Mode decoration is owned by this card; timings below are also read by modeEffects.ts. */
+.board-card {
+  --apex-slide-ms: 310ms;
+  --apex-slide-ease: cubic-bezier(.22,.7,.25,1);
+  --apex-tab-delay: 210;
+  --apex-panel-delay: 410;
+  --apex-spread-ms: 480;
+  --apex-settle-ms: 1200;
+  --apex-cool-ms: 460;
+  --apex-tab-glow: .3;
+  --apex-tab-peak: .7;
+  --apex-panel-glow: .24;
+  --apex-line-opacity: .58;
+  --apex-edge-flame-size: 6px;
+  --apex-flame-sway: 1px;
+  --apex-flame-rise: 1.12;
   position: relative;
+  container-type: inline-size;
 }
-.mode-switch button[data-app-mode=apex] .apex-tab-label { position: relative; }
-/* The icon occupies existing padding, so neither tab nor label moves. */
-.mode-switch button[data-app-mode=apex] .apex-tab-flame { display: none; position: absolute; right: calc(100% + 1px); top: 50%; width: 10px; height: 14px; transform: translateY(-50%); color: #e6b969; pointer-events: none; }
-.mode-switch button[data-app-mode=apex][aria-pressed=true] {
-  color: #fff;
-  background: #224d35;
-  box-shadow: 0 2px 8px rgba(28,62,38,.1), inset 0 0 0 1px rgba(230,177,87,.24), 0 0 var(--apex-tab-glow-blur) rgb(226 155 63 / var(--apex-tab-glow-opacity));
+/* A reserved legend column keeps its three/five real entries from moving the tabs. */
+.board-heading { display: grid; grid-template-columns: minmax(120px,1fr) 216px 300px; gap: 8px 12px; }
+.board-heading .mode-switch { grid-column: 2; grid-row: 1; }
+.board-heading .legend { grid-column: 3; grid-row: 1; min-height: 24px; }
+.mode-switch { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; width: 216px; flex: 0 0 auto; padding: 3px; border: 1px solid #cdd9cf; border-radius: 11px; background: #e6ece6; isolation: isolate; }
+.mode-switch button { position: relative; z-index: 1; min-height: 34px; min-width: 0; padding: 0 12px; border: 0; border-radius: 8px; color: #66756c; background: transparent; font-size: 12px; font-weight: 750; white-space: nowrap; transition: color var(--apex-slide-ms) var(--apex-slide-ease); }
+.mode-switch button[aria-pressed=true] { color: #194d32; }
+.mode-switch button[data-app-mode=apex][aria-pressed=true] { color: #fff; }
+.mode-capsule { position: absolute; z-index: 0; inset: 3px auto 3px 3px; width: calc((100% - 6px) / 2); border-radius: 8px; background: #fff; box-shadow: 0 2px 8px rgba(28,62,38,.1); pointer-events: none; transition: transform var(--apex-slide-ms) var(--apex-slide-ease), background-color var(--apex-slide-ms) ease; }
+.board-card[data-mode-effects=apex] .mode-capsule { transform: translateX(100%); background: #224d35; }
+.apex-tab-glow { position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px #e6b157, 0 0 9px #e29b3f; opacity: 0; }
+.apex-tab-label { position: relative; }
+/* The existing SVG lives in a permanently reserved part of the button padding. */
+.apex-tab-ignition { position: absolute; right: calc(100% + 1px); top: calc(50% - 7px); width: 10px; height: 14px; color: #efbd68; opacity: 0; transform: scale(.35); transform-origin: center bottom; pointer-events: none; }
+.apex-tab-flame { display: block; width: 100%; height: 100%; transform-origin: center bottom; }
+.board-card[data-mode-effects=apex] .apex-tab-flame { animation: apex-icon-warmth 2.7s ease-in-out infinite; }
+@keyframes apex-icon-warmth {
+  0%, 100% { transform: scale(1); opacity: .95; }
+  42% { transform: translateX(calc(var(--apex-flame-sway) * -.35)) scale(.94,.9); opacity: .78; }
+  73% { transform: scale(.96,1.04); opacity: 1; }
 }
-.mode-switch button[data-app-mode=apex][aria-pressed=true] .apex-tab-flame { display: block; }
-.mode-switch button[data-app-mode=apex][aria-pressed=true]::before,
-.mode-switch button[data-app-mode=apex][aria-pressed=true]::after {
-  content: '';
-  position: absolute;
-  top: -4px;
-  left: 27%;
-  width: calc(var(--apex-tab-flame-size) * .65);
-  height: var(--apex-tab-flame-size);
-  border-radius: 70% 0 65% 45%;
-  background: linear-gradient(0deg, #c78d40, #edc776 65%, rgba(243,210,139,.3));
-  opacity: var(--apex-tab-flame-opacity);
-  transform: rotate(-28deg) scaleY(.9);
-  transform-origin: center bottom;
-  pointer-events: none;
-  animation: apex-tab-flicker var(--apex-tab-flicker-duration) ease-in-out infinite;
+.apex-panel-heat { position: absolute; z-index: 1; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; }
+.apex-panel-outline { display: block; position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; fill: none; }
+.apex-heat-line { stroke: #c95739; stroke-width: 1.35; stroke-opacity: var(--apex-line-opacity); }
+.apex-heat-halo { stroke: #e66543; stroke-width: 5; stroke-opacity: var(--apex-panel-glow); filter: blur(3px); }
+.apex-heat-sweep { stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0; }
+.apex-heat-sweep .apex-heat-line { stroke: #ef8049; stroke-width: 1.8; stroke-opacity: .95; }
+.apex-heat-sweep .apex-heat-halo { stroke-width: 7; stroke-opacity: .5; }
+.apex-heat-steady, .apex-edge-flames { opacity: 0; }
+.apex-heat-section { animation: apex-edge-warmth 4.7s ease-in-out infinite; }
+.apex-heat-section-1 { animation-duration: 5.3s; animation-delay: -2.1s; }
+.apex-heat-section-2 { animation-duration: 6.1s; animation-delay: -3.7s; }
+.apex-heat-section-3 { animation-duration: 5.7s; animation-delay: -1.4s; }
+.apex-heat-section-2 .apex-heat-line, .apex-heat-section-3 .apex-heat-line { stroke-opacity: calc(var(--apex-line-opacity) * .8); }
+@keyframes apex-edge-warmth { 0%, 100% { opacity: .8; } 46% { opacity: 1; } 75% { opacity: .72; } }
+.apex-edge-flames { position: absolute; inset: 0; border-radius: inherit; }
+.apex-edge-flames i { position: absolute; left: 16%; bottom: calc(100% - 1px); width: calc(var(--apex-edge-flame-size) * .62); height: var(--apex-edge-flame-size); border-radius: 70% 15% 60% 45%; background: linear-gradient(0deg, #d76541, #e99559 68%, #edc68d00); transform-origin: center bottom; opacity: .5; animation: apex-small-heat 3.6s ease-in-out infinite; }
+.apex-edge-flames i:nth-child(2) { left: 35%; height: calc(var(--apex-edge-flame-size) * .8); animation-duration: 4.3s; animation-delay: -1.8s; }
+.apex-edge-flames i:nth-child(3) { left: 74%; animation-duration: 3.9s; animation-delay: -2.7s; }
+.apex-edge-flames i:nth-child(4) { left: 2%; bottom: calc(100% - 5px); height: calc(var(--apex-edge-flame-size) * .75); animation-duration: 4.8s; animation-delay: -.8s; }
+.apex-edge-flames i:nth-child(5) { left: auto; right: 2%; bottom: calc(100% - 5px); height: calc(var(--apex-edge-flame-size) * .85); animation-duration: 4.1s; animation-delay: -3.1s; }
+@keyframes apex-small-heat {
+  0%, 100% { transform: rotate(-18deg) scaleY(.78); opacity: .38; }
+  40% { transform: translateX(var(--apex-flame-sway)) rotate(-9deg) scaleY(var(--apex-flame-rise)); opacity: .56; }
+  72% { transform: rotate(-23deg) scaleY(.88); opacity: .44; }
 }
-.mode-switch button[data-app-mode=apex][aria-pressed=true]::after {
-  left: 72%;
-  top: -3px;
-  width: calc(var(--apex-tab-flame-size) * .5);
-  height: calc(var(--apex-tab-flame-size) * .8);
-  animation-delay: -.9s;
+.board-card[data-mode-phase=idle] .apex-panel-heat * { animation: none; }
+.board-card[data-effects-paused=true] .apex-panel-heat *, .board-card[data-effects-paused=true] .apex-tab-flame { animation-play-state: paused; }
+.board-card[data-effects-static=true] .mode-capsule, .board-card[data-effects-static=true] .mode-switch button { transition: none; }
+@container (max-width: 680px) {
+  .board-heading { grid-template-columns: minmax(0,1fr) 216px; }
+  .board-heading .legend { grid-column: 1/-1; grid-row: 2; }
 }
-@keyframes apex-tab-flicker {
-  0%, 100% { opacity: var(--apex-tab-flame-opacity); transform: rotate(-28deg) scaleY(.9); }
-  40% { opacity: calc(var(--apex-tab-flame-opacity) * .78); transform: rotate(-23deg) scaleY(.78); }
-  70% { opacity: calc(var(--apex-tab-flame-opacity) * .94); transform: rotate(-31deg) scaleY(1); }
+@media (max-width: 760px) {
+  .board-heading .mode-switch { width: 100%; grid-column: 1/-1; grid-row: 2; }
+  .board-heading .legend { grid-column: 2; grid-row: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-card .mode-capsule, .board-card .mode-switch button { transition: none; }
+  .board-card .apex-panel-heat *, .board-card .apex-tab-flame { animation: none; }
+  .board-card .apex-heat-halo, .board-card .apex-edge-flames, .board-card .apex-tab-glow { display: none; }
 }
 .challenge-panel { display: grid; gap: 13px; min-width: 0; padding: 0 0 16px; border-bottom: 1px solid #dce5dc; }
 .challenge-panel[data-phase=over] { border-bottom-color: #d5b9a8; }
@@ -227,7 +259,7 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 .board-card, .pyramid-card, .removal-card, .graph-card, .statistics-card, .learning-card, .rule-card { border: 1px solid #d2ddd3; border-radius: 17px; background: #fff; box-shadow: 0 8px 25px rgba(29,59,38,.06); }
 .board-card { min-width: 0; padding: 17px; }
 .board-heading > div:first-child { flex: 0 0 auto; }
-.board-heading-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; min-width: 0; gap: 6px 12px; }
+.board-heading-actions { display: contents; }
 .legend { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; color: #56645b; font-size: 9px; }
 .legend > span { display: flex; align-items: center; gap: 3px; white-space: nowrap; }
 .legend canvas { width: 23px; height: 23px; }
@@ -466,7 +498,6 @@ dialog .confirm-removal { color: #fff; border-color: #a65431; background: #a6543
   *, *::before, *::after { animation: none !important; }
   .mini-population em, .best-emphasis .challenge-score, .best-emphasis .challenge-score > strong, .best-emphasis .new-best, .best-emphasis .best-improvement { transform: none !important; opacity: 1; }
   .best-emphasis .challenge-score::after { display: none; }
-  .mode-switch button[data-app-mode=apex]::before, .mode-switch button[data-app-mode=apex]::after { display: none; }
 }
 
 /* 페이지 하단 브랜드 footer (index.html) */
