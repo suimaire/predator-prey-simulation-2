@@ -82,7 +82,52 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 .mode-switch { display: inline-grid; grid-template-columns: 1fr 1fr; flex: 0 0 auto; padding: 3px; border: 1px solid #cdd9cf; border-radius: 11px; background: #e6ece6; }
 .mode-switch button { min-height: 34px; padding: 0 12px; border: 0; border-radius: 8px; color: #66756c; background: transparent; font-size: 12px; font-weight: 750; white-space: nowrap; }
 .mode-switch button[aria-pressed=true] { color: #194d32; background: #fff; box-shadow: 0 2px 8px rgba(28,62,38,.1); }
-.mode-switch button[data-app-mode=apex][aria-pressed=true] { color: #fff; background: #224d35; }
+/* Apex tab only: tune the glow and two top-edge flames here; no particles. */
+.mode-switch button[data-app-mode=apex] {
+  --apex-tab-glow-opacity: .16;
+  --apex-tab-glow-blur: 9px;
+  --apex-tab-flame-opacity: .46;
+  --apex-tab-flame-size: 7px;
+  --apex-tab-flicker-duration: 2.6s;
+  position: relative;
+}
+.mode-switch button[data-app-mode=apex] .apex-tab-label { position: relative; }
+/* The icon occupies existing padding, so neither tab nor label moves. */
+.mode-switch button[data-app-mode=apex] .apex-tab-flame { display: none; position: absolute; right: calc(100% + 1px); top: 50%; width: 10px; height: 14px; transform: translateY(-50%); color: #e6b969; pointer-events: none; }
+.mode-switch button[data-app-mode=apex][aria-pressed=true] {
+  color: #fff;
+  background: #224d35;
+  box-shadow: 0 2px 8px rgba(28,62,38,.1), inset 0 0 0 1px rgba(230,177,87,.24), 0 0 var(--apex-tab-glow-blur) rgb(226 155 63 / var(--apex-tab-glow-opacity));
+}
+.mode-switch button[data-app-mode=apex][aria-pressed=true] .apex-tab-flame { display: block; }
+.mode-switch button[data-app-mode=apex][aria-pressed=true]::before,
+.mode-switch button[data-app-mode=apex][aria-pressed=true]::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 27%;
+  width: calc(var(--apex-tab-flame-size) * .65);
+  height: var(--apex-tab-flame-size);
+  border-radius: 70% 0 65% 45%;
+  background: linear-gradient(0deg, #c78d40, #edc776 65%, rgba(243,210,139,.3));
+  opacity: var(--apex-tab-flame-opacity);
+  transform: rotate(-28deg) scaleY(.9);
+  transform-origin: center bottom;
+  pointer-events: none;
+  animation: apex-tab-flicker var(--apex-tab-flicker-duration) ease-in-out infinite;
+}
+.mode-switch button[data-app-mode=apex][aria-pressed=true]::after {
+  left: 72%;
+  top: -3px;
+  width: calc(var(--apex-tab-flame-size) * .5);
+  height: calc(var(--apex-tab-flame-size) * .8);
+  animation-delay: -.9s;
+}
+@keyframes apex-tab-flicker {
+  0%, 100% { opacity: var(--apex-tab-flame-opacity); transform: rotate(-28deg) scaleY(.9); }
+  40% { opacity: calc(var(--apex-tab-flame-opacity) * .78); transform: rotate(-23deg) scaleY(.78); }
+  70% { opacity: calc(var(--apex-tab-flame-opacity) * .94); transform: rotate(-31deg) scaleY(1); }
+}
 .challenge-panel { display: grid; gap: 13px; min-width: 0; padding: 0 0 16px; border-bottom: 1px solid #dce5dc; }
 .challenge-panel[data-phase=over] { border-bottom-color: #d5b9a8; }
 .challenge-copy h2 { margin: 0; color: #1d402c; font-size: 13px; }
@@ -421,6 +466,7 @@ dialog .confirm-removal { color: #fff; border-color: #a65431; background: #a6543
   *, *::before, *::after { animation: none !important; }
   .mini-population em, .best-emphasis .challenge-score, .best-emphasis .challenge-score > strong, .best-emphasis .new-best, .best-emphasis .best-improvement { transform: none !important; opacity: 1; }
   .best-emphasis .challenge-score::after { display: none; }
+  .mode-switch button[data-app-mode=apex]::before, .mode-switch button[data-app-mode=apex]::after { display: none; }
 }
 
 /* 페이지 하단 브랜드 footer (index.html) */

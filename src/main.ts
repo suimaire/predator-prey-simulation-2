@@ -191,7 +191,7 @@ app.innerHTML = `
               <header class="board-heading">
                 <div><p class="section-kicker">LIVE ECOSYSTEM</p><h2 id="forest-heading">숲 생태계</h2></div>
                 <div class="board-heading-actions">
-                  <div class="mode-switch" role="group" aria-label="모드 선택"><button type="button" data-app-mode="free" aria-pressed="true">자유 탐구</button><button type="button" data-app-mode="apex" aria-pressed="false">Apex Survival</button></div>
+                  <div class="mode-switch" role="group" aria-label="모드 선택"><button type="button" data-app-mode="free" aria-pressed="true">자유 탐구</button><button type="button" data-app-mode="apex" aria-pressed="false"><span class="apex-tab-label"><svg class="apex-tab-flame" viewBox="0 0 16 20" aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d="M9 1c1 4-3 5-2 8-1.5-.5-2-2-1.5-3.5C2.5 8 1 10.5 1.5 13.5a6.5 6.5 0 0 0 13-1C14.5 8 11 6 9 1ZM8.5 10c.5 2-2 3-2 5a2 2 0 0 0 4 0c0-2-1-3-2-5Z"/></svg>Apex Survival</span></button></div>
                   <div class="legend" id="board-legend"></div>
                 </div>
               </header>
