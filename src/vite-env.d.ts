@@ -7,7 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_ANON_KEY?: string;
   /** 제출 대상 원본 테이블. 기본값은 apex_leaderboard 이며 학생은 읽을 수 없습니다. */
   readonly VITE_LEADERBOARD_TABLE?: string;
-  /** 조회 대상 공개 view. 기본값은 `${VITE_LEADERBOARD_TABLE}_public` 입니다. */
+  /** 조회 대상 공개 view. 기본값은 `${VITE_LEADERBOARD_TABLE}_public_v2`; v2 endpoint만 허용합니다. */
   readonly VITE_LEADERBOARD_PUBLIC_VIEW?: string;
 }
 

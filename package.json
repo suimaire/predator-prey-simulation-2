@@ -7,9 +7,15 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node --test tests/*.test.ts"
+    "test": "node --test tests/*.test.ts",
+    "test:leaderboard": "node --test tests/leaderboard.test.ts tests/leaderboardView.test.ts tests/boardGroup.test.ts tests/leaderboardDb.test.ts",
+    "test:browser:leaderboard": "node tests/leaderboard.browser.mjs",
+    "db:generate": "node scripts/build-leaderboard-sql.mjs",
+    "db:check": "node scripts/build-leaderboard-sql.mjs --check"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "playwright": "^1.63.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.3"
   }

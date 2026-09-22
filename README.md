@@ -62,183 +62,56 @@ record schema는 `ChallengeRecord<SimulationParameters>`와 `ApexSurvivalRecord`
 
 ## 중앙 leaderboard
 
-Apex Survival 결과 화면에서 학번과 이름을 입력해 학급 공용 기록판에 제출할 수 있습니다. 저장소는 Supabase이고, 앱은 `src/leaderboard.ts`의 `LeaderboardTransport` 인터페이스만 알고 있으므로 다른 백엔드로 교체하거나 테스트에서 메모리 구현으로 바꿔 끼울 수 있습니다.
+Apex Survival 결과에서 **학교 → 학번 → 이름**을 입력해 제출합니다. 학교는 직접 입력하며 처음에는 빈칸입니다. 학교명은 공백 정리 후 최대 80자, 학번은 선행 0을 유지하는 문자열입니다. 기존 브라우저에 저장된 학번·이름은 유지하고 학교만 빈칸으로 승격합니다. Personal Best 저장 동작은 그대로입니다.
 
-- 기록판은 **생태 HAFS 보호단**(기본 탭)과 **HAFS AI RED TEAM** 두 보드로 나뉩니다. 어느 기록이 어느 보드에 올라갈지는 자동으로 판정하지 않고, 교사가 `board_group` 열을 기록 id 단위로 직접 정합니다(아래 "교사용 운영 절차"). 학생은 기록을 다시 제출할 필요가 없습니다. 내부 값은 그대로 `protector` / `manipulator` 이며 화면 표시명만 다릅니다.
-- 두 보드 모두 학생마다 최고 기록 1개만 남기고 상위 10명을 보여 줍니다. 기존 순위 계산은 마지막 자리 동점자까지 유지합니다. 화면 요약은 그 정렬 결과의 앞 3명, 상세 모달은 앞 10명까지만 표시하며 동점 순위와 제출 시각 순서는 그대로 유지합니다. 동점은 같은 순위를 공유하고 먼저 제출한 기록이 앞에 옵니다. HAFS AI RED TEAM도 1위부터 점수 내림차순입니다.
-- **RED TEAM 우선 규칙.** 같은 기록판(`challenge_id`, `simulation_version`, `seed`) 안에서 `manipulator` 기록이 하나라도 있는 학생(학번 기준)은 HAFS AI RED TEAM에만 나오고 생태 HAFS 보호단에서는 빠집니다. 원본 `protector` 행은 지우거나 바꾸지 않으며, 그 학생의 `manipulator` 지정을 모두 되돌리면 남아 있던 보호단 기록이 다시 나옵니다. 별도 명단 테이블 없이 현재 기록 상태로 매번 계산합니다.
-- 학생별 최고 기록 1개로 접는 일과 RED TEAM 우선 규칙은 **서버의 공개 view가** 적용하고, 클라이언트 `rankBoards()`도 같은 규칙으로 한 번 더 거릅니다. 그래서 다른 학생이 몇 번 도전했고 예전 점수가 얼마였는지는 public API로도 알 수 없습니다. 원본 테이블에는 모든 제출이 그대로 남습니다.
-- 학생의 고유 식별자는 `student_number`(학번) **하나**입니다. `student_name`은 기록판에 보여 주기 위한 표시 정보이며 동일인 판정에 쓰지 않습니다. 같은 학번으로 이름을 조금 다르게 적어 제출해도 같은 학생으로 봅니다. 반대로 이름이 같아도 학번이 다르면 다른 학생입니다.
-- 같은 학번의 학생이 완전히 같은 제출을 두 번 등록하는 것은 unique index `apex_leaderboard_dedupe_idx`가 막습니다. 키는 `(challenge_id, simulation_version, seed, student_number, payload_hash)`이며 `student_name`은 들어가지 않습니다. 이름 표기만 바꿔 같은 기록을 다시 내는 길을 막기 위한 것입니다. 파라미터나 점수가 다른 진짜 새 도전은 `payload_hash`가 달라져 그대로 여러 행 남습니다.
-- 학번은 자릿수나 숫자 형식을 강제하지 않고 문자열로 다룹니다. 학번 체계가 바뀌어도 스키마와 코드를 고치지 않아도 되게 하기 위한 것이며, 앞뒤 공백 정리 · 빈 값 금지 · 최대 24자 · 위험 문자 배제만 검사합니다.
-- 읽기와 쓰기가 서로 다른 대상을 향합니다. 조회는 공개 view `apex_leaderboard_public`, 제출은 원본 테이블 `apex_leaderboard` 입니다.
-- `VITE_SUPABASE_URL`과 `VITE_SUPABASE_ANON_KEY`가 없으면 `createLeaderboardTransport`가 `null`을 돌려주고, 기록판 자리에는 안내 문구만 표시되며 나머지 기능은 그대로 동작합니다.
-- 학번과 이름은 공백을 정리한 뒤 길이와 문자 종류를 검사하고, 화면에 그릴 때 HTML escape합니다. 입력값은 브라우저에 기억해 두어 다음 제출에서 다시 입력하지 않아도 됩니다.
-- 제출은 도전이 끝난 기록 하나당 한 번만 가능하며, 새 도전을 시작하면 제출 상태가 초기화됩니다.
+전국 랭킹은 **HAFS를 포함한 모든 학교**, HAFS 랭킹은 HAFS만 대상으로 합니다. 두 영역을 동시에 표시하고 공통 **생태계 수호단 / AI RED TEAM** 탭으로 함께 전환합니다. 요약은 최대 3행, 상세는 상위 10개 위치와 경계 점수 동점자 전원입니다. 동점은 1,1,3 순위이며 서버 제출 시각, id 순으로 정렬합니다. 두 scope는 서버에 독립적으로 조회하며 한쪽의 오류가 다른 쪽 결과를 지우지 않습니다.
 
-### 공개 범위와 권한 구조
+공개 행은 **순위 / 학교 / 일부 가림 이름 / 점수**, 상세에는 기존 서버 제출 시각도 표시합니다. 학번과 전체 이름을 조회한 뒤 화면에서 숨기는 방식은 사용하지 않습니다.
 
-Apex Survival은 좋은 파라미터 조합을 찾는 활동이므로, 다른 학생의 `parameter_snapshot`이 보이면 활동이 성립하지 않습니다. 그래서 학생 키(publishable key)로는 원본 테이블을 **읽을 수 없게** 만들고, 공개해도 되는 열만 담은 view 하나만 열어 둡니다.
-
-| 대상 | 학생 키 권한 | 담긴 열 |
-| --- | --- | --- |
-| `apex_leaderboard` (원본) | INSERT만. `board_group`·`verification`·`verified_*`·`submitted_at`은 지정 불가, UPDATE 불가 | 전체. `parameter_snapshot`, `payload_hash`, `verified_*`, `board_group` 포함 |
-| `apex_leaderboard_public` (view) | SELECT만 | `id`, `challenge_id`, `simulation_version`, `seed`, `score`, `student_number`, `student_name`, `submitted_at`, `board_group`. `hidden` 행 제외, 보드별로 학번 하나당 최고 기록 1행, RED TEAM 학생의 `protector` 행 제외 |
-
-클라이언트의 `select=` 목록을 줄이는 것만으로는 부족합니다. 학생이 개발자 도구에서 원본 테이블에 `select=*`를 직접 보낼 수 있기 때문입니다. 그래서 서버에서 `revoke all on table public.apex_leaderboard from anon, authenticated` 로 SELECT 권한 자체를 회수하고 INSERT만 되돌려 줍니다. 공개 읽기 RLS 정책도 함께 제거합니다.
-
-view는 `security_invoker = false`로 만듭니다. 이 값의 의미를 짚어 두면,
-
-- `false`(사용): view가 **소유자(postgres) 권한**으로 원본 테이블을 읽습니다. 학생에게 원본 SELECT 권한이 없어도 view가 동작합니다. 소유자 권한이므로 원본 테이블의 RLS도 우회하는데, 기록판은 원래 전체 공개이므로 의도한 동작이며 노출 범위의 상한은 view의 SELECT 목록입니다.
-- `true`: view가 **호출자(anon) 권한**으로 읽습니다. 그러면 원본 테이블 SELECT 권한이 다시 필요해지고, 그 권한을 주는 순간 `select=*`로 `parameter_snapshot`이 노출됩니다. 즉 이 구조에서는 쓸 수 없습니다.
-
-view를 만들었다는 사실만으로 안전하다고 가정하면 안 됩니다. 실제로 확인해야 하는 것은 두 가지입니다. **(1)** 원본 테이블에 `select=*`를 보냈을 때 거부되는가, **(2)** view에는 비공개 열이 아예 존재하지 않는가. 아래 "권한 검증" 절차로 확인할 수 있습니다.
-
-타입에도 같은 경계가 있습니다. `LeaderboardSubmission`(보내는 값)에만 `parameterSnapshot`과 `payloadHash`가 있고, `LeaderboardEntry`(읽는 값)에는 아예 없습니다. 화면 코드가 실수로 참조하면 컴파일이 실패합니다.
-
-제출은 `Prefer: return=minimal`로 보냅니다. 삽입한 행을 되돌려받으려면 원본 테이블 SELECT 권한이 필요한데, 그 권한이 없는 것이 이 구조의 핵심이기 때문입니다. 본인 기록 강조는 반환된 행 id 대신 학번으로 판별합니다.
-
-검증 상태(`verification`)는 현재 공개 view에 넣지 않아 기록판에 배지가 뜨지 않습니다. 공개하기로 하면 `supabase/schema.sql`의 view 정의에 열 한 줄만 추가하면 되고, 클라이언트는 그 열이 오면 배지를 그리고 없으면 그리지 않도록 이미 되어 있습니다. `verified_score`와 `verifier_version`은 교사용이므로 넣지 마세요.
-
-교사가 `parameter_snapshot`을 조회하는 기능은 **아직 없습니다.** 현재는 Supabase 대시보드에서 직접 봐야 하며, 교사 로그인은 5단계(server-side verification)와 함께 설계할 예정입니다.
-
-### 권한 검증
-
-publishable key만으로 아래가 모두 기대대로 나와야 합니다.
-
-| 요청 | 기대 결과 |
+| 대상 | 학생 권한과 계약 |
 | --- | --- |
-| `GET /rest/v1/apex_leaderboard_public?select=*` | 200 · 공개 9개 열만. 각 행에 `board_group`(`protector` 또는 `manipulator`)이 **있고** `parameter_snapshot`·`payload_hash`·`achieved_at`은 **없음**. `hidden` 값은 나오지 않음 |
-| `GET /rest/v1/apex_leaderboard_public?select=parameter_snapshot` | 400 · 열이 존재하지 않음 |
-| `GET /rest/v1/apex_leaderboard?select=*` | 401 · permission denied |
-| `GET /rest/v1/apex_leaderboard?select=parameter_snapshot` | 401 · permission denied |
-| `POST /rest/v1/apex_leaderboard` (정상 기록) | 201 · 저장된 행의 `board_group`은 `protector` |
-| `POST /rest/v1/apex_leaderboard` (본문에 `"board_group":"manipulator"` 추가) | 401 · permission denied (열 INSERT 권한 없음) |
-| `PATCH /rest/v1/apex_leaderboard?id=eq.<id>` (본문 `{"board_group":"hidden"}`) | 401 · permission denied, 반영 0건 |
-| `PATCH` / `DELETE` (그 밖의 열) | 반영 0건 |
+| `apex_leaderboard` | 기존 허용 제출 열 + `school_name`에만 INSERT. 원본 SELECT/UPDATE/DELETE 불가. `school_key`, `board_group`, 서버 시각, verification 열 지정 불가 |
+| `apex_leaderboard_public_v2` | SELECT만. `id`, `challenge_id`, `simulation_version`, `seed`, `score`, `school_name`, `display_name`, `submitted_at`, `board_group`, `is_hafs` |
+| `apex_schools`, `apex_school_aliases` | 관리자 전용 registry. 학생 조회·변조 불가 |
 
-터미널에서 확인할 때는 아래처럼 보냅니다. `<URL>`과 `<KEY>`는 `.env.local`의 값입니다.
+DB의 동일 참가자 기준은 `school_key + normalized student_number`입니다. 이름은 identity가 아닙니다. hidden을 제외하고 같은 challenge/version/seed/학교/학번에 manipulator가 있으면 protector를 제외한 다음, `score DESC, submitted_at ASC, id ASC`로 대표 최고 기록을 고릅니다. 모든 원본 제출은 보존합니다. 교사가 manipulator 지정을 모두 되돌리면 보존된 protector 기록이 다시 표시됩니다. 학생용 분류 UI는 없습니다.
 
-```bash
-curl -s "<URL>/rest/v1/apex_leaderboard_public?select=*&limit=3" -H "apikey: <KEY>"
-```
+HAFS 및 외대부고·용인외대부고·한국외대부고·용인한국외대부고·한국외국어대학교부설고등학교·용인한국외국어대학교부설고등학교는 등록 별칭으로 `hafs` / `HAFS`에 연결합니다. 다른 학교는 미등록 상태로도 제출할 수 있고 내부 키에 `free:` 접두사를 사용합니다. 별칭 등록은 기존 기록을 자동 re-key하지 않습니다. HAFS 입력은 재학 인증이 아니며, 미등록 학교의 다른 약칭도 자동 통합하지 않습니다. 일부 가림 이름은 완전한 익명화가 아닙니다.
 
-응답 JSON의 각 객체에 `"board_group"` 키가 있고 `"parameter_snapshot"` 키가 없으면 정상입니다.
+제출은 `Prefer: return=minimal`로 원본에 POST합니다. 학교명·학번·이름은 simulation payload hash에 포함하지 않습니다. 점수·파라미터·challenge/version/seed의 기존 SHA-256 규칙은 유지합니다. 해시는 서버 점수 검증이나 인증 기능이 아닙니다. verification 열은 계속 비공개입니다.
 
-### 제출 payload와 무결성
+### DB 설치와 운영 전환
 
-제출할 때 `challengeId`, `simulationVersion`, `seed`, `score`, `parameterSnapshot`만 key 순서까지 정규화한 뒤 SHA-256으로 요약한 `payloadHash`를 함께 보냅니다. 학생 이름이나 달성 시각은 해시에 들어가지 않으므로 표기를 고쳐도 해시는 그대로입니다.
+**운영 상태는 별도 확인이 필요합니다.** 신규 빈 DB는 [`supabase/schema.sql`](supabase/schema.sql), 기존 DB는 [전환 runbook](supabase/LEADERBOARD_V2_RUNBOOK.md)의 **preflight → 승인된 expand → v2 frontend → 승인된 수동 finalize → 실제 REST/권한 검사** 순서를 따릅니다. schema.sql을 기존 DB에 다시 붙여 넣어 upgrade하지 않습니다.
 
-이 해시는 점수를 증명하지 않습니다. 클라이언트가 계산하는 값이므로 위조가 가능하며, 목적은 저장된 snapshot과 제출된 점수가 서로 어긋났는지 드러내는 것과, 5단계에서 서버가 같은 정규화 규칙으로 재실행 결과를 대조할 자리를 미리 만들어 두는 것입니다. 실제 신뢰는 서버 재실행 검증이 들어올 때 생깁니다.
+- 운영 쓰기·Pages 배포는 별도 승인 단계입니다. 기능 브랜치 commit/push는 배포가 아닙니다.
+- 학교 출처가 확인되지 않은 legacy 행은 HAFS로 추정하지 않습니다. 관리자가 승인한 id별 mapping 또는 모든 학교 미상 legacy 행의 HAFS 출처 확인이 필요합니다.
+- expand는 bounded lock/단일 트랜잭션과 per-id 모든 기존 값 비교를 사용합니다. 정규화 중복이나 예상하지 못한 trigger/권한을 만나면 rollback합니다. 행 삭제·점수/hash 수정으로 충돌을 없애지 않습니다.
+- 임시 HAFS default는 설치하지 않습니다. expand 후 구 클라이언트는 학교 미입력 제출이 실패하므로 유지보수 시간에 전환하고 새로고침을 안내합니다.
+- 구 `apex_leaderboard_public` 및 다른 개인정보 공개 view/RPC를 닫기 전에는 개인정보 비공개 전환이 완료된 것이 아닙니다. finalize는 자동 migrations 밖에 있습니다.
+- 복구는 원본과 개인정보 경계를 보존하는 forward-fix입니다. 구 개인정보 view를 다시 열거나 타교 기록을 삭제하지 않습니다.
 
-`apex_leaderboard` 테이블에는 `verification`, `verified_score`, `verified_at`, `verifier_version` 열이 미리 있습니다. 지금은 항상 `unverified`이며 anon key로는 이 열을 쓸 수 없습니다. 기록판은 이미 `검증됨 / 재현 불일치 / 미검증`을 구분해 표시하므로, 나중에 서버가 이 열만 채우면 클라이언트 변경 없이 검증 결과가 드러납니다.
+### 환경변수와 Pages
 
-### Supabase 설정
+`.env.example`을 참고해 `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`를 설정합니다. service_role/secret key는 프론트엔드에 넣지 않습니다. 설정이 없으면 중앙 기록판만 비활성화되고 Personal Best는 유지됩니다.
 
-1. Supabase 프로젝트를 만들고 SQL Editor에서 [`supabase/schema.sql`](supabase/schema.sql)을 실행합니다. 테이블, 인덱스, 권한, RLS 정책, 공개 view, 제출 빈도 제한 트리거가 함께 만들어집니다. 여러 번 실행해도 안전하므로 스키마가 바뀌면 다시 실행하면 됩니다.
-2. `.env.example`을 `.env.local`로 복사하고 프로젝트 URL과 **anon public key**를 채웁니다. `service_role` key는 RLS를 우회하므로 절대 클라이언트에 넣지 않습니다.
-3. GitHub Pages 배포에는 저장소 secret `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`를 등록합니다. 테이블 이름을 바꿨다면 repository variable `VITE_LEADERBOARD_TABLE`도 함께 설정합니다.
+원본은 기본 `apex_leaderboard`, 공개 endpoint는 `${VITE_LEADERBOARD_TABLE}_public_v2`입니다. `VITE_LEADERBOARD_PUBLIC_VIEW`를 지정하면 v2 endpoint여야 하며, 기존 `_public` override는 제거/수정해야 합니다. 오류 시 legacy fallback은 없습니다. GitHub Pages에서도 같은 repository variable을 확인합니다.
 
-RLS INSERT 정책은 현재 challenge 정의(`apex-survival` / `apex-v1` / seed `260903`)와 일치하며 검증 열과 `board_group`을 건드리지 않는 행만 허용합니다. UPDATE와 DELETE 정책이 없으므로 학생 키로는 남의 기록을 고치거나 지울 수 없고, SELECT 권한 자체가 없으므로 원본 테이블을 읽을 수도 없습니다.
+Pages는 main push/수동 실행 설정을 유지하되 **main + `LEADERBOARD_V2_DB_READY=true`**일 때만 배포 job을 실행합니다. 승인된 운영 expand와 실제 v2 API 검증을 마친 운영자가 이 변수를 설정합니다. feature branch push는 배포를 실행하지 않습니다. 상세 적용 파일·교사 분류·alias/re-key·충돌 진단·실패 복구·검증 재현 명령은 [runbook](supabase/LEADERBOARD_V2_RUNBOOK.md)에 있습니다.
 
-두 보드 기능은 `board_group` 열이 있는 view를 전제로 합니다. 기존 프로젝트라면 **새 클라이언트를 배포하기 전에** `supabase/schema.sql`을 다시 실행하세요. 열이 추가되면서 기존 행은 모두 `protector`로 채워지고, 지워지는 행은 없습니다.
-
-이미 두 보드 구조가 설치된 프로젝트에 RED TEAM 우선 규칙만 반영하려면 [`supabase/migrations/20260915_red_team_precedence.sql`](supabase/migrations/20260915_red_team_precedence.sql)을 SQL Editor에서 실행합니다. `create or replace view`로 공개 view 정의만 바꾸며 테이블 · 행 · 권한은 건드리지 않습니다.
-
-### 교사용 운영 절차 — HAFS AI RED TEAM 지정
-
-`board_group` 값은 세 가지입니다.
-
-| 값 | 표시 위치 |
-| --- | --- |
-| `protector` (기본값) | 생태 HAFS 보호단 |
-| `manipulator` | HAFS AI RED TEAM — 웹 페이지에서 설정할 수 없는 파라미터 값이 사용된 기록(화면 설명: "시스템의 경계를 탐색한 특별 기록") |
-| `hidden` | 어느 보드에도 표시하지 않음 |
-
-원칙
-- **기록 id 단위로 지정하지만, 효과는 학생 단위입니다.** 한 학생의 기록 하나라도 `manipulator`로 바꾸면 같은 기록판에서 그 학생의 `protector` 기록은 보호단에 더 이상 보이지 않습니다(행은 그대로 남습니다). 다시 보호단에 보이게 하려면 그 학생의 `manipulator` 기록을 모두 `protector` 또는 `hidden`으로 바꿉니다.
-- **기존 행은 절대 삭제하지 않습니다.** 보이지 않게 하려면 `DELETE` 대신 `hidden`으로 바꿉니다. 언제든 되돌릴 수 있습니다.
-- 판정은 자동이 아닙니다. 아래 1번 쿼리로 `parameter_snapshot`을 눈으로 확인한 뒤 결정합니다.
-- 모든 쿼리는 Supabase **SQL Editor**(postgres 역할)에서 실행합니다. 학생 키로는 이 열을 바꿀 수 없습니다.
-- 값을 바꾼 뒤 학생 화면에서 기록판 ↻ 버튼을 누르거나 페이지를 새로고침하면 반영됩니다. 학생이 다시 제출할 필요는 없습니다.
-- 보드마다 학생별 **최고 기록**만 보입니다. 어떤 학생의 기록을 `hidden`으로 숨기면, 그 학생의 다음으로 높은 같은 분류 기록이 있을 경우 그것이 올라옵니다. 그 기록도 확인하세요.
-
-**1) 최근 제출 목록 확인** — `parameter_snapshot`을 눈으로 확인하는 용도입니다.
-
-```sql
-select
-  id,
-  student_number,
-  student_name,
-  score,
-  submitted_at,
-  board_group,
-  parameter_snapshot
-from public.apex_leaderboard
-where challenge_id = 'apex-survival'
-  and simulation_version = 'apex-v1'
-  and seed = 260903
-order by submitted_at desc
-limit 100;
-```
-
-**2) 특정 기록을 HAFS AI RED TEAM으로 옮기기** — `id` 목록만 바꿔 씁니다.
-
-```sql
-update public.apex_leaderboard
-set board_group = 'manipulator'
-where id in (
-  '00000000-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000002'
-)
-returning id, student_number, student_name, score, board_group;
-```
-
-**3) 특정 기록을 다시 생태 HAFS 보호단으로 되돌리기**
-
-```sql
-update public.apex_leaderboard
-set board_group = 'protector'
-where id in (
-  '00000000-0000-0000-0000-000000000001'
-)
-returning id, student_number, student_name, score, board_group;
-```
-
-**4) 특정 기록을 두 보드 모두에서 숨기기** — 행은 지우지 않습니다.
-
-```sql
-update public.apex_leaderboard
-set board_group = 'hidden'
-where id in (
-  '00000000-0000-0000-0000-000000000001'
-)
-returning id, student_number, student_name, score, board_group;
-```
-
-**5) 현재 분류별 행 수**
-
-```sql
-select board_group, count(*) as row_count
-from public.apex_leaderboard
-group by board_group
-order by board_group;
-```
-
-`update`에는 반드시 `where id in (...)`을 붙이세요. `where` 없이 실행하면 모든 기록의 분류가 한꺼번에 바뀝니다. `returning` 결과에 나온 행 수가 지정한 id 수와 같은지 확인하면 오타로 빠진 id를 알아챌 수 있습니다.
 
 ## 대시보드와 모달
 
-Forest 카드 내부에 STEP·식생량(성장 단계 합)·활성 소비자·최근 5 step 순변화를 표시합니다. 오른쪽은 현재 모드/점수 → 생태 피라미드 → 두 부문 Top 3 → 조작 순서입니다. 전체 격자는 논리 크기와 종 수를 바꾸지 않고 화면 높이에 맞춰 표시하며, 좁은 화면에서는 페이지가 정상 스크롤됩니다.
+Forest 카드 내부에 STEP·식생량(성장 단계 합)·활성 소비자·최근 5 step 순변화를 표시합니다. 오른쪽은 현재 모드/점수 → 생태 피라미드 → 전국/HAFS Top 3 → 조작 순서입니다. 전체 격자는 논리 크기와 종 수를 바꾸지 않고 화면 높이에 맞춰 표시하며, 좁은 화면에서는 페이지가 정상 스크롤됩니다.
 
-- 전체 순위 보기: 두 부문의 기존 정렬 결과를 최대 10명씩 표시합니다. 조회와 제출은 분리돼 있으며 제출은 종료된 도전의 원본 기록을 사용합니다.
+- 전체 순위 보기: 전국/HAFS를 함께 표시하며 각 영역은 Top 10과 경계 동점자 전체를 유지합니다. 조회와 제출은 분리돼 있으며 제출은 종료된 도전의 원본 기록을 사용합니다.
 - Parameters: 현재 다음 도전 설정을 복사해 임시 편집합니다. 취소·닫기·Escape는 버리고, 설정 적용만 전체 검증 후 한 번 반영합니다. 변경이 없으면 초기화하지 않습니다. 배경 클릭으로는 닫히지 않습니다.
 - Parameters 왼쪽에는 4차 → 3차 → 늑대 → 토끼 → 식생 순으로 초기 개체수·밀도 슬라이더를 모았습니다. 카드 폭은 영양 단계만 표현하며 값에 비례하지 않습니다. 비활성 단계도 표시하고 입력만 잠급니다. 제목 버튼을 선택하면 오른쪽에 해당 생물군의 이동·먹이/사냥·번식·사망 설정을 표시합니다. 공통 환경에는 격자·먹이사슬 단계·전달 효율·seed·토로이드 경계를 모았습니다.
 - 데스크톱은 2-pane과 오른쪽 독립 스크롤, 760px 이하에서는 초기 구성 아래에 상세 설정을 배치합니다. 하단 복원·취소·적용 버튼은 항상 접근할 수 있습니다. 초기값과 기본 설정 복원도 임시 편집에만 반영되며, 섹션을 전환해도 값과 입력 요소를 유지합니다.
 - 진행 중 및 일시정지된 Apex 설정은 잠깁니다. 종료 후 적용은 다음 설계만 바꾸며 점수, PB, 붕괴 정보, 제출 snapshot, 최종 숲·그래프를 보존합니다.
 - native dialog를 한 번만 생성하고, 포커스 순환/복귀 및 페이지 스크롤 잠금/복원을 공유합니다. tick에서는 입력을 다시 만들거나 랭킹을 다시 조회하지 않습니다.
 
-브라우저 fixture는 `tests/browser.html`이며 production build에 포함되지 않습니다. Vite를 별도 포트 5174에서 `VITE_SUPABASE_URL=http://127.0.0.1:5174/fixture`, `VITE_SUPABASE_ANON_KEY=fixture`로 실행한 뒤 `/predator-prey-simulation-2/tests/browser.html`에 접속합니다. 이 페이지는 메모리 저장소와 가짜 조회 응답을 사용하고 모든 제출을 차단합니다. `?records=0`, `2`, `3`, `10`, `13`, `error`, `loading`으로 목록 상태를 검사할 수 있습니다.
+브라우저 fixture는 `tests/browser.html`이며 production build에 포함되지 않습니다. 합성 데이터·메모리 저장소로만 검사합니다. 서버 실행, 화면 크기, 브라우저 검사와 결과 경로는 [runbook](supabase/LEADERBOARD_V2_RUNBOOK.md#로컬-검증-재현)을 따릅니다.
 
 ## 교육적 가정과 한계
 
@@ -258,4 +131,4 @@ npx tsc --noEmit
 npm run build
 ```
 
-테스트에는 leaderboard 제출 해시의 key 순서 독립성, 학번·이름 정규화와 검증, 학번 기준 동일인 판정(이름 표기가 달라도 한 학생, 이름이 같아도 학번이 다르면 다른 학생), 학생별 최고 기록 집계와 상위 10명 + 동점자 표시, 조회가 공개 view만 향하고 비공개 열을 요청하지 않는지, 서버가 여분의 열을 보내도 entry에 새어 들어오지 않는지, 제출이 `return=minimal`로 원본 테이블에 가는지, 환경 변수 미설정 시 비활성화 동작과 함께 기본 2차 소비자 deterministic regression, 3·4차 활성화, 상위 포식자의 실제 섭식, 효율 적용, 종 제거 고정, Reset, intervention, 격자 불변식, Apex score 경계, 동시 붕괴, 설정 잠금, 속도 독립성, 동일 seed Retry, Personal Best 갱신 규칙, 10,000 step 이력 제한 검사가 포함됩니다.
+테스트는 실제 PostgreSQL WASM 엔진에서 학교 resolver·마스킹·보존·rollback·anon/authenticated 권한을 실행하고, transport의 공개 계약·pagination·비동기 scope 상태·storage와 기존 모델/seed/도전/개인 최고 기록/파라미터/modal 회귀를 확인합니다. 운영 Supabase/PostgREST와 다중 연결 동시성은 별도 검증 대상입니다.

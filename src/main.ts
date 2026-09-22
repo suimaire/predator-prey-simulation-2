@@ -18,16 +18,15 @@ import {
   createLeaderboardTransport,
   createSubmission,
   participantStorageKey,
-  participantKey,
-  rankBoards,
+  loadParticipant,
   validateParticipant,
   BOARD_GROUPS,
   type BoardGroup,
-  type LeaderboardEntry,
   type LeaderboardTransport,
   type Participant,
 } from './leaderboard.ts';
 import { BOARD_TAB_MARKUP, boardMarkup } from './leaderboardView.ts';
+import { LeaderboardStore, leaderboardStateText } from './leaderboardState.ts';
 import {
   DEFAULT_PARAMETERS,
   ForestSimulation,
@@ -219,7 +218,14 @@ app.innerHTML = `
         <p class="pyramid-note" id="pyramid-note"></p>
         <details class="pyramid-help"><summary>척도와 단위 안내</summary><p>소비자는 실제 개체수이며 식생은 모든 칸의 성장 단계 합입니다. 막대 폭은 제곱근 척도와 최소 가시 폭을 적용합니다. 에너지 흐름은 최근 20 step의 실제 섭식 전달량을 경과 step으로 나눈 모델 에너지/step이며 실제 Joule이 아닙니다.</p></details><p class="chain-summary" id="chain-summary"></p>
       </section>
-              <section class="leaderboard-summary" aria-labelledby="ranking-summary-title"><div class="card-heading"><h2 id="ranking-summary-title">HAFS 랭킹 <small>Top 3</small></h2></div><p id="leaderboard-summary-status" class="leaderboard-status" aria-live="polite"></p><div class="ranking-mini-grid">${BOARD_GROUPS.map((board) => `<section><button type="button" class="ranking-board-button" data-open-board="${board}">${BOARD_TAB_MARKUP[board]}</button><div id="leaderboard-summary-${board}"></div></section>`).join('')}</div><button type="button" id="open-leaderboard" aria-haspopup="dialog" aria-controls="leaderboard-dialog">전체 순위 보기</button></section>
+              <section class="leaderboard-summary" aria-labelledby="ranking-summary-title">
+                <div class="card-heading"><h2 id="ranking-summary-title">공개 랭킹 <small>Top 3</small></h2></div>
+                <div class="leaderboard-tabs" role="tablist" aria-label="요약 기록판 선택">
+                  ${BOARD_GROUPS.map(board => `<button type="button" role="tab" id="summary-tab-${board}" aria-controls="summary-board-${board}" aria-selected="${board === 'protector'}" tabindex="${board === 'protector' ? 0 : -1}">${BOARD_TAB_MARKUP[board]}</button>`).join('')}
+                </div>
+                ${BOARD_GROUPS.map(board => `<div id="summary-board-${board}" role="tabpanel" aria-labelledby="summary-tab-${board}" ${board === 'protector' ? '' : 'hidden'}><div class="ranking-mini-grid">${['national', 'hafs'].map(scope => `<section aria-labelledby="summary-heading-${board}-${scope}"><h3 id="summary-heading-${board}-${scope}">${scope === 'national' ? '전국' : 'HAFS'} TOP 3</h3><p class="leaderboard-status" id="summary-status-${board}-${scope}" aria-live="polite"></p><div id="summary-list-${board}-${scope}"></div></section>`).join('')}</div></div>`).join('')}
+                <button type="button" id="open-leaderboard" aria-haspopup="dialog" aria-controls="leaderboard-dialog">전체 순위 보기</button>
+              </section>
               <nav class="sim-toolbar" aria-label="시뮬레이션 조작">
                 <div class="run-controls"><button class="run-button" id="run-button" type="button" aria-label="시뮬레이션 실행"><span>▶</span><b>Run</b></button><button id="pause-button" type="button" aria-label="시뮬레이션 일시정지" disabled><span>Ⅱ</span><b>Pause</b></button><button id="step-button" type="button" aria-label="한 step 실행"><span>↦</span><b>Step</b></button><button id="reset-button" type="button" aria-label="시뮬레이션 Reset"><span>↺</span><b>Reset</b></button></div>
                 <div class="toolbar-middle"><label for="speed-control"><span>속도</span><input id="speed-control" type="range" min="1" max="40" value="8" /><output id="speed-output">8 step/s</output></label></div>
@@ -293,7 +299,7 @@ app.innerHTML = `
                   </div>
                 </div>
               <div class="dialog-footer"><p id="parameter-error" role="alert"></p><div><button type="button" class="restore-button" id="restore-defaults">기본 설정으로 복원</button><button type="button" id="cancel-parameters">취소</button><button type="button" id="apply-parameters" class="challenge-primary" disabled>설정 적용</button></div></div></dialog>
-        <dialog id="leaderboard-dialog" class="dashboard-dialog leaderboard-dialog" aria-labelledby="leaderboard-title"><div class="dialog-heading"><h2 id="leaderboard-title">HAFS 랭킹 · Top 10</h2><button type="button" id="close-leaderboard" aria-label="랭킹 닫기">×</button></div><section class="leaderboard-panel" id="leaderboard-panel" aria-label="Apex Survival 기록판">
+        <dialog id="leaderboard-dialog" class="dashboard-dialog leaderboard-dialog" aria-labelledby="leaderboard-title"><div class="dialog-heading"><h2 id="leaderboard-title">전국 · HAFS 랭킹</h2><button type="button" id="close-leaderboard" aria-label="랭킹 닫기">×</button></div><section class="leaderboard-panel" id="leaderboard-panel" aria-label="Apex Survival 기록판">
           <div class="leaderboard-heading">
             <div class="leaderboard-tabs" role="tablist" aria-label="기록판 선택">
               <button type="button" role="tab" id="leaderboard-tab-protector" data-board="protector" aria-controls="leaderboard-board-protector" aria-selected="true">${BOARD_TAB_MARKUP.protector}</button>
@@ -302,13 +308,14 @@ app.innerHTML = `
             <button type="button" id="leaderboard-refresh" aria-label="기록판 새로고침" title="새로고침">↻</button>
           </div>
           <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
-          <div class="dialog-body ranking-body" tabindex="0" aria-label="상세 랭킹 목록"><div class="leaderboard-board" role="tabpanel" id="leaderboard-board-protector" aria-labelledby="leaderboard-tab-protector"></div>
-          <div class="leaderboard-board" role="tabpanel" id="leaderboard-board-manipulator" aria-labelledby="leaderboard-tab-manipulator" hidden></div>
+          <p class="leaderboard-ranking-note">참가자별 대표 최고 기록 · Top 10과 경계 동점자 전체 · 점수 단위: step</p>
+          <div class="dialog-body ranking-body" tabindex="0" aria-label="상세 랭킹 목록">${BOARD_GROUPS.map(board => `<div class="leaderboard-board" role="tabpanel" id="leaderboard-board-${board}" aria-labelledby="leaderboard-tab-${board}" ${board === 'protector' ? '' : 'hidden'}><div class="ranking-scope-grid">${['national', 'hafs'].map(scope => `<section aria-labelledby="ranking-heading-${board}-${scope}"><h3 id="ranking-heading-${board}-${scope}">${scope === 'national' ? '전국 순위' : 'HAFS 랭킹'}</h3><p class="leaderboard-status" id="ranking-status-${board}-${scope}" aria-live="polite"></p><div id="ranking-list-${board}-${scope}"></div></section>`).join('')}</div></div>`).join('')}
           </div><form class="leaderboard-form" id="leaderboard-form" hidden>
+            <label for="leaderboard-school"><span>학교</span><input id="leaderboard-school" data-max-codepoints="80" required placeholder="학교명을 입력해 주세요" autocomplete="off" aria-describedby="leaderboard-school-hint" /><small id="leaderboard-school-hint">최대 80자</small></label>
             <label for="leaderboard-student-number"><span>학번</span><input id="leaderboard-student-number" maxlength="24" placeholder="예: 10935" autocomplete="off" /></label>
             <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 박창현" autocomplete="off" /></label>
             <button type="submit" class="challenge-primary" id="leaderboard-submit">이 기록 제출하기</button>
-            <p class="leaderboard-privacy">입력한 학번과 이름은 수업용 기록판에 공개되고 선생님이 관리하는 서버에 저장됩니다. 같은 학번으로 다시 제출하면 최고 기록 하나만 남습니다. 실명을 남기고 싶지 않다면 선생님과 약속한 표기를 사용하세요.</p>
+            <p class="leaderboard-privacy">학교명, 일부 가림 처리된 이름, 점수가 공개 기록판에 표시됩니다. 학번과 전체 이름은 참가자 구분 및 기록 관리를 위해 서버에 저장되지만 공개 기록판에는 표시되지 않습니다. 같은 학교의 같은 학번은 동일 참가자로 처리됩니다.</p>
           </form>
         </section></dialog>
     <dialog id="removal-dialog" aria-labelledby="dialog-title"><form method="dialog"><span class="dialog-icon">↯</span><h2 id="dialog-title">종을 제거할까요?</h2><p id="dialog-copy"></p><div><button value="cancel">취소</button><button value="confirm" class="confirm-removal" id="confirm-removal">제거</button></div></form></dialog>
@@ -367,6 +374,7 @@ const leaderboardTabs: Readonly<Record<BoardGroup, HTMLButtonElement>> = {
 };
 const leaderboardStatus = element<HTMLParagraphElement>('#leaderboard-status');
 const leaderboardForm = element<HTMLFormElement>('#leaderboard-form');
+const leaderboardSchoolInput = element<HTMLInputElement>('#leaderboard-school');
 const leaderboardNumberInput = element<HTMLInputElement>('#leaderboard-student-number');
 const leaderboardNameInput = element<HTMLInputElement>('#leaderboard-name');
 const leaderboardSubmitButton = element<HTMLButtonElement>('#leaderboard-submit');
@@ -389,16 +397,11 @@ const leaderboardTransport: LeaderboardTransport | null = createLeaderboardTrans
   table: import.meta.env.VITE_LEADERBOARD_TABLE,
   publicView: import.meta.env.VITE_LEADERBOARD_PUBLIC_VIEW,
 });
-type LeaderboardStatus = 'disabled' | 'idle' | 'loading' | 'ready' | 'error';
-let leaderboardStatusPhase: LeaderboardStatus = leaderboardTransport ? 'idle' : 'disabled';
-let leaderboardEntries: readonly LeaderboardEntry[] = [];
-let rankedLeaderboard = rankBoards(leaderboardEntries);
+const leaderboardStore = new LeaderboardStore(leaderboardTransport);
 let leaderboardMessage = '';
 let leaderboardSubmitting = false;
-let leaderboardRequestId = 0;
 let lastFinishedRecord: ApexSurvivalRecord | null = null;
 let hasSubmittedFinishedRecord = false;
-let highlightedParticipant: string | null = null;
 let leaderboardSignature = '';
 // 기본 표시는 보호단입니다. 기억해 두지 않으므로 페이지를 다시 열면 늘 보호단부터 보입니다.
 let activeLeaderboardBoard: BoardGroup = 'protector';
@@ -579,17 +582,7 @@ function renderChallengePanel(): void {
 }
 
 function readStoredParticipant(): Participant | null {
-  try {
-    const serialized = window.localStorage.getItem(participantStorageKey());
-    if (!serialized) return null;
-    const parsed: unknown = JSON.parse(serialized);
-    if (!parsed || typeof parsed !== 'object') return null;
-    const candidate = parsed as Partial<Participant>;
-    if (typeof candidate.studentNumber !== 'string' || typeof candidate.studentName !== 'string') return null;
-    return { studentNumber: candidate.studentNumber, studentName: candidate.studentName };
-  } catch {
-    return null;
-  }
+  try { return loadParticipant(window.localStorage); } catch { return null; }
 }
 
 function rememberParticipant(participant: Participant): void {
@@ -600,98 +593,66 @@ function rememberParticipant(participant: Participant): void {
   }
 }
 
-function leaderboardStatusText(entryCount: number): string {
-  if (leaderboardStatusPhase === 'disabled') return '이 배포에는 중앙 기록판 서버가 연결되어 있지 않습니다. Personal Best는 이 브라우저에 계속 저장됩니다.';
-  if (leaderboardStatusPhase === 'loading') return '기록판을 불러오는 중입니다…';
-  if (leaderboardStatusPhase === 'error') return leaderboardMessage || '기록판을 불러오지 못했습니다.';
-  if (leaderboardStatusPhase === 'idle') return '기록판을 준비하고 있습니다…';
-  // 기록이 없으면 보드 본문이 빈 상태 문구를 대신 보여 주므로 상태 줄은 비워 둡니다.
-  if (entryCount === 0) return '';
-  return `학생마다 최고 기록 1개씩, 상위 ${entryCount}명을 보여 줍니다.`;
-}
-
 function renderLeaderboardPanel(): void {
-  const boards = rankedLeaderboard;
-  const signature = JSON.stringify([
-    leaderboardStatusPhase,
-    leaderboardMessage,
-    highlightedParticipant,
-    activeLeaderboardBoard,
-    BOARD_GROUPS.map((board) => boards[board]),
-  ]);
+  const signature = JSON.stringify([leaderboardStore.states, leaderboardMessage, activeLeaderboardBoard]);
   if (signature !== leaderboardSignature) {
     leaderboardSignature = signature;
     for (const board of BOARD_GROUPS) {
       const isActive = board === activeLeaderboardBoard;
-      leaderboardTabs[board].setAttribute('aria-selected', String(isActive));
-      leaderboardTabs[board].tabIndex = isActive ? 0 : -1;
+      for (const tab of [leaderboardTabs[board], element(`#summary-tab-${board}`)]) {
+        tab.setAttribute('aria-selected', String(isActive));
+        tab.tabIndex = isActive ? 0 : -1;
+      }
       leaderboardBoards[board].hidden = !isActive;
-      leaderboardBoards[board].innerHTML = boardMarkup(board, boards[board], {
-        limit: 10,
-        highlightedParticipant,
-        showEmptyState: leaderboardStatusPhase === 'ready',
-      });
-      element(`#leaderboard-summary-${board}`).innerHTML = boardMarkup(board, boards[board], {
-        limit: 3, compact: true, highlightedParticipant, showEmptyState: leaderboardStatusPhase === 'ready',
-      });
+      element(`#summary-board-${board}`).hidden = !isActive;
+      for (const scope of ['national', 'hafs'] as const) {
+        const state = leaderboardStore.states[scope][board];
+        for (const surface of ['ranking', 'summary'] as const) {
+          const status = element(`#${surface}-status-${board}-${scope}`);
+          const message = leaderboardStateText(state);
+          if (status.textContent !== message) status.textContent = message;
+          status.dataset.tone = state.phase === 'error' ? 'error' : 'normal';
+          const list = element(`#${surface}-list-${board}-${scope}`);
+          const markup = boardMarkup(board, state.entries, { compact: surface === 'summary', showEmptyState: state.phase === 'ready' });
+          if (list.innerHTML !== markup) list.innerHTML = markup;
+        }
+      }
     }
-    leaderboardStatus.textContent = leaderboardStatusText(Math.min(10, boards[activeLeaderboardBoard].length));
-    element('#leaderboard-summary-status').textContent = leaderboardStatusPhase === 'ready' ? '' : leaderboardStatusText(0);
-    leaderboardStatus.dataset.tone = leaderboardStatusPhase === 'error' ? 'error' : 'normal';
+    if (leaderboardStatus.textContent !== leaderboardMessage) leaderboardStatus.textContent = leaderboardMessage;
   }
-
   const phase = apexSession.getState().phase;
   const canSubmit = appMode === 'apex' && Boolean(leaderboardTransport) && phase === 'over' && lastFinishedRecord !== null && !hasSubmittedFinishedRecord;
   leaderboardForm.hidden = !canSubmit;
   leaderboardSubmitButton.disabled = leaderboardSubmitting;
   leaderboardSubmitButton.textContent = leaderboardSubmitting ? '제출 중…' : '이 기록 제출하기';
-  leaderboardRefreshButton.disabled = !leaderboardTransport || leaderboardStatusPhase === 'loading';
+  leaderboardRefreshButton.disabled = !leaderboardTransport;
 }
 
 async function refreshLeaderboard(): Promise<void> {
-  if (!leaderboardTransport) return;
-  const requestId = leaderboardRequestId + 1;
-  leaderboardRequestId = requestId;
-  leaderboardStatusPhase = 'loading';
-  leaderboardMessage = '';
-  renderLeaderboardPanel();
-  try {
-    const entries = await leaderboardTransport.list();
-    if (requestId !== leaderboardRequestId) return;
-    leaderboardEntries = entries;
-    rankedLeaderboard = rankBoards(leaderboardEntries);
-    leaderboardStatusPhase = 'ready';
-  } catch (error) {
-    if (requestId !== leaderboardRequestId) return;
-    leaderboardStatusPhase = 'error';
-    leaderboardMessage = error instanceof Error ? error.message : '기록판을 불러오지 못했습니다.';
-  }
-  renderLeaderboardPanel();
+  await leaderboardStore.refresh(renderLeaderboardPanel);
 }
 
 async function submitFinishedRecord(): Promise<void> {
   const record = lastFinishedRecord;
   if (!leaderboardTransport || !record || leaderboardSubmitting || hasSubmittedFinishedRecord) return;
-  const validation = validateParticipant({ studentNumber: leaderboardNumberInput.value, studentName: leaderboardNameInput.value });
+  const validation = validateParticipant({ schoolName: leaderboardSchoolInput.value, studentNumber: leaderboardNumberInput.value, studentName: leaderboardNameInput.value });
   if (!validation.ok) {
-    leaderboardStatusPhase = 'error';
     leaderboardMessage = validation.message;
     renderLeaderboardPanel();
     return;
   }
   leaderboardSubmitting = true;
+  leaderboardMessage = '';
   renderLeaderboardPanel();
   try {
     const submission = await createSubmission(record, validation.participant);
     await leaderboardTransport.submit(submission);
     hasSubmittedFinishedRecord = true;
-    highlightedParticipant = participantKey(validation.participant);
     rememberParticipant(validation.participant);
     leaderboardSubmitting = false;
     await refreshLeaderboard();
-    if (leaderboardStatusPhase === 'ready') leaderboardMessage = '';
+    leaderboardMessage = '기록을 제출했습니다.';
   } catch (error) {
-    leaderboardStatusPhase = 'error';
     leaderboardMessage = error instanceof Error ? error.message : '기록을 제출하지 못했습니다.';
   } finally {
     leaderboardSubmitting = false;
@@ -997,7 +958,6 @@ function finishApexChallenge(): void {
   const record = createApexRecord(apexSession.getState());
   lastFinishedRecord = record;
   hasSubmittedFinishedRecord = false;
-  highlightedParticipant = null;
   try {
     const result = saveApexPersonalBest(window.localStorage, record);
     personalBest = result.best;
@@ -1068,7 +1028,6 @@ function switchMode(nextMode: AppMode): void {
   apexSession.returnToSetup();
   challengeMessage = '';
   clearFinishedRecord();
-  if (nextMode === 'apex' && leaderboardStatusPhase === 'idle') void refreshLeaderboard();
   if (nextMode === 'apex') {
     if (!hasApexDesign) {
       apexDesignParameters = apexParameters(parameters);
@@ -1205,29 +1164,36 @@ function openLeaderboard(opener: HTMLElement, board: BoardGroup = activeLeaderbo
 }
 element('#open-leaderboard').addEventListener('click', (event) => openLeaderboard(event.currentTarget as HTMLElement));
 element('#close-leaderboard').addEventListener('click', () => leaderboardDialog.close());
-document.querySelectorAll<HTMLElement>('[data-open-board]').forEach((button) => button.addEventListener('click', () => openLeaderboard(button, button.dataset.openBoard as BoardGroup)));
 challengePanel.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLElement>('[data-open-ranking]');
   if (button) openLeaderboard(button);
 });
 leaderboardRefreshButton.addEventListener('click', () => { void refreshLeaderboard(); });
-function selectLeaderboardBoard(board: BoardGroup, focus = false): void {
+function selectLeaderboardBoard(board: BoardGroup): void {
   activeLeaderboardBoard = board;
   renderLeaderboardPanel();
-  if (focus) leaderboardTabs[board].focus();
 }
 for (const board of BOARD_GROUPS) {
-  leaderboardTabs[board].addEventListener('click', () => selectLeaderboardBoard(board));
-  leaderboardTabs[board].addEventListener('keydown', (event) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return;
-    event.preventDefault();
-    const index = BOARD_GROUPS.indexOf(board);
-    const next = event.key === 'Home' ? 0
-      : event.key === 'End' ? BOARD_GROUPS.length - 1
+  for (const surface of ['detail', 'summary'] as const) {
+    const tab = surface === 'detail' ? leaderboardTabs[board] : element<HTMLButtonElement>(`#summary-tab-${board}`);
+    tab.addEventListener('click', () => selectLeaderboardBoard(board));
+    tab.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return;
+      event.preventDefault();
+      const index = BOARD_GROUPS.indexOf(board);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? BOARD_GROUPS.length - 1
         : (index + (event.key === 'ArrowRight' ? 1 : -1) + BOARD_GROUPS.length) % BOARD_GROUPS.length;
-    selectLeaderboardBoard(BOARD_GROUPS[next]!, true);
-  });
+      const selected = BOARD_GROUPS[next]!;
+      selectLeaderboardBoard(selected);
+      (surface === 'detail' ? leaderboardTabs[selected] : element(`#summary-tab-${selected}`)).focus();
+    });
+  }
 }
+// Native maxlength counts UTF-16 units. Validate code points to match PostgreSQL's 80-character limit.
+leaderboardSchoolInput.addEventListener('input', () => {
+  const school = leaderboardSchoolInput.value.replace(/\s+/gu, ' ').trim();
+  leaderboardSchoolInput.setCustomValidity([...school].length > 80 ? '학교명은 80자 이내로 입력해 주세요.' : '');
+});
 leaderboardForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void submitFinishedRecord();
@@ -1335,6 +1301,7 @@ function animationLoop(time: number): void {
 
 const storedParticipant = readStoredParticipant();
 if (storedParticipant) {
+  leaderboardSchoolInput.value = storedParticipant.schoolName;
   leaderboardNumberInput.value = storedParticipant.studentNumber;
   leaderboardNameInput.value = storedParticipant.studentName;
 }
