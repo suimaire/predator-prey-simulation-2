@@ -1,0 +1,61 @@
+{
+  "sourceCommit": "19d0bac",
+  "cases": [
+    {
+      "overrides": {},
+      "hash": "d6df249dabe1f0c77cfb80992f6ac20b924e2ce3ea835bf548d1fae33ff2eeec"
+    },
+    {
+      "overrides": {
+        "foodChainDepth": 3,
+        "seed": "BASELINE-3"
+      },
+      "hash": "b647aedfde8be14c556d054dee15c5c6e8422bf727298609db2433f2df14a437"
+    },
+    {
+      "overrides": {
+        "foodChainDepth": 4,
+        "seed": "BASELINE-4"
+      },
+      "hash": "08d5b64756b92ba517c7193b15aba060f3e0c3857887631cb6ef1a214f08642d"
+    },
+    {
+      "overrides": {
+        "foodChainDepth": 4,
+        "gridColumns": 48,
+        "transferEfficiency": 0.3,
+        "seed": "BASELINE-DENSE"
+      },
+      "hash": "44e2d556836c9d48b970924299e074abc5ac6762ea680b91df357915f6f2d083"
+    }
+  ],
+  "apexCases": [
+    {
+      "overrides": {},
+      "hash": "56697a2be3365b4857aca8aa43c9fa928cf74a41effb66d17eaa344044b24da4",
+      "score": 43,
+      "collapseStep": 44
+    },
+    {
+      "overrides": {
+        "initialRabbits": 120,
+        "initialWolves": 30,
+        "initialTertiary": 10,
+        "initialQuaternary": 4,
+        "transferEfficiency": 0.2
+      },
+      "hash": "6ee8c2ffff78d9b35580d97498471300f966263b283c0e54734d6b5d044644f2",
+      "score": 46,
+      "collapseStep": 47
+    },
+    {
+      "overrides": {
+        "gridColumns": 48,
+        "quaternaryMaxAge": 10
+      },
+      "hash": "4861faf04c30e09472df4586393ccbf2e9946af4352b529e81fa8b6ee16c7c5b",
+      "score": 9,
+      "collapseStep": 10
+    }
+  ]
+}

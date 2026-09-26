@@ -2,7 +2,12 @@ import type { PopulationMetric, SimulationSnapshot, Species } from './model.ts';
 
 // Keep the strip's existing five-step comparison, including its startup window.
 export function populationComparison(history: readonly PopulationMetric[]): PopulationMetric | undefined {
-  return history[Math.max(0, history.length - 6)] ?? history[0];
+  const target = (history.at(-1)?.step ?? 0) - 5;
+  // Several intervention samples can share a step; comparison remains five logical steps.
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    if (history[index].step <= target) return history[index];
+  }
+  return history[0];
 }
 
 export function populationChange(current: number, species: Species, comparison: PopulationMetric | undefined) {

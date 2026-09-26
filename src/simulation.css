@@ -292,6 +292,26 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 .mini-population.is-removal-feedback { opacity: 1; filter: none; background: #fff7f1; }
 
 .pyramid-card, .removal-card { padding: 16px; }
+.intervention-card { min-width: 0; padding: 12px; border: 1px solid #d2ddd3; border-radius: 12px; background: #f7faf6; }
+.intervention-card h2 { margin: 0; color: #1d402c; font-size: 14px; }
+.intervention-card p { margin: 6px 0 10px; color: #647169; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.intervention-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.intervention-actions button { flex: 1 1 110px; min-width: 0; min-height: 42px; padding: 8px; border: 1px solid #c8d6ca; border-radius: 8px; color: #215d3b; background: #fff; font-size: 12px; font-weight: 700; }
+.intervention-secondary { margin-top: 6px; }
+.intervention-secondary button { font-size: 11px; color: #596b5f; background: transparent; }
+.intervention-card #recent-intervention { margin: 10px 0 0; font-size: 10px; }
+.intervention-dialog { width: min(430px, calc(100% - 24px)); max-width: calc(100% - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; }
+.intervention-dialog form { padding: 20px; gap: 10px; justify-items: stretch; text-align: left; }
+.intervention-dialog h2 { margin: 0; }
+.intervention-field { display: grid; min-width: 0; gap: 7px; color: #425d4c; font-size: 12px; font-weight: 700; }
+.intervention-field select, .intervention-field input { width: 100%; min-width: 0; min-height: 42px; padding: 8px; border: 1px solid #c8d6ca; border-radius: 8px; background: #fff; color: #203b2b; }
+.amount-control { display: grid; grid-template-columns: 42px minmax(0,1fr) 42px; gap: 8px; }
+.amount-control input { text-align: center; }
+.intervention-dialog #intervention-warning:not(:empty) { padding: 8px; border-radius: 8px; background: #fff4cf; color: #71551f; }
+.intervention-dialog #intervention-error { color: #8b402b; }
+.intervention-dialog .challenge-primary { color: #fff; background: #215d3b; }
+.intervention-dialog .confirm-removal { background: #a65431; }
+.support-grid:has(#challenge-description[hidden]) { display: none; }
 .pyramid-card .card-heading h2, .removal-card .card-heading h2, .graph-card .card-heading h2 { font-size: 16px; }
 .live-pill { display: flex; align-items: center; gap: 5px; padding: 5px 7px; border-radius: 99px; color: #2c6d48; background: #e7f1e8; font-size: 8px; font-weight: 800; }
 .live-pill i { width: 5px; height: 5px; border-radius: 50%; background: #3c9f67; }

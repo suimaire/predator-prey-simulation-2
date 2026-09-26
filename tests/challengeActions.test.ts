@@ -36,7 +36,7 @@ function completedUi() {
     hasSubmittedFinishedRecord: false, challengeMessage: '', challengeSignature: '', bestEmphasisStartedAt: 0,
     challengePanel: { classList: { remove() {} } }, inspector: {},
     parametersDialog: { open: false, close() { closes++; context.parametersDialog.open = false; run('clearParameterDraft()'); } },
-    leaderboardDialog: { open: false }, removalDialog: { open: false },
+    leaderboardDialog: { open: false }, interventionDialog: { open: false },
     dialogs: { open(_dialog: unknown, opener: unknown) { opens++; context.opener = opener; context.parametersDialog.open = true; return true; } },
     parameterToggle: element('#toggle-parameters'), applyParametersButton: element('#apply-parameters'),
     parameterDefinitions: [], updateParameterNavigation() {}, transferControl: {}, toroidalToggle: {}, depthSelect: {}, seedInput: {},

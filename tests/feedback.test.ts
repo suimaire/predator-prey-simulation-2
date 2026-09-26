@@ -48,9 +48,9 @@ test('removal copies exact current count and positions without changing the mode
   assert.equal(simulation.getSnapshot().wolves.length, 0);
   assert.equal(simulation.getSnapshot().step, 5);
   assert.deepEqual(simulation.getSnapshot().stats, stats);
-  assert.equal(simulation.getHistory().length, historyLength);
+  assert.equal(simulation.getHistory().length, historyLength + 1);
   assert.equal(simulation.getHistory().at(-1)!.wolves, 0);
-  assert.deepEqual(simulation.getInterventions(), [{ step: 5, species: 'wolf' }]);
+  assert.deepEqual(simulation.getInterventions(), [{ kind: 'remove', step: 5, species: 'wolf', amount: feedback.count, resultingCount: 0 }]);
   assert.deepEqual(populationChange(simulation.getSnapshot().rabbits.length, 'rabbit', populationComparison(simulation.getHistory())), rabbitChange);
   for (const reduced of [false, true]) {
     assert.equal(removalEmphasis(feedback, 1000, reduced), 1);
@@ -104,7 +104,7 @@ test('chart emphasis reuses exactly one existing marker and restores its normal 
       removalHighlights: [{ species: 'wolf', step: 1, emphasis }],
     });
     assert.deepEqual(strokes.filter((stroke) => stroke.color === SERIES_COLORS.wolf), [{ color: SERIES_COLORS.wolf, width: 1.5 + 3 * emphasis }]);
-    assert.deepEqual(labels.filter((label) => label.includes('제거')), ['t=1 늑대 제거']);
+    assert.deepEqual(labels.filter((label) => label.includes('제거')), ['늑대 제거']);
     assert.deepEqual(simulation.getHistory(), history);
   }
 });

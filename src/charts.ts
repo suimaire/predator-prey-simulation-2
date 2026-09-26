@@ -1,4 +1,5 @@
-import { SPECIES_LABELS, type FoodChainDepth, type Intervention, type PopulationMetric, type Species } from './model.ts';
+import { activeSpecies, type FoodChainDepth, type Intervention, type PopulationMetric, type Species } from './model.ts';
+import { groupInterventions, interventionLabel } from './interventions.ts';
 
 export type ChartSeries = 'forest' | Species;
 
@@ -13,6 +14,7 @@ export const SERIES_COLORS: Readonly<Record<ChartSeries, string>> = Object.freez
 interface ChartOptions {
   history: readonly PopulationMetric[];
   depth: FoodChainDepth;
+  runtimeSpecies?: readonly Species[];
   visibleSeries: ReadonlySet<ChartSeries>;
   interventions: readonly Intervention[];
   removalHighlights?: readonly { species: Species; step: number; emphasis: number }[];
@@ -86,9 +88,7 @@ export function drawPopulationChart(canvas: HTMLCanvasElement, options: ChartOpt
   if (!configured) return;
   const { ctx, geometry: g } = configured;
   const { history } = options;
-  const species: Species[] = ['rabbit', 'wolf'];
-  if (options.depth >= 3) species.push('tertiary');
-  if (options.depth >= 4) species.push('quaternary');
+  const species = options.runtimeSpecies ?? activeSpecies(options.depth);
   const visibleSpecies = species.filter((item) => options.visibleSeries.has(item));
   const maxPopulation = Math.max(20, ...history.flatMap((metric) => visibleSpecies.map((item) => populationValue(metric, item))));
   const roundedMaximum = Math.ceil(maxPopulation / 20) * 20;
@@ -106,7 +106,8 @@ export function drawPopulationChart(canvas: HTMLCanvasElement, options: ChartOpt
   }
 
   const sampling = Math.max(1, Math.ceil(history.length / 260));
-  const display = history.filter((_, index) => index % sampling === 0 || index === history.length - 1);
+  const eventSteps = new Set(options.interventions.map((event) => event.step));
+  const display = history.filter((metric, index) => index % sampling === 0 || index === history.length - 1 || eventSteps.has(metric.step));
   const firstStep = display[0]?.step ?? 0;
   const lastStep = display.at(-1)?.step ?? 0;
   const stepSpan = Math.max(1, lastStep - firstStep);
@@ -118,19 +119,24 @@ export function drawPopulationChart(canvas: HTMLCanvasElement, options: ChartOpt
   if (options.visibleSeries.has('forest')) drawLine(ctx, display, xForIndex, yForest, (metric) => metric.forestPercent, SERIES_COLORS.forest);
   for (const item of visibleSpecies) drawLine(ctx, display, xForIndex, yPopulation, (metric) => populationValue(metric, item), SERIES_COLORS[item]);
 
-  const visibleInterventions = options.interventions.filter((item) => item.step >= firstStep && item.step <= lastStep);
-  visibleInterventions.forEach((item, index) => {
-    const x = xForStep(item.step);
-    const emphasis = options.removalHighlights?.find((highlight) => highlight.species === item.species && highlight.step === item.step)?.emphasis ?? 0;
+  const visibleInterventions = groupInterventions(options.interventions, firstStep, lastStep);
+  canvas.title = visibleInterventions.map((group) => `Step ${group.step.toLocaleString('ko-KR')} · ${group.events.map(interventionLabel).join(' · ')}`).join('\n');
+  visibleInterventions.forEach((group) => {
+    const x = xForStep(group.step);
+    const color = SERIES_COLORS[group.events[0].species];
+    const emphasis = Math.max(0, ...group.events.filter((item) => item.kind === 'remove').map((item) => options.removalHighlights?.find((highlight) => highlight.species === item.species && highlight.step === item.step)?.emphasis ?? 0));
     ctx.save();
-    ctx.setLineDash([4, 4]); ctx.strokeStyle = SERIES_COLORS[item.species]; ctx.lineWidth = 1.5 + 3 * emphasis;
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = color; ctx.lineWidth = 1.5 + 3 * emphasis;
     ctx.beginPath(); ctx.moveTo(x, g.top); ctx.lineTo(x, g.top + g.plotHeight); ctx.stroke();
     ctx.setLineDash([]);
-    const label = `t=${item.step} ${SPECIES_LABELS[item.species]} 제거`;
-    ctx.translate(x + (index % 2 === 0 ? 5 : -5), g.top + 8 + (index % 3) * 12);
+    const labels = [`Step ${group.step.toLocaleString('ko-KR')}`, ...group.events.slice(0, 3).map(interventionLabel)];
+    if (group.events.length > 3) labels.push(`외 ${group.events.length - 3}건`);
+    const onRight = x < g.left + g.plotWidth / 2;
+    ctx.translate(x + (onRight ? 5 : -5), g.top + 8);
     ctx.rotate(-Math.PI / 2);
-    ctx.fillStyle = SERIES_COLORS[item.species]; ctx.font = '700 9px system-ui, sans-serif';
-    ctx.textAlign = 'right'; ctx.fillText(label, 0, 0);
+    ctx.fillStyle = color; ctx.font = '700 9px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    labels.forEach((label, index) => ctx.fillText(label, 0, index * (onRight ? 11 : -11), g.plotHeight - 16));
     ctx.restore();
   });
 

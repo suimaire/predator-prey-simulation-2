@@ -3,7 +3,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { readFileSync } from 'node:fs';
-import { DEFAULT_PARAMETERS, ForestSimulation } from '../src/model.ts';
+import { SPECIES_ORDER, SPECIES_LABELS as INTERVENTION_LABELS, DEFAULT_PARAMETERS, ForestSimulation } from '../src/model.ts';
 import { ParameterDraft } from '../src/parameterDraft.ts';
 import { BOARD_TAB_MARKUP } from '../src/leaderboardView.ts';
 import { APEX_CHALLENGE_CONFIG, apexParameters, challengeSettingsLocked } from '../src/challenge.ts';
@@ -46,7 +46,7 @@ function setup(mode: 'free' | 'apex' = 'free', phase = 'setup') {
   const panels = groups.map(group => { const control = element(`panel-${group}`); control.dataset.parameterPanel = group; return control; });
   let resets = 0;
   const context = vm.createContext({
-    DEFAULT_PARAMETERS, APEX_CHALLENGE_CONFIG, ParameterDraft, apexParameters, challengeSettingsLocked, element,
+    SPECIES_ORDER, SPECIES_LABELS: INTERVENTION_LABELS, DEFAULT_PARAMETERS, APEX_CHALLENGE_CONFIG, ParameterDraft, apexParameters, challengeSettingsLocked, element,
     app: { innerHTML: '' }, BOARD_GROUPS: [], BOARD_TAB_MARKUP, initialFreeParameters: { ...DEFAULT_PARAMETERS },
     parameters, simulation, appMode: mode, phase, running: false, parameterIntent: 'edit', parameterDraftError: '', challengeMessage: '',
     parameterDraft: new ParameterDraft(parameters), apexSession: { getState: () => ({ phase: context.phase }), returnToSetup() {} },
