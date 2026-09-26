@@ -237,9 +237,7 @@ app.innerHTML = `
               </section>
       <section class="pyramid-card ecological-pyramid--dashboard" aria-label="실시간 생태 피라미드">
         <div class="pyramid-toolbar"><h2>실시간 생태 피라미드</h2><div class="segmented-control" role="group" aria-label="피라미드 표현 방식"><button type="button" data-pyramid-mode="numbers" aria-pressed="true">개체수</button><button type="button" data-pyramid-mode="energy" aria-pressed="false">에너지 흐름</button></div></div>
-        <div class="pyramid" id="pyramid" aria-describedby="pyramid-note"></div>
-        <p class="pyramid-note" id="pyramid-note"></p>
-        <details class="pyramid-help"><summary>척도와 단위 안내</summary><p>소비자는 실제 개체수이며 식생은 모든 칸의 성장 단계 합입니다. 막대 폭은 제곱근 척도와 최소 가시 폭을 적용합니다. 에너지 흐름은 최근 20 step의 실제 섭식 전달량을 경과 step으로 나눈 모델 에너지/step이며 실제 Joule이 아닙니다.</p></details><p class="chain-summary" id="chain-summary"></p>
+        <div class="pyramid" id="pyramid"></div>
       </section>
               <section class="leaderboard-summary" aria-labelledby="ranking-summary-title">
                 <div class="card-heading"><h2 id="ranking-summary-title">공개 랭킹 <small>Top 3</small></h2></div>
@@ -862,6 +860,7 @@ function renderPyramid(snapshot: SimulationSnapshot): void {
   element('.pyramid-card').setAttribute('aria-label', title);
   element('.pyramid-toolbar [role=group]').setAttribute('aria-label', foodWeb ? '영양 구조 표현 방식' : '피라미드 표현 방식');
   pyramid.classList.toggle('food-web', foodWeb);
+  let pyramidNote: string;
   if (pyramidMode === 'numbers') {
     const levels = [
       { id: 'vegetation', label: '식생', value: metric?.forestAbundance ?? 0, unit: '성장 단계 합', color: '#2f7b4c' },
@@ -869,7 +868,7 @@ function renderPyramid(snapshot: SimulationSnapshot): void {
     ].reverse();
     const maximum = Math.max(...levels.map((level) => level.value), 1);
     pyramid.innerHTML = levels.map((level) => `<div class="pyramid-level" title="${level.label}: ${level.value.toLocaleString()} ${level.unit}"><div style="width:${pyramidWidth(level.value, maximum)}%;--level:${level.color}"><span>${level.label}</span><b>${level.value.toLocaleString()}</b><small>${level.unit}</small></div></div>`).join('');
-    element('#pyramid-note').textContent = '식생 = 성장 단계 합 · 막대 폭 = 제곱근 척도';
+    pyramidNote = '식생 = 성장 단계 합 · 막대 폭 = 제곱근 척도';
   } else {
     const flows = simulation.getEnergyFlow(20).filter(flow => flow.target !== 'fox').reverse();
     const maximum = Math.max(...flows.map((flow) => flow.rate), 1);
@@ -878,14 +877,22 @@ function renderPyramid(snapshot: SimulationSnapshot): void {
       const label = `${source} → ${SPECIES_LABELS[flow.target]}`;
       return `<div class="pyramid-level energy-level" title="최근 ${flow.window} step · ${label}: ${flow.rate.toFixed(1)} 모델 에너지/step"><div style="width:${pyramidWidth(flow.rate, maximum)}%;--level:${SERIES_COLORS[flow.target]}"><span>${label}</span><b>${flow.rate.toFixed(1)}</b><small>모델 에너지/step</small></div></div>`;
     }).join('');
-    element('#pyramid-note').textContent = '최근 20 step 실제 전달량 / 경과 step · 모델 에너지/step · 폭 = 제곱근 척도';
+    pyramidNote = '최근 20 step 실제 전달량 / 경과 step · 모델 에너지/step · 폭 = 제곱근 척도';
   }
   if (foodWeb) {
     pyramid.innerHTML = foodWebMarkup(snapshot, simulation.getFoxDiet(), simulation.getEnergyFlow(20), pyramidMode, pyramid.innerHTML);
-    element('#pyramid-note').textContent = '잡식종은 먹이에 따라 둘 이상의 영양 위치에 참여할 수 있습니다.';
+    element('.pyramid-card').querySelectorAll('.pyramid-note, .pyramid-help, .chain-summary').forEach(description => description.remove());
+    pyramid.removeAttribute('aria-describedby');
+  } else {
+    if (!document.querySelector('#pyramid-note')) {
+      pyramid.insertAdjacentHTML('afterend', `<p class="pyramid-note" id="pyramid-note"></p>
+        <details class="pyramid-help"><summary>척도와 단위 안내</summary><p>소비자는 실제 개체수이며 식생은 모든 칸의 성장 단계 합입니다. 막대 폭은 제곱근 척도와 최소 가시 폭을 적용합니다. 에너지 흐름은 최근 20 step의 실제 섭식 전달량을 경과 step으로 나눈 모델 에너지/step이며 실제 Joule이 아닙니다.</p></details><p class="chain-summary" id="chain-summary"></p>`);
+    }
+    pyramid.setAttribute('aria-describedby', 'pyramid-note');
+    element('#pyramid-note').textContent = pyramidNote;
+    const observedParameters = simulation.getParameters();
+    element('#chain-summary').textContent = `활성 영양 단계 ${simulation.getActiveSpecies().length + 1} · 전달 효율 ${Math.round(observedParameters.transferEfficiency * 100)}%`;
   }
-  const observedParameters = simulation.getParameters();
-  element('#chain-summary').textContent = `${foodWeb ? '먹이그물 · 잡식종 포함' : `활성 영양 단계 ${simulation.getActiveSpecies().length + 1}`} · 전달 효율 ${Math.round(observedParameters.transferEfficiency * 100)}%`;
 }
 
 function renderStats(snapshot: SimulationSnapshot): void {

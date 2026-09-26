@@ -809,4 +809,3 @@ dialog::backdrop { background: rgba(10,29,18,.5); backdrop-filter: none; }
 .fox-energy small { font-size: 10px; }
 .food-web-edges { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 0 2px; }
 .food-web-edges span { background: #e8efe7; border-radius: 4px; padding: 3px 6px; color: #36573e; font-size: 10px; }
-.fox-proxy-help { margin: 4px 0; color: #526a58; font-size: 11px; line-height: 1.6; }

@@ -12,6 +12,5 @@ export function foodWebMarkup(snapshot: SimulationSnapshot, diet: ReturnType<For
     <div class="fox-card-heading"><span>붉은여우 <small>잡식</small></span><strong data-fox-count>${snapshot.agents.fox?.length ?? 0}<small>마리</small></strong></div>
     <p>토끼와 식물성 먹이를 모두 이용하는 잡식성 소비자입니다.</p>${energyMarkup}
     <div class="fox-diet"><h3>최근 ${diet.window} step 섭식 에너지</h3>${dietMarkup}</div>
-    </aside></div><div class="food-web-edges" aria-label="먹이에서 소비자로 향하는 연결">${edges.join('')}</div>
-    <p class="fox-proxy-help">열매 등 식물 유래 먹이를 현재 식생 자원으로 단순화하여 표현합니다. 늑대와는 토끼를 통한 간접 경쟁만 모델링합니다.</p>`;
+    </aside></div><div class="food-web-edges" aria-label="먹이에서 소비자로 향하는 연결">${edges.join('')}</div>`;
 }
