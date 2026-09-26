@@ -419,12 +419,27 @@ export class ForestSimulation {
     return this.recordMetric();
   }
 
-  removeSpecies(species: Species): boolean {
-    const amount = this.agents[species].length;
-    if (amount === 0) return false;
-    this.agents[species] = [];
-    this.removed.add(species);
-    this.interventions.push({ kind: 'remove', step: this.stepNumber, species, amount, resultingCount: 0 });
+  removeSpecies(species: Species, amount = this.agents[species].length): boolean {
+    const agents = this.agents[species];
+    // Invalid actions are atomic, including the RNG and event/history state.
+    if (!Number.isInteger(amount) || amount < 1 || amount > agents.length) return false;
+    if (amount === agents.length) {
+      // Preserve the original full-removal path without consuming selection RNG.
+      this.agents[species] = [];
+      this.removed.add(species);
+    } else {
+      // Partial Fisher–Yates: sample distinct indices using this experiment's RNG.
+      const indices = agents.map((_, index) => index);
+      const selected = new Set<number>();
+      for (let index = 0; index < amount; index += 1) {
+        const swapIndex = index + this.random.integer(indices.length - index);
+        [indices[index], indices[swapIndex]] = [indices[swapIndex], indices[index]];
+        selected.add(indices[index]);
+      }
+      // Keep survivor objects and their order intact; they continue acting normally.
+      this.agents[species] = agents.filter((_, index) => !selected.has(index));
+    }
+    this.interventions.push({ kind: 'remove', step: this.stepNumber, species, amount, resultingCount: this.agents[species].length });
     this.recordMetric(true);
     return true;
   }

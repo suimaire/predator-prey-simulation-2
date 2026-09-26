@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { DEFAULT_PARAMETERS, ForestSimulation, POPULATION_LIMITS, SPECIES_ORDER, speciesConfigs, type SimulationParameters } from '../src/model.ts';
-import { InterventionSession, groupInterventions } from '../src/interventions.ts';
+import { InterventionSession, groupInterventions, interventionLabel, removalPresetAmount } from '../src/interventions.ts';
 import { ApexChallengeSession, apexParameters } from '../src/challenge.ts';
 import { drawPopulationChart, SERIES_COLORS } from '../src/charts.ts';
 
@@ -119,6 +119,155 @@ test('wolves can be removed and reintroduced later without changing initial cond
   ]);
 });
 
+test('partial removal removes exactly 25 distinct rabbits, preserving survivors, other species and all experiment state', () => {
+  const simulation = new ForestSimulation({ ...DEFAULT_PARAMETERS, initialRabbits: 100 });
+  const before = structuredClone(simulation.getSnapshot());
+  const original = [...simulation.getSnapshot().rabbits];
+  const wolves = simulation.getSnapshot().wolves;
+  const history = structuredClone(simulation.getHistory());
+  const parameters = simulation.getParameters();
+  assert.equal(simulation.removeSpecies('rabbit', 25), true);
+  const after = simulation.getSnapshot();
+  const survivors = new Set(after.rabbits.map(agent => agent.id));
+  assert.equal(after.rabbits.length, 75);
+  assert.equal(survivors.size, 75);
+  assert.equal(original.filter(agent => !survivors.has(agent.id)).length, 25);
+  assert.deepEqual(after.rabbits, before.rabbits.filter(agent => survivors.has(agent.id)));
+  after.rabbits.forEach(agent => assert.equal(agent, original.find(item => item.id === agent.id)));
+  assert.equal(after.wolves, wolves); assert.equal(after.wolves.length, 8);
+  assert.deepEqual(after.forest, before.forest); assert.deepEqual(after.stats, before.stats);
+  assert.deepEqual(after.removedSpecies, []);
+  assert.equal(after.step, before.step); assert.deepEqual(simulation.getParameters(), parameters);
+  assert.deepEqual(simulation.getHistory().slice(0, history.length), history);
+  assert.deepEqual(simulation.getHistory().slice(-2).map(item => [item.step, item.rabbits]), [[0, 100], [0, 75]]);
+  assert.deepEqual(after.interventions, [{ kind: 'remove', step: 0, species: 'rabbit', amount: 25, resultingCount: 75 }]);
+  assertValid(simulation);
+});
+
+test('every species retains aged survivor identities, energy, position, active behavior and existing death/feeding statistics', () => {
+  for (const species of SPECIES_ORDER) {
+    const simulation = new ForestSimulation({ ...DEFAULT_PARAMETERS, foodChainDepth: 4, initialQuaternary: 4 });
+    advance(simulation, 2);
+    const snapshot = simulation.getSnapshot();
+    const before = structuredClone(snapshot);
+    const original = [...snapshot.agents[species]];
+    const energyFlow = structuredClone(simulation.getEnergyFlow());
+    assert.ok(original.length > 1);
+    assert.equal(simulation.removeSpecies(species, 1), true);
+    const survivors = simulation.getSnapshot().agents[species];
+    assert.equal(survivors.length, original.length - 1);
+    for (const agent of survivors) {
+      assert.equal(agent, original.find(item => item.id === agent.id));
+      assert.deepEqual(agent, before.agents[species].find(item => item.id === agent.id));
+    }
+    for (const other of SPECIES_ORDER.filter(item => item !== species)) assert.deepEqual(simulation.getSnapshot().agents[other], before.agents[other]);
+    assert.deepEqual(simulation.getSnapshot().stats, before.stats);
+    assert.deepEqual(simulation.getEnergyFlow(), energyFlow);
+    assert.deepEqual(simulation.getInterventions().at(-1), { kind: 'remove', step: 2, species, amount: 1, resultingCount: original.length - 1 });
+    simulation.step();
+    assert.ok(simulation.getSnapshot().agents[species].some(agent => agent.age === 3));
+  }
+});
+
+test('partial selection consumes the existing seeded RNG, never Math.random, and is not a prefix/ID selection', (t) => {
+  const simulation = new ForestSimulation({ ...DEFAULT_PARAMETERS, initialRabbits: 100, seed: 'PARTIAL-RNG' });
+  const random = (simulation as any).random;
+  const state = random.state;
+  const original = simulation.getSnapshot().rabbits.map(agent => agent.id);
+  const next = random.next.bind(random);
+  let calls = 0;
+  t.mock.method(random, 'next', () => {
+    calls++;
+    return next();
+  });
+  t.mock.method(Math, 'random', () => { throw new Error('Unseeded selection'); });
+  simulation.removeSpecies('rabbit', 25);
+  assert.equal(calls, 25); assert.notEqual(random.state, state);
+  const survivingIds = new Set(simulation.getSnapshot().rabbits.map(agent => agent.id));
+  const removed = original.filter(id => !survivingIds.has(id));
+  assert.notDeepEqual(removed, original.slice(0, 25));
+  assert.notDeepEqual(removed, original.slice(-25));
+});
+
+test('same history reproduces removed IDs and the future trajectory; different seeds produce different samples', () => {
+  const parameters = { ...DEFAULT_PARAMETERS, initialRabbits: 100, foodChainDepth: 4 as const, initialQuaternary: 4, seed: 'PARTIAL-REPLAY' };
+  const a = new ForestSimulation(parameters), b = new ForestSimulation(parameters);
+  for (const simulation of [a, b]) {
+    advance(simulation, 3);
+    simulation.introduceSpecies('wolf', 3);
+    assert.equal(simulation.removeSpecies('rabbit', 25), true);
+    assert.equal(simulation.removeSpecies('quaternary', 2), true);
+  }
+  for (let step = 0; step < 100; step++) {
+    assert.deepEqual(a.getSnapshot(), b.getSnapshot());
+    assert.deepEqual(a.getHistory(), b.getHistory());
+    assert.deepEqual(a.getEnergyFlow(), b.getEnergyFlow());
+    a.step(); b.step();
+  }
+  const samples = new Set<string>();
+  for (const seed of ['A', 'B', 'C', 'D']) {
+    const simulation = new ForestSimulation({ ...parameters, seed });
+    simulation.removeSpecies('rabbit', 25);
+    samples.add(JSON.stringify(simulation.getSnapshot().rabbits.map(agent => agent.id)));
+  }
+  assert.equal(samples.size, 4);
+});
+
+test('explicit full removal matches the legacy call without consuming RNG, including population one', () => {
+  for (const population of [1, 100]) {
+    const parameters = { ...DEFAULT_PARAMETERS, initialRabbits: population };
+    const explicit = new ForestSimulation(parameters), legacy = new ForestSimulation(parameters);
+    const rng = JSON.stringify((explicit as any).random);
+    assert.equal(explicit.removeSpecies('rabbit', population), true);
+    assert.equal(legacy.removeSpecies('rabbit'), true);
+    assert.equal(JSON.stringify((explicit as any).random), rng);
+    assert.deepEqual(explicit.getSnapshot(), legacy.getSnapshot());
+    assert.equal(explicit.getSnapshot().rabbits.length, 0);
+    assert.deepEqual(explicit.getSnapshot().removedSpecies, ['rabbit']);
+    advance(explicit, 30); advance(legacy, 30);
+    assert.deepEqual(explicit.getSnapshot(), legacy.getSnapshot());
+  }
+});
+
+test('invalid and zero-population removals reject atomically, including overflow and stale quantities', () => {
+  const simulation = new ForestSimulation({ ...DEFAULT_PARAMETERS });
+  const before = structuredClone(simulation.getSnapshot());
+  const history = structuredClone(simulation.getHistory());
+  const rng = JSON.stringify((simulation as any).random);
+  for (const amount of [0, -1, 1.5, NaN, Infinity, -Infinity, 51, Number.MAX_VALUE, Number('')]) {
+    assert.equal(simulation.removeSpecies('rabbit', amount), false);
+  }
+  assert.equal(simulation.removeSpecies('tertiary', 1), false);
+  assert.equal(simulation.removeSpecies('tertiary'), false);
+  assert.deepEqual(simulation.getSnapshot(), before);
+  assert.deepEqual(simulation.getHistory(), history);
+  assert.equal(JSON.stringify((simulation as any).random), rng);
+});
+
+test('removal percentage presets round and clamp to a living population', () => {
+  for (const [population, fraction, expected] of [[3, .1, 1], [224, .1, 22], [224, .25, 56], [224, .5, 112], [224, 1, 224], [50, .1, 5], [8, .1, 1], [3, -.1, 1], [3, 2, 3]]) {
+    assert.equal(removalPresetAmount(population, fraction), expected);
+  }
+  for (const fraction of [.1, .25, .5, 1]) {
+    assert.equal(removalPresetAmount(1, fraction), 1);
+    assert.equal(removalPresetAmount(0, fraction), 0);
+  }
+  assert.equal(removalPresetAmount(NaN, .1), 0);
+  assert.equal(removalPresetAmount(10, NaN), 0);
+});
+
+test('Reset after introductions and partial removals restores the original snapshot, history and RNG', () => {
+  const simulation = new ForestSimulation({ ...DEFAULT_PARAMETERS });
+  const control = new ForestSimulation({ ...DEFAULT_PARAMETERS });
+  advance(simulation, 5); simulation.introduceSpecies('rabbit', 20);
+  simulation.removeSpecies('rabbit', 30); simulation.introduceSpecies('tertiary', 6); simulation.removeSpecies('tertiary', 3);
+  simulation.reset();
+  assert.deepEqual(simulation.getSnapshot(), control.getSnapshot());
+  assert.deepEqual(simulation.getHistory(), control.getHistory());
+  advance(simulation, 20); advance(control, 20);
+  assert.deepEqual(simulation.getSnapshot(), control.getSnapshot());
+});
+
 test('Reset clears all runtime events/activation and exactly restores the configured initial experiment', () => {
   const simulation = new ForestSimulation({ ...DEFAULT_PARAMETERS });
   const before = structuredClone(simulation.getSnapshot());
@@ -206,13 +355,31 @@ test('Apex and stale experiment transactions reject both mutations and accidenta
   }
 });
 
+test('partial removal transactions preserve pause/cancel behavior and validate current populations at confirmation', () => {
+  for (const initiallyRunning of [true, false]) {
+    const { state, session, tick } = controls(initiallyRunning);
+    session.begin(); tick(); assert.equal(state.simulation.getSnapshot().step, 0);
+    session.cancel(); assert.equal(state.running, initiallyRunning);
+    session.begin(); assert.equal(session.confirm('remove', 'rabbit', 25)!.amount, 25);
+    session.cancel(); tick(); assert.equal(state.running, false);
+    assert.equal(state.simulation.getSnapshot().rabbits.length, 25);
+    session.begin(); state.simulation.removeSpecies('rabbit', 20);
+    assert.equal(session.confirm('remove', 'rabbit', 10), null);
+    assert.equal(state.simulation.getSnapshot().rabbits.length, 5);
+    assert.equal(session.confirm('remove', 'rabbit', 2)!.resultingCount, 3);
+    state.free = false;
+    assert.equal(session.begin(), null); assert.equal(session.confirm('remove', 'rabbit', 1), null);
+    assert.equal(state.simulation.getSnapshot().rabbits.length, 3);
+  }
+});
+
 test('one marker per step groups introduce/remove events and retains every series/history sample', (t) => {
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
   Object.defineProperty(globalThis, 'window', { configurable: true, value: { devicePixelRatio: 1 } });
   t.after(() => { if (previous) Object.defineProperty(globalThis, 'window', previous); else Reflect.deleteProperty(globalThis, 'window'); });
   const simulation = new ForestSimulation({ ...DEFAULT_PARAMETERS });
   advance(simulation, 500);
-  simulation.introduceSpecies('tertiary', 3); simulation.introduceSpecies('quaternary', 2); simulation.removeSpecies('tertiary');
+  simulation.introduceSpecies('tertiary', 6); simulation.removeSpecies('tertiary', 3); simulation.introduceSpecies('quaternary', 2); simulation.removeSpecies('tertiary');
   const history = structuredClone(simulation.getHistory());
   const labels: string[] = [], lines: { color: string; dashed: boolean; points: number[][] }[] = [];
   const ctx = {
@@ -229,9 +396,12 @@ test('one marker per step groups introduce/remove events and retains every serie
   assert.equal(lines.filter(line => line.dashed).length, 1);
   assert.equal(lines.find(line => line.dashed)!.points[0][0], 595); // Rightmost step 500.
   assert.ok(lines.some(line => !line.dashed && line.color === SERIES_COLORS.quaternary));
-  assert.ok(labels.includes('Step 500')); assert.ok(labels.includes('3차 소비자 +3')); assert.ok(labels.includes('3차 소비자 제거'));
+  assert.ok(labels.includes('Step 500')); assert.ok(labels.includes('3차 소비자 +6')); assert.ok(labels.includes('3차 소비자 −3 (실험적 제거)'));
+  assert.match(canvas.title, /3차 소비자 −3 \(실험적 전체 제거\)/);
+  assert.deepEqual(history.slice(-5).map(item => [item.step, item.tertiary]), [[500, 0], [500, 6], [500, 3], [500, 3], [500, 0]]);
+  assert.equal(interventionLabel(simulation.getInterventions()[1]), '3차 소비자 −3 (실험적 제거)');
   assert.match(canvas.title, /4차 소비자 \+2/);
-  assert.equal(groupInterventions(simulation.getInterventions(), 0, 500)[0].events.length, 3);
+  assert.equal(groupInterventions(simulation.getInterventions(), 0, 500)[0].events.length, 4);
   assert.deepEqual(groupInterventions(simulation.getInterventions(), 501, 600), []);
   assert.deepEqual(simulation.getHistory(), history);
 });
