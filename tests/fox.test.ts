@@ -82,7 +82,10 @@ test('successful hunt removes exactly one rabbit and never consumes vegetation i
 
 test('failed hunt retains rabbit and disallows same-step plant fallback despite available plants', () => {
   const {sim,fox,internal,feed}=feedingFixture(1); const forest=sim.getSnapshot().forest.slice();
-  internal.random.next=()=>.99; feed();
+  sim.getSnapshot().forest[4*sim.getSnapshot().width+4]=4;
+  forest[4*sim.getSnapshot().width+4]=4;
+  const draws=[0,0,.99]; internal.random.next=()=>draws.shift()!; feed();
+  assert.equal(draws.length,0);
   assert.equal(sim.getSnapshot().rabbits.length,1); assert.deepEqual(sim.getSnapshot().forest,forest);
   assert.equal(fox.energy,10-FOX_CONFIG.basalEnergyCost); assert.equal(internal.feedingLog.length,0);
 });

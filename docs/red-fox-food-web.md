@@ -1,4 +1,9 @@
-# Phase 2 — Red Fox Omnivore & Food-Web v1
+# Red Fox Food Web — Phase 2 / Phase 2.1
+
+**현재 Phase 2.1 판정: weighted choice 구현·회귀 검증은 통과했지만, 공존 기본값 튜닝은 BLOCKED다.**
+이 feature branch의 평가값은 rabbitPreference **0.67**, plantGain **0.5**다. 정식 배포 기본값으로 채택했다는 뜻이 아니다.
+Calibration의 작은 전체 먹이그물 개선이 holdout에서는 유지되지 않았다. 상세 결과는 아래 **Phase 2.1** 절에 있다.
+그 절 전까지는 기존 **Phase 2의 역사적 설계·검증 기록**이며, 토끼 우선 fallback 설명과 당시 검증 수치는 현재 동작과 구분한다.
 
 ## 작업 기준과 범위
 
@@ -159,3 +164,162 @@ npm run test:browser:fox
 개발·문서: `scripts/capture-fox-free-baseline.ts`, `scripts/calibrate-fox.ts`, `package.json`, `README.md`, `docs/runtime-ecosystem-interventions.md`, 이 문서, `docs/fox-calibration.json`, `docs/fox-tuning.json`.
 
 다음 Phase는 `FOOD_SOURCES`/종 config와 별도 feeding strategy, step별 에너지 집계, 기존 intervention infrastructure를 확장할 수 있다. 새 종을 core trophic depth에 끼워 넣을 필요가 없다. 이번에는 붉은여우 한 종만 구현했다. 식물 자원 분리, 실제 먹이 가용성/계절 변화, 개체 단위 경쟁 순서는 별도 가정과 검증이 필요한 후속 범위다.
+
+## Phase 2.1 — Coexistence calibration (2026-09-26)
+
+### 기준, 실행 계약과 판정
+
+- Branch: `feat/fox-coexistence-tuning`. Base: `e476ff83d08168a9f9e2d8d44fb49c73a3ec6c3d` (`Add red fox food-web simulation`). 원격 fetch 후 main/origin/main은 `2fce748`, Phase 2는 미병합이었다. 시작 상태 clean, 적용되는 AGENTS.md 없음.
+- `scripts/calibrate-fox-coexistence.ts`는 기준 모델을 항상 위 Git object에서 읽는다. baseline 저장과 진단 후에만 모델을 수정했다. 기존 `calibrate-fox.ts`의 300-run 결과도 재실행하여 `docs/fox-calibration.json`의 **모든 summary와 모든 row가 exact equality**임을 확인했다. 이 역사적 JSON은 수정하지 않았다.
+- Calibration: `FOX-CAL-001`–`FOX-CAL-050`; holdout: `FOX-HOLDOUT-001`–`FOX-HOLDOUT-050`. 수정 전에 확정했다. seed contract는 trim된 40자 이하 문자열이며, 100개 문자열과 초기 RNG 상태 모두 중복 없음. Holdout 결과를 이용한 재튜닝 없음.
+- 각 run은 600 steps, 32×21 격자, 초기 여우4를 step0의 runtime introduction으로 도입한다. Plant-only는 토끼0·늑대0·식생100%; Rabbit+Fox는 토끼50·늑대0·식생78%; Full Web은 토끼50·늑대8·식생78%. 식생 재성장0.1, 기본 효율0.1. 대조군은 Full Web에서 여우만 도입하지 않는다. Phase 2와 같은 조건이다.
+- 모든 후보는 같은 calibration 50개를 사용한다. 동일 seed 비교이나 source choice 이후 RNG 소비가 달라지므로 모든 후속 난수가 일대일로 대응하는 실험은 아니다.
+- **기본값 튜닝 BLOCKED:** Stage A 9개와 진단용 Stage B 3개 중 Full Web 여우 10–25/50 목표에 도달한 후보가 없다. Holdout에서도 전체 먹이그물 개선을 확인하지 못했다. 이 목표는 교육용 탐구 trajectory에 대한 engineering target이며, 자연계 공존·생존 확률이나 측정 식단 비율이 아니다.
+- `docs/fox-coexistence-selection.json`에 holdout 실행 **이전**의 평가 후보와 선택 이유를 고정했다. feature branch 평가값은 P=.67/G=.5, secondary parameter 변경 없음. 이 값은 출시 권고가 아니다.
+
+### Baseline 재현과 멸종 진단
+
+각 수치는 50 runs 기준이다. 처음부터 없던 종은 멸종으로 세지 않는다. 아래 단계 중앙값은 **600 step 이내 실제 멸종한 run에 한정**한다. 미멸종을 600으로 censor한 persistence 분포도 raw report에 별도로 저장한다.
+
+| Phase 2 조건 | 여우 생존 | 토끼 멸종 | 늑대 생존 | 여우 멸종 step 중앙값 | 여우 평균 출생 | cap runs |
+|---|---:|---:|---:|---:|---:|---:|
+| Plant-only 10% | 0 | — | — | 16 | 0 | 0 |
+| Plant-only 30% | 0 | — | — | 92 | 0 | 0 |
+| Rabbit+Fox | 27 | 9 | — | 393 | 111.58 | 0 |
+| Full Web | 1 | 38 | 2 | 149 | 13.66 | 0 |
+| Wolf control | — | 38 | 3 | — | — | — |
+
+Full Web 전체 붕괴는 38/50. 여우 persistence 중앙값은 150이며, 멸종 run만의 중앙값149와 구분한다.
+
+- **A — 번식 전 기아만이 원인인가? 아니다.** 49/50 runs에서 출생이 있었다. 사망868 중 기아619·나이249였으며, 기아196개체는 관측된 생애 중 번식 문턱을 넘지 못했다. 나머지 기아423개체는 문턱에 도달한 적이 있었다. 원래 death-cause 필드는 없어서 harness가 기존 사망 조건을 관찰했다. 에너지≤0와 최대 나이가 겹치면 기아로 분류한다.
+- **B — 번식 후 계통 유지 실패인가? 그렇다.** 총683 출생, 53,431 fox-agent feeding opportunities 중 37,436회(70.06%)에서 섭식 후·번식 전 에너지≥24였다. 이 시점의 개체-기회 가중 평균 에너지는59.63, 전체 최솟값−1.6832다. 음수는 섭식 이후에도 회복하지 못한 사망 직전 상태를 포함한다. 오래 생존한 개체가 평균에 더 많이 기여하므로 이를 일반 개체의 건강도라고 해석하지 않는다.
+- **C — 식물 fallback이 거의 막혀 있는가? 아니다.** 토끼 후보는17,015회(31.84%), 현재 칸 식물도 있는 기회는7,017회(13.13%)였다. 실제 식물 섭식은25,890회, 그중20,110회는 전역 토끼가 아직 존재할 때 발생했다. fallback은 이미 자주 쓰였다. 가중 선택이 직접 바꾸는 것은 두 먹이가 동시에 가능한 일부 기회다.
+- **D — 사냥 실패가 비정상적으로 높은가? 아니다.** 17,015 시도 중11,874 성공(69.79%),5,141 실패로 설정0.70과 부합한다. 토끼 에너지94,992·식물12,945, run별 토끼 비중 중앙값86.30%였다.
+- **E — 늑대 경쟁 뒤 기회를 잃는가? 일부 관측되나 단독 원인으로 입증되지 않았다.** wolf-first 처리 전에는 이웃 토끼가 있었지만 직후 사라진 fox-step이192회였다. 여우가 없던 대조군도 토끼38/50 멸종이다. Full Web 토끼 멸종 중앙값109.5, 늑대160; 37개 run에서는 토끼가 먼저 사라진 후 여우도 멸종했다. 먹이 기반 붕괴와 제한된 계통 유지가 핵심이며, 이 관찰만으로 인과 기여도를 분리할 수 없다.
+
+계측은 개발 harness의 메서드 래퍼에만 있다. 동작을 복제하거나 새 난수를 사용하지 않는다. `audit`은 기준/현재 모델 각각 세 시나리오에서 계측 유무의 전체 직렬화 상태·rolling diet·RNG 해시, 출생/사망 회계가 동일함을 검사한다. product bundle에는 이 진단·전역 탐색이 포함되지 않는다.
+
+### 가중 선택과 RNG 순서
+
+`chooseFoxFoodSource(rabbitAvailable, plantAvailable, preference, random)`가 선택을 담당하고 기존 사냥/`eatPlant()`가 실행한다.
+
+1. Phase 2와 동일하게 나이+1, 기초 에너지 차감, 거리1의 이웃 토끼 후보를 찾는다.
+2. 토끼 후보가 없을 때만 기존 확률0.94의 이동을 수행한다. 이동했다면 **도착한 현재 칸**의 식생을 확인한다. 후보가 있다면 이동하지 않고 현재 칸을 확인한다. 식물을 찾기 위한 추가 이동이나 이웃 칸 식물 검색은 없다.
+3. 현재 칸 식생 단계≥1이 plant available이다. 두 먹이가 있으면 seeded draw 1회로 `draw < P`는 토끼, `draw >= P`는 식물을 선택한다. 하나만 있으면 그 먹이, 둘 다 없으면 null이며 source-choice draw는0회다.
+4. 토끼 선택은 기존 candidate 선택 RNG 1회 → hunt RNG 1회 순서다. 성공이면 토끼1마리와 토끼 에너지, 실패이면 섭식 종료. 같은 step 식물 fallback/재시도/이중 식사는 없다.
+5. 식물 선택은 candidate/hunt RNG를 소비하지 않으며 현재 칸 단계1만 감소한다. 에너지는 기존 `nominal / .1 × efficiency`로 한 번만 전달한다. 이후 번식·사망 순서는 기존 그대로다.
+
+따라서 번식 등 공통 부분을 제외한 난수 순서는 `both→rabbit: choice,candidate,hunt`, `both→plant: choice`, `rabbit-only: candidate,hunt`, `no-rabbit: legacy movement(+destination), no choice/hunt`다. 여우가 없으면 새 선택·순서 RNG가 전혀 실행되지 않는다. 살아 있는 여우가 있을 때만 기존 seeded50:50 wolf/fox 처리 순서를 유지한다. 기본 Full Web 순서 횟수는 baseline **wolf-first4094 / fox-first4102**, 평가 후보 **4234 / 4169**, holdout **3724 / 3777**로 심각한 편향은 관측되지 않았다.
+
+### Stage A matrix와 Stage B
+
+Stage A는 P∈{.80,.75,.67} × G∈{.5,.7,.9}. 사냥0.70·기초소비1.7·토끼획득8·번식문턱24·번식확률0.018·자식이전42%·최대나이110·거리1·이동0.94·cap80과 모든 core species parameter를 고정했다. 모든 후보는 기본 효율10%에서 비교했다.
+
+아래 `RF`는 Rabbit+Fox의 **여우 생존 / 토끼 멸종**, `Full 생존`은 **여우 / 늑대 / 토끼**다. 각 수치는 /50. 모든 A/B 후보의 Plant-only 결과는 여우 생존0·최종 중앙값0·출생0·cap0, 모든 시나리오에서 여우 cap0이었다.
+
+| Stage | P | G | 번식확률 | RF | Full 생존 |
+|---|---:|---:|---:|---|---|
+| A | .80 | .5 | .018 | 37 / 4 | 0 / 6 / 17 |
+| A | .80 | .7 | .018 | 33 / 4 | 2 / 6 / 14 |
+| A | .80 | .9 | .018 | 30 / 13 | 2 / 5 / 13 |
+| A | .75 | .5 | .018 | 39 / 4 | 1 / 6 / 18 |
+| A | .75 | .7 | .018 | 34 / 8 | 1 / 2 / 11 |
+| A | .75 | .9 | .018 | 31 / 14 | 3 / 3 / 14 |
+| **A 평가점** | **.67** | **.5** | **.018** | **38 / 2** | **2 / 10 / 13** |
+| A | .67 | .7 | .018 | 41 / 4 | 0 / 4 / 13 |
+| A | .67 | .9 | .018 | 36 / 7 | 4 / 2 / 13 |
+| B | .80 | .5 | .020 | 31 / 11 | 1 / 3 / 10 |
+| B | .75 | .5 | .020 | 35 / 6 | 0 / 5 / 22 |
+| B | .67 | .5 | .020 | 33 / 7 | 1 / 4 / 6 |
+
+Full Web의 추가 지표다. 단계 중앙값은 멸종한 run에 한정; 에너지 비중은 각 run의 전체 누적 transferred-energy share의 중앙값이다. 식생은 run별 600-step 평균을 다시 평균한 값이다.
+
+| Stage / P / G | 멸종 step 여우/토끼/늑대 | 여우 평균 출생 | 최고 개체수(max) | 토끼/식물 에너지 % | 평균 식생 % |
+|---|---|---:|---:|---|---:|
+| A/.80/.5 | 147.5 / 110 / 166 | 11.36 | 36 | 85.86 / 14.14 | 64.49 |
+| A/.80/.7 | 149.5 / 101.5 / 156.5 | 17.92 | 42 | 79.94 / 20.06 | 68.88 |
+| A/.80/.9 | 168.5 / 111 / 167 | 17.14 | 37 | 74.54 / 25.46 | 69.39 |
+| A/.75/.5 | 144 / 117.5 / 160.5 | 12.28 | 41 | 85.93 / 14.07 | 58.62 |
+| A/.75/.7 | 155 / 116 / 168.5 | 14.08 | 20 | 80.06 / 19.94 | 67.70 |
+| A/.75/.9 | 161 / 123 / 172 | 21.22 | 47 | 74.35 / 25.65 | 66.28 |
+| **A/.67/.5** | **145.5 / 118 / 170** | **10.84** | **24** | **86.08 / 13.92** | **66.27** |
+| A/.67/.7 | 156.5 / 109 / 165 | 11.68 | 23 | 80.24 / 19.76 | 66.53 |
+| A/.67/.9 | 162 / 112 / 162 | 23.14 | 42 | 75.97 / 24.03 | 65.27 |
+| B/.80/.5 | 146 / 112.5 / 167 | 14.42 | 34 | 85.61 / 14.39 | 71.33 |
+| B/.75/.5 | 143.5 / 113.5 / 169 | 12.02 | 21 | 85.71 / 14.29 | 55.82 |
+| B/.67/.5 | 150 / 110 / 162.5 | 16.14 | 40 | 85.86 / 14.14 | 75.09 |
+
+Stage A에서는 약66–70%의 fox-agent 기회에서 에너지가 번식 문턱 이상이었으나 계통이 남지 않았다. 이 진단에 따라 Stage B에서는 **번식 확률만** .020으로 바꿨다. G=.5는 최대 효율에서도1.5<1.7이라는 buffer 조건을 분석적으로 유지하므로 세 P를 그 조건에서 비교했다. 번식 규칙이 단독 원인이라는 증명은 아니다. 결과는 Full Web0–1/50이고 P=.67에서는 토끼 멸종44/50으로 악화해 채택하지 않았다. 기초 소비·사냥 성공률의 추가 sweep은 하지 않았다.
+
+평가점은 여우 생존 수만 최대화해 고르지 않았다. G=.9의 최대4/50도 목표 미달이고, 최대 효율에서는 gain2.7>cost1.7이 되어 buffer-only 보장을 잃는다. 모든 후보를 최대 효율에서 sweep해 병리를 입증했다는 뜻은 아니다. 기존 gain을 유지하는 A 후보 중 P=.67이 Full Web 여우2·늑대10과 RF 여우38·토끼 멸종2를 얻어 **구현 평가점**으로 골랐다. 추가 파라미터를 늘려 겉보기 목표를 맞추지는 않는다.
+
+### Holdout, before/after와 불확실성
+
+| Set / 조건 | Phase 2 baseline | 평가점 P=.67/G=.5 | 변화 |
+|---|---|---|---|
+| Calibration / RF 여우 생존 | 27/50 (54%) | 38/50 (76%) | +22 pp |
+| Calibration / RF 토끼 멸종 | 9/50 (18%) | 2/50 (4%) | −14 pp |
+| Calibration / Full 여우 생존 | 1/50 (2%) | 2/50 (4%) | +2 pp |
+| Calibration / Full 토끼 멸종 | 38/50 (76%) | 37/50 (74%) | −2 pp |
+| Calibration / Full 늑대 멸종 | 48/50 (96%) | 40/50 (80%) | −16 pp |
+| Holdout / RF 여우 생존 | 22/50 (44%) | 38/50 (76%) | +32 pp |
+| Holdout / RF 토끼 멸종 | 18/50 (36%) | 5/50 (10%) | −26 pp |
+| Holdout / Full 여우 생존 | 2/50 (4%) | 1/50 (2%) | −2 pp |
+| Holdout / Full 토끼 멸종 | 36/50 (72%) | 36/50 (72%) | 0 pp |
+| Holdout / Full 늑대 멸종 | 43/50 (86%) | 45/50 (90%) | +4 pp |
+
+Full Web의 여우 멸종 단계 중앙값은 calibration149→145.5(−3.5), holdout153→142(−11); 토끼는109.5→118(+8.5),113.5→105(−8.5); 늑대는160→170(+10),163→158(−5)이다. 멸종 run 구성이 다르므로 이 중앙값 차이는 동일 개체의 수명 변화나 paired causal effect가 아니다. 전체 멸종 분포(q25/q75/min/max)와 censor한 분포는 raw report에 저장한다.
+
+50-run Wilson95% 구간: fox1/50=2% **[0.35,10.50]%**,2/50=4% **[1.10,13.46]%**,RF27/50=54% **[40.40,67.03]%**,22/50=44% **[31.16,57.69]%**,38/50=76% **[62.59,85.70]%**. 희귀 생존1–2회의 차이를 성공 증거로 해석하지 않는다. 이 구간은 고정seed 표본에서의 변동성 참고이며 자연계 확률 추정이 아니다. 각 종의 count/percent/Wilson 구간도 machine-readable summary에 있다.
+
+600 step에 **세 종이 동시에 남은 run**은 calibration baseline0→평가점2, holdout baseline0→평가점0이다. Holdout의 여우1 생존도 늑대와의 장기 공존은 아니다. Wolf control의 토끼 멸종은 calibration38, holdout35이며 현재/기준 모델의 대조군 결과는 같다.
+
+### 식물·식단·식생 guardrail
+
+| 평가점 / set | 효율 | Plant-only 생존/최종 중앙값/출생/cap | 멸종 step 중앙값 | 식생 최종 중앙값 |
+|---|---:|---|---:|---:|
+| Calibration | 10% | 0 / 0 / 0 / 0 | 16 | 100% |
+| Calibration | 30% | 0 / 0 / 0 / 0 | 92 | 100% |
+| Holdout | 10% | 0 / 0 / 0 / 0 | 16.5 | 100% |
+| Holdout | 30% | 0 / 0 / 0 / 0 | 93 | 100% |
+
+전체200 plant-only runs의 최고 개체수는 초기4, step400–600 개체수는0이었다. 현재 UI의 실제 최대 효율은30%이며 plant gain은1.5가 된다. 기초 소비1.7 미만이고 도입 에너지도 문턱24 미만이므로 plant-only에서 출생하지 않는다. 최대 효율의 평균 식생은 calibration99.61%, holdout99.61%. 전체 A/B/calibration/holdout에서 여우 cap hit는0이었다.
+
+평가점의 식단 에너지 중앙 비율(토끼/식물): RF는 calibration **92.67/7.33%**, holdout **92.56/7.44%**; Full은 **86.08/13.92%**, **85.73/14.27%**다. P=.67은 실제 식단 비율이 아니다. UI는 기존처럼 최근50 logical steps의 실측 에너지만 표시하고, 분모0이면 "최근 섭식 없음"과 null 비율을 반환한다. P를 학생 조절 항목이나 자연계의67% 식단으로 표시하지 않는다.
+
+| 조건 | 평균 식생 baseline→평가점 | run별 최소 식생 중앙값 baseline→평가점 | 최종 식생 중앙값 baseline→평가점 |
+|---|---|---|---|
+| Calibration RF | 26.36→19.19% | .186→.186% | 9.97→5.39% |
+| Holdout RF | 34.41→22.31% | .186→.186% | 32.29→9.69% |
+| Calibration Full | 72.28→66.27% | 1.004→.409% | 100→100% |
+| Holdout Full | 62.16→69.28% | .521→.818% | 100→100% |
+
+RF에서는 동물이 오래 남는 대신 식생의 평균·최종 상태가 낮아진다. Full에서는 calibration과 holdout의 변화 방향도 다르다. Wolf control의 최소 식생 중앙값은 .335%/.298%로 기존 모델 자체에도 깊은 자원 고갈이 있다. 새로운 plant-only 폭증이나 cap 병리는 관측되지 않았고, 여우 추가만으로 대다수 run이 극단적 고갈을 겪는다는 근거도 얻지 못했다. 그러나 자원 변동 문제가 해결됐다는 뜻은 아니다. 최종 식생100%는 소비자 멸종 뒤 회복도 포함하므로 건강한 공존의 지표로 볼 수 없다.
+
+### 검증, 산출물과 재현
+
+- Focused fox **33/33**, intervention **27/27**, 전체 **157/157**. 신규9 deterministic tests는 경계값 선택, 사냥 실패 시 no-fallback, 먹이1종류·0종류에서 choice RNG 없음, plant 선택 시 hunt RNG 없음, 현재 칸 제한, 최대 효율, 실제 식단 표시, 같은 개입 이력의 state/RNG replay를 검사한다. 확률 분포를 대량 반복하는 flaky test는 추가하지 않았다.
+- 기존 fox-free exact regression의9개 시나리오/3,742시점 fixture는 갱신하지 않았다. 2/3/4단계, 도입·부분 제거, RNG, energy, graph를 포함한 기존 intervention exact 회귀도 통과했다. Apex trajectory/collapse/score/RNG는 exact 일치. 기본 collapse44/score43, 밀집18/17, 효율20%71/70.
+- TypeScript, production build, 로컬DB generated-artifact check, `git diff --check` 통과. 기존dist에 대한 sandbox 쓰기 제약 때문에 build는 `--configLoader native --outDir verification.local/fox-coexistence/build`로 검증했다. SQL/DB 생성물은 변경하지 않았다.
+- 실제 설치된 Microsoft Edge **153.0.4234.48**의 headless 실행에서 fox와 기존 intervention browser suite가 통과했다. 자연 진행15회 표본에서 여우·토끼가 있을 때 plant energy>0, 토끼가 풍부할 때 rabbit dominance를 확인했다. 평가값 P=.67에서 step49 토끼253마리·식물 에너지5.44%, step112 토끼1마리·15.54%, step140 토끼0마리·84.83%였다. 이는 한 trajectory의 관측이며 증가 방향을 강제하는 테스트는 두지 않았다.
+- 1440×900, 1024×768, 390×844, 320×740에서 식단·영양 구조·legend·개입·부분 제거 dialog의 overflow/겹침 검사와 스크린샷 확인을 했다. Tab/Shift+Tab, Enter/Space, ESC, focus return, 실행/정지 복귀를 검증했다. 별도 screen reader나 모바일 실기기 검사는 하지 않았다.
+- 여우 부분 제거·재도입·Reset과50-step 빈 식단, Apex의 fox UI 부재·강제 이벤트 무효·44/43을 검증했다. 두 browser suite 모두 JS errors0/외부writes0.
+- 48열·rabbit200/wolf30/fox40의600-step model+energy/diet query 측정: 중앙값3.02ms, p95 5.79ms, max12.02ms. 이 기계에서1회 측정한 값이며 화면 렌더링 성능 보장은 아니다. 기존8–40step/s용 runtime에 새 전역scan은 없다.
+- 변경 범위: `src/model.ts`, `src/main.ts` 설명1문장, `tests/fox.test.ts`, 신규`tests/fox-choice.test.ts`, `tests/fox.browser.mjs`, `scripts/calibrate-fox-coexistence.ts`, `package.json`, 이 문서, `docs/fox-coexistence-selection.json`. 종 추가, simulationVersion, Apex 로직, leaderboard, Supabase, main/Pages 변경·배포는 하지 않는다.
+- final commit/push는 feature branch의 Git 이력과 최종 보고에 기록한다. raw JSON·로그·build는 `verification.local/fox-coexistence/`, 스크린샷과 Edge JSON은 `verification.local/fox/` 및 `verification.local/interventions/`에 있다. 이들은 gitignored이며 commit은 harness·선택 이유·요약·구현/검증으로 제한한다.
+
+```text
+npm run calibrate:fox:coexistence -- baseline
+npm run calibrate:fox:coexistence -- audit
+npm run calibrate:fox:coexistence -- stage-a
+npm run calibrate:fox:coexistence -- stage-b
+npm run calibrate:fox:coexistence -- validate
+```
+
+기존 raw report 덮어쓰기는 거부한다. 의도적으로 같은 조건을 재현할 때만 `FOX_OVERWRITE=1`을 지정한다. Stage B 후보와 holdout 이전 선택은 versioned selection JSON에 저장했다. `validate`는 선택 후보의 calibration 최대 효율과 holdout 각 조건, Git 기준 holdout 대조군을 실행한다. Holdout 이후 다시 tuning한다면 이번 holdout을 재사용하지 말고 제3의 seed set을 먼저 고정해야 한다.
+
+### 남은 한계와 다음 단계
+
+**weighted choice만으로 늑대와 장기 공존을 확보할 수 있다는 가설은 지지되지 않았다.** RF 개선과 Full Web 개선은 구분한다. Release default tuning은 계속 BLOCKED이며 이번에는 main merge/Pages deploy를 하지 않는다.
+
+다음은 parameter 범위를 넓히기 전에 (1) 공유 토끼의 증가·자원 고갈·붕괴 과정, (2) 나이 상한과 에너지 조건부 번식의 계통 대체율, (3) 국소 이동/탐색 규모와 늑대·여우 간접 경쟁, (4) 현재 칸 식생 proxy의 자원 의미를 하나씩 독립 실험으로 재검토하는 것이다. 각 후보의 인과 가설과 비악화 조건을 먼저 정하고 별도의 제3 seed set으로 검증한다. 과일 객체·계절·직접 공격 등을 이번 변경에 추가하지 않는다.

@@ -855,7 +855,7 @@ function renderPyramid(snapshot: SimulationSnapshot): void {
     ? '기존 먹이사슬에 <b>붉은여우의 두 먹이 연결</b>을 더한 단순한 먹이그물입니다. 실제 식단 전체를 재현하지 않습니다.'
     : '학습을 위해 먹이 관계를 <b>직선형 먹이사슬</b>로 단순화했습니다. 실제 생태계는 대부분 먹이그물입니다.';
   element('.rule-content li:nth-child(3)').innerHTML = foodWeb
-    ? '<b>늑대·붉은여우 행동</b><span>살아 있는 여우가 있으면 매 step 순서를 추첨합니다. 여우는 토끼 사냥을 우선하며, 후보가 없을 때만 식물성 먹이를 이용합니다.</span>'
+    ? '<b>늑대·붉은여우 행동</b><span>살아 있는 여우가 있으면 매 step 순서를 추첨합니다. 여우는 이용 가능한 토끼와 식물성 먹이 중 하나를 선택합니다. 사냥에 실패하면 그 step의 섭식을 마칩니다.</span>'
     : '<b>늑대 행동</b><span>토끼 탐색·사냥·번식·사망</span>';
   const title = foodWeb ? '실시간 영양 구조' : '실시간 생태 피라미드';
   element('.pyramid-toolbar h2').textContent = title;

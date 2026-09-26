@@ -69,7 +69,7 @@ export interface SpeciesConfig {
   reproductionProbability: number;
   nominalFoodGainAtTenPercent: number;
   maxAge: number;
-  omnivory?: { huntSuccess: number; plantNominalGain: number };
+  omnivory?: { huntSuccess: number; plantNominalGain: number; rabbitPreference: number };
   populationCap?: number;
 }
 
@@ -140,8 +140,20 @@ export const FOX_CONFIG: Readonly<SpeciesConfig> = Object.freeze({
   movement: Object.freeze({ probability: 0.94, distance: 1 }),
   basalEnergyCost: 1.7, reproductionThreshold: 24, reproductionProbability: 0.018,
   nominalFoodGainAtTenPercent: 8, maxAge: 110, populationCap: 80,
-  omnivory: Object.freeze({ huntSuccess: 0.70, plantNominalGain: 0.5 }),
+  // Phase 2.1 evaluation point: the long-term coexistence target is still unmet.
+  // See docs/red-fox-food-web.md before adopting this branch as a release default.
+  omnivory: Object.freeze({ huntSuccess: 0.70, plantNominalGain: 0.5, rabbitPreference: 0.67 }),
 });
+
+// Preference applies only when both local sources are available, and is not a
+// measured diet percentage. Single-source decisions consume no choice RNG.
+export function chooseFoxFoodSource(
+  rabbitAvailable: boolean, plantAvailable: boolean, rabbitPreference: number, random: () => number,
+): 'rabbit' | 'vegetation' | null {
+  if (rabbitAvailable && plantAvailable) return random() < rabbitPreference ? 'rabbit' : 'vegetation';
+  if (rabbitAvailable) return 'rabbit';
+  return plantAvailable ? 'vegetation' : null;
+}
 // Existing initial-population domain, also used as a per-introduction batch cap.
 // Runtime occupancy is additionally limited by the shared one-animal-per-cell rule.
 export const POPULATION_LIMITS: Readonly<Record<Species, number>> = Object.freeze({
@@ -751,7 +763,20 @@ export class ForestSimulation {
       animal.age += 1; animal.energy -= config.basalEnergyCost;
       const nearby = this.neighbors(animal, config.movement.distance);
       const preyCells = nearby.filter(position => occupied.get(this.positionKey(position))?.species === preySpecies);
-      if (preyCells.length > 0) {
+      // Preserve Phase 2 movement: only move when no rabbit candidate exists,
+      // then inspect the resulting current cell. Never search plants remotely.
+      if (preyCells.length === 0 && this.random.next() < config.movement.probability) {
+        const available = nearby.filter(position => !occupied.has(this.positionKey(position)));
+        if (available.length > 0) {
+          const destination = available[this.random.integer(available.length)];
+          occupied.delete(this.index(animal.x, animal.y));
+          animal.x = destination.x; animal.y = destination.y;
+          occupied.set(this.positionKey(destination), animal);
+        }
+      }
+      const source = chooseFoxFoodSource(preyCells.length > 0, this.forest[this.index(animal.x, animal.y)] > 0,
+        diet.rabbitPreference, () => this.random.next());
+      if (source === 'rabbit') {
         // Match legacy seeded candidate selection, then one probabilistic hunt.
         const destination = preyCells[this.random.integer(preyCells.length)];
         if (this.random.next() < diet.huntSuccess) {
@@ -764,16 +789,7 @@ export class ForestSimulation {
           this.stats.deaths[preySpecies] = (this.stats.deaths[preySpecies] ?? 0) + 1;
         }
         // Failed hunts end feeding: deliberately no plant fallback or second meal.
-      } else {
-        if (this.random.next() < config.movement.probability) {
-          const available = nearby.filter(position => !occupied.has(this.positionKey(position)));
-          if (available.length > 0) {
-            const destination = available[this.random.integer(available.length)];
-            occupied.delete(this.index(animal.x, animal.y));
-            animal.x = destination.x; animal.y = destination.y;
-            occupied.set(this.positionKey(destination), animal);
-          }
-        }
+      } else if (source === 'vegetation') {
         this.eatPlant(animal, diet.plantNominalGain);
       }
       this.tryReproduce(animal, config, occupied, newborns);

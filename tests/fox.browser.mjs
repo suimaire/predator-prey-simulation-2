@@ -54,6 +54,21 @@ try {
   assert.match(await page.locator('#population-chart').getAttribute('title'),/붉은여우 \+4/);
   results.push({scenario:'running Step 500 introduction preserves state, pause and history; food web and graph appear',passed:true});
   await page.locator('#reset-button').click();assert.deepEqual(await read(),initial);
+  // Observe an unmodified trajectory: UI diet is rolling transferred energy,
+  // not the source-choice constant. Record trends without forcing their sign.
+  await introduce('fox');
+  const dietSamples=[];
+  for(let i=0;i<15;i++) {
+    await runSteps(10);
+    const state=await read(), {diet}=await food();
+    dietSamples.push({step:state.snapshot.step,rabbits:state.snapshot.rabbits.length,
+      wolves:state.snapshot.wolves.length,fox:state.snapshot.agents.fox.length,...diet});
+    assert.doesNotMatch(await page.locator('.fox-diet').textContent(),/NaN|undefined/);
+  }
+  assert.ok(dietSamples.some(s=>s.rabbits>0&&s.fox>0&&s.plantEnergy>0));
+  assert.ok(dietSamples.some(s=>s.rabbits>=50&&s.rabbitPercent>50));
+  results.push({scenario:'unforced diet observations with rabbit/fox present and rabbit-dominant energy',passed:true,dietSamples});
+  await page.locator('#reset-button').click();assert.deepEqual(await read(),initial);
   // Use a living ecosystem to exercise all requested competition interventions.
   await introduce('fox');await runSteps(20);
   await remove('rabbit',.5);await runSteps(3);await remove('wolf',.5);await runSteps(3);

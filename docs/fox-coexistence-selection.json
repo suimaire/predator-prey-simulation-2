@@ -1,0 +1,21 @@
+{
+  "status": "default-tuning-blocked",
+  "scope": "Feature-branch evaluation point, not an approved coexistence release default",
+  "selectedBeforeHoldout": true,
+  "baselineCommit": "e476ff83d08168a9f9e2d8d44fb49c73a3ec6c3d",
+  "tuning": { "preference": 0.67, "gain": 0.5 },
+  "stageBDiagnostic": "Energy is often above reproduction threshold; lineages still fail. Compare reproduction probability 0.018 versus 0.020 only, keeping plant gain 0.5 and the three Stage A preferences.",
+  "stageBCandidates": [
+    { "preference": 0.80, "gain": 0.5, "reproduction": 0.020 },
+    { "preference": 0.75, "gain": 0.5, "reproduction": 0.020 },
+    { "preference": 0.67, "gain": 0.5, "reproduction": 0.020 }
+  ],
+  "rationale": [
+    "No Stage A or B candidate reaches the 10–25/50 full-web fox persistence target; do not claim calibration success.",
+    "Keep nominal plant gain 0.5: at maximum efficiency it remains 1.5, below basal cost 1.7. Larger gains lose this analytic buffer-only guarantee.",
+    "Among unchanged-gain Stage A candidates, preference 0.67 improves full-web fox persistence from 1 to 2 and wolf persistence from 2 to 10; rabbit extinction falls from 38 to 37.",
+    "Rabbit+fox fox persistence rises from 27 to 38 and rabbit extinction falls from 9 to 2.",
+    "Reject the secondary reproduction change: it does not improve full-web fox persistence and can increase rabbit extinction.",
+    "Freeze this evaluation point before holdout. A failed holdout cannot be used for another tuning iteration."
+  ]
+}
