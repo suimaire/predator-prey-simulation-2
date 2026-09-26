@@ -1,4 +1,5 @@
 import './simulation.css';
+import { foodWebMarkup } from './foodWebView.ts';
 import { createModeEffects } from './modeEffects.ts';
 import { DialogController } from './dialog.ts';
 import { InterventionSession, groupInterventions, interventionLabel, removalPresetAmount } from './interventions.ts';
@@ -32,7 +33,7 @@ import {
   DEFAULT_PARAMETERS,
   ForestSimulation,
   SPECIES_LABELS,
-  SPECIES_ORDER,
+  RUNTIME_SPECIES,
   speciesConfigs,
   validateParameters,
   type Agent,
@@ -224,6 +225,7 @@ app.innerHTML = `
                 <h2 id="intervention-heading">생태계 개입</h2>
                 <p>현재 생태계에 종을 도입하거나 제거합니다.</p>
                 <div class="intervention-actions">
+                  <button type="button" data-introduce="fox" aria-haspopup="dialog" aria-controls="intervention-dialog">＋ 붉은여우</button>
                   <button type="button" data-introduce="tertiary" aria-haspopup="dialog" aria-controls="intervention-dialog">＋ 3차 소비자</button>
                   <button type="button" data-introduce="quaternary" aria-haspopup="dialog" aria-controls="intervention-dialog">＋ 4차 소비자</button>
                 </div>
@@ -338,7 +340,7 @@ app.innerHTML = `
       <form id="intervention-form">
         <h2 id="intervention-title">생태계 개입</h2>
         <p id="intervention-copy"></p>
-        <label class="intervention-field" for="intervention-species">대상 종<select id="intervention-species">${SPECIES_ORDER.map((species) => `<option value="${species}">${SPECIES_LABELS[species]}</option>`).join('')}</select></label>
+        <label class="intervention-field" for="intervention-species">대상 종<select id="intervention-species">${RUNTIME_SPECIES.map((species) => `<option value="${species}">${SPECIES_LABELS[species]}</option>`).join('')}</select></label>
         <span class="intervention-field" id="introduction-field"><label for="introduction-amount">도입 개체 수</label>
           <span class="amount-control"><button type="button" id="decrease-introduction" aria-label="도입 개체 수 줄이기">−</button><input id="introduction-amount" type="number" min="1" step="1" value="1" required aria-describedby="introduction-limit"><button type="button" id="increase-introduction" aria-label="도입 개체 수 늘리기">＋</button></span>
         </span>
@@ -461,12 +463,12 @@ const removalFeedback = new Map<Species, RemovalFeedback>();
 const populationFeedbackUntil = new Map<Species, number>();
 let lastPopulationStep = -1;
 let removalNeedsRedraw = false;
-const visibleSeries = new Set<ChartSeries>(['forest', 'rabbit', 'wolf', 'tertiary', 'quaternary']);
+const visibleSeries = new Set<ChartSeries>(['forest', 'rabbit', 'wolf', 'tertiary', 'quaternary', 'fox']);
 
-const speciesClass: Record<Species, string> = { rabbit: 'rabbit', wolf: 'wolf', tertiary: 'tertiary', quaternary: 'quaternary' };
+const speciesClass: Record<Species, string> = { rabbit: 'rabbit', wolf: 'wolf', fox: 'fox', tertiary: 'tertiary', quaternary: 'quaternary' };
 
 function allActiveAgents(snapshot: SimulationSnapshot): Agent[] {
-  return simulation.getActiveSpecies().flatMap((species) => [...snapshot.agents[species]]);
+  return simulation.getActiveSpecies().flatMap((species) => [...(snapshot.agents[species] ?? [])]);
 }
 
 function drawRabbit(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, simple = false): void {
@@ -513,8 +515,19 @@ function drawQuaternary(ctx: CanvasRenderingContext2D, x: number, y: number, siz
 function drawSpecies(ctx: CanvasRenderingContext2D, species: Species, x: number, y: number, size: number, simple = false): void {
   if (species === 'rabbit') drawRabbit(ctx, x, y, size * 0.75, simple);
   else if (species === 'wolf') drawWolf(ctx, x, y, size * 0.88, simple);
+  else if (species === 'fox') drawFox(ctx, x, y, size * 0.9);
   else if (species === 'tertiary') drawTertiary(ctx, x, y, size, simple);
   else drawQuaternary(ctx, x, y, size * 1.06, simple);
+}
+
+function drawFox(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  ctx.save(); ctx.translate(x, y); ctx.scale(size, size);
+  ctx.lineWidth = 0.06; ctx.lineJoin = 'round'; ctx.strokeStyle = '#542713'; ctx.fillStyle = SERIES_COLORS.fox;
+  ctx.beginPath(); ctx.moveTo(-.45, -.05); ctx.lineTo(-.36, -.44); ctx.lineTo(-.1, -.25); ctx.lineTo(.1, -.25); ctx.lineTo(.36, -.44); ctx.lineTo(.45, -.05); ctx.lineTo(0, .38); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#fff1d5'; ctx.beginPath(); ctx.moveTo(-.39, -.02); ctx.lineTo(0, .1); ctx.lineTo(.39, -.02); ctx.lineTo(0, .34); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#251710';
+  for (const [cx, cy] of [[-.19, -.07], [.19, -.07], [0, .23]]) { ctx.beginPath(); ctx.arc(cx, cy, .045, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
 }
 
 function initializeIconCanvases(): void {
@@ -553,7 +566,7 @@ function drawBoard(snapshot: SimulationSnapshot, now = performance.now()): void 
   const displayedCellSize = board.clientWidth > 0 ? board.clientWidth / snapshot.width : cellSize;
   const simple = displayedCellSize < 16;
   for (const species of simulation.getActiveSpecies()) {
-    for (const agent of snapshot.agents[species]) drawSpecies(ctx, species, (agent.x + 0.5) * cellSize, (agent.y + 0.54) * cellSize, cellSize, simple);
+    for (const agent of snapshot.agents[species] ?? []) drawSpecies(ctx, species, (agent.x + 0.5) * cellSize, (agent.y + 0.54) * cellSize, cellSize, simple);
   }
   for (const feedback of removalFeedback.values()) {
     const emphasis = removalEmphasis(feedback, now, reducedMotion.matches);
@@ -753,6 +766,11 @@ function updateControlAvailability(): void {
 }
 
 function updateStructuralUi(): void {
+  const speciesSelect = element<HTMLSelectElement>('#intervention-species');
+  if (speciesSelect.dataset.mode !== appMode) {
+    speciesSelect.innerHTML = RUNTIME_SPECIES.filter(species => appMode === 'free' || species !== 'fox').map(species => `<option value="${species}">${SPECIES_LABELS[species]}</option>`).join('');
+    speciesSelect.dataset.mode = appMode;
+  }
   const active = simulation.getActiveSpecies();
   shell.classList.toggle('apex-mode', appMode === 'apex');
   modeEffects.sync(appMode);
@@ -788,7 +806,7 @@ function renderPopulationStrip(snapshot: SimulationSnapshot): void {
   const now = performance.now();
   for (const species of simulation.getActiveSpecies()) {
     const item = element<HTMLElement>(`[data-population="${species}"]`);
-    const current = snapshot.agents[species].length;
+    const current = (snapshot.agents[species]?.length ?? 0);
     const change = populationChange(current, species, comparison);
     const removed = snapshot.removedSpecies.includes(species);
     const feedback = removalFeedback.get(species);
@@ -832,16 +850,28 @@ function pyramidWidth(value: number, maximum: number): number {
 function renderPyramid(snapshot: SimulationSnapshot): void {
   const metric = simulation.getHistory().at(-1);
   const pyramid = element('#pyramid');
+  const foodWeb = appMode === 'free' && simulation.getActiveSpecies().includes('fox');
+  element('.learning-card li').innerHTML = foodWeb
+    ? '기존 먹이사슬에 <b>붉은여우의 두 먹이 연결</b>을 더한 단순한 먹이그물입니다. 실제 식단 전체를 재현하지 않습니다.'
+    : '학습을 위해 먹이 관계를 <b>직선형 먹이사슬</b>로 단순화했습니다. 실제 생태계는 대부분 먹이그물입니다.';
+  element('.rule-content li:nth-child(3)').innerHTML = foodWeb
+    ? '<b>늑대·붉은여우 행동</b><span>살아 있는 여우가 있으면 매 step 순서를 추첨합니다. 여우는 토끼 사냥을 우선하며, 후보가 없을 때만 식물성 먹이를 이용합니다.</span>'
+    : '<b>늑대 행동</b><span>토끼 탐색·사냥·번식·사망</span>';
+  const title = foodWeb ? '실시간 영양 구조' : '실시간 생태 피라미드';
+  element('.pyramid-toolbar h2').textContent = title;
+  element('.pyramid-card').setAttribute('aria-label', title);
+  element('.pyramid-toolbar [role=group]').setAttribute('aria-label', foodWeb ? '영양 구조 표현 방식' : '피라미드 표현 방식');
+  pyramid.classList.toggle('food-web', foodWeb);
   if (pyramidMode === 'numbers') {
     const levels = [
       { id: 'vegetation', label: '식생', value: metric?.forestAbundance ?? 0, unit: '성장 단계 합', color: '#2f7b4c' },
-      ...simulation.getActiveSpecies().map((species) => ({ id: species, label: SPECIES_LABELS[species], value: snapshot.agents[species].length, unit: '개체', color: SERIES_COLORS[species] })),
+      ...simulation.getActiveSpecies().filter(species => species !== 'fox').map((species) => ({ id: species, label: SPECIES_LABELS[species], value: (snapshot.agents[species]?.length ?? 0), unit: '개체', color: SERIES_COLORS[species] })),
     ].reverse();
     const maximum = Math.max(...levels.map((level) => level.value), 1);
     pyramid.innerHTML = levels.map((level) => `<div class="pyramid-level" title="${level.label}: ${level.value.toLocaleString()} ${level.unit}"><div style="width:${pyramidWidth(level.value, maximum)}%;--level:${level.color}"><span>${level.label}</span><b>${level.value.toLocaleString()}</b><small>${level.unit}</small></div></div>`).join('');
     element('#pyramid-note').textContent = '식생 = 성장 단계 합 · 막대 폭 = 제곱근 척도';
   } else {
-    const flows = [...simulation.getEnergyFlow(20)].reverse();
+    const flows = simulation.getEnergyFlow(20).filter(flow => flow.target !== 'fox').reverse();
     const maximum = Math.max(...flows.map((flow) => flow.rate), 1);
     pyramid.innerHTML = flows.map((flow) => {
       const source = flow.source === 'vegetation' ? '식생' : SPECIES_LABELS[flow.source];
@@ -850,20 +880,24 @@ function renderPyramid(snapshot: SimulationSnapshot): void {
     }).join('');
     element('#pyramid-note').textContent = '최근 20 step 실제 전달량 / 경과 step · 모델 에너지/step · 폭 = 제곱근 척도';
   }
+  if (foodWeb) {
+    pyramid.innerHTML = foodWebMarkup(snapshot, simulation.getFoxDiet(), simulation.getEnergyFlow(20), pyramidMode, pyramid.innerHTML);
+    element('#pyramid-note').textContent = '잡식종은 먹이에 따라 둘 이상의 영양 위치에 참여할 수 있습니다.';
+  }
   const observedParameters = simulation.getParameters();
-  element('#chain-summary').textContent = `활성 영양 단계 ${simulation.getActiveSpecies().length + 1} · 전달 효율 ${Math.round(observedParameters.transferEfficiency * 100)}%`;
+  element('#chain-summary').textContent = `${foodWeb ? '먹이그물 · 잡식종 포함' : `활성 영양 단계 ${simulation.getActiveSpecies().length + 1}`} · 전달 효율 ${Math.round(observedParameters.transferEfficiency * 100)}%`;
 }
 
 function renderStats(snapshot: SimulationSnapshot): void {
   const stats = snapshot.stats;
-  const totalBirths = simulation.getActiveSpecies().reduce((sum, species) => sum + stats.births[species], 0);
-  const totalDeaths = simulation.getActiveSpecies().reduce((sum, species) => sum + stats.deaths[species], 0);
-  const totalHunts = simulation.getActiveSpecies().slice(1).reduce((sum, species) => sum + stats.feedingEvents[species], 0);
+  const totalBirths = simulation.getActiveSpecies().reduce((sum, species) => sum + (stats.births[species] ?? 0), 0);
+  const totalDeaths = simulation.getActiveSpecies().reduce((sum, species) => sum + (stats.deaths[species] ?? 0), 0);
+  const totalHunts = simulation.getActiveSpecies().slice(1).reduce((sum, species) => sum + (stats.feedingEvents[species] ?? 0), 0) - (stats.foxPlantEaten ?? 0);
   element('#stat-grid').innerHTML = `
     <div><span>전체 출생</span><strong>${totalBirths}</strong></div>
     <div><span>전체 자연사·피식</span><strong>${totalDeaths}</strong></div>
     <div><span>동물 사냥 성공</span><strong>${totalHunts}</strong></div>
-    <div><span>토끼가 먹은 식생</span><strong>${stats.forestEaten} 단계</strong></div>
+    <div><span>${simulation.getActiveSpecies().includes('fox') ? '동물이 먹은 식생' : '토끼가 먹은 식생'}</span><strong>${stats.forestEaten} 단계</strong></div>
     <div><span>기록된 생태계 개입</span><strong>${snapshot.interventions.length}</strong></div>`;
 }
 
@@ -1092,7 +1126,7 @@ function updateInterventionDialog(): void {
   element('#introduction-limit').textContent = limit === 0 ? '도입할 빈 칸이 없습니다.' : `한 번에 1–${limit}마리 도입 가능 · 빈 칸에 배치`;
   element<HTMLButtonElement>('#decrease-introduction').disabled = !Number.isInteger(amount) || amount <= 1;
   element<HTMLButtonElement>('#increase-introduction').disabled = !Number.isInteger(amount) || amount >= limit;
-  const count = simulation.getSnapshot().agents[species].length;
+  const count = (simulation.getSnapshot().agents[species]?.length ?? 0);
   const removalInput = element<HTMLInputElement>('#removal-amount');
   const removalAmount = removalInput.valueAsNumber;
   const validRemoval = Number.isInteger(removalAmount) && removalAmount >= 1 && removalAmount <= count;
@@ -1120,7 +1154,7 @@ function updateInterventionDialog(): void {
   element('#intervention-title').textContent = `${SPECIES_LABELS[species]} ${introducing ? '도입' : '개체 제거'}`;
   element('#intervention-copy').textContent = introducing ? '현재 생태계에 새 개체를 넣습니다. 확인 후에는 일시정지를 유지합니다.' : '현재 개체군에서 무작위로 실험적 제거를 합니다. 확인 후에는 일시정지를 유지합니다.';
   const prey = speciesConfigs(simulation.getParameters())[species].preyType;
-  const noPrey = introducing && prey !== 'vegetation' && simulation.getSnapshot().agents[prey].length === 0;
+  const noPrey = introducing && prey !== 'vegetation' && (simulation.getSnapshot().agents[prey]?.length ?? 0) === 0;
   element('#intervention-warning').textContent = noPrey ? `현재 주요 먹이인 ${SPECIES_LABELS[prey as Species]}가 없습니다. 도입 후 먹이 부족의 영향을 받을 수 있습니다.` : '';
   const confirm = element<HTMLButtonElement>('#confirm-intervention');
   confirm.textContent = introducing ? `${Number.isInteger(amount) && amount > 0 ? amount : ''}마리 도입`
@@ -1131,8 +1165,8 @@ function updateInterventionDialog(): void {
 
 function resetInterventionAmount(): void {
   const species = element<HTMLSelectElement>('#intervention-species').value as Species;
-  element<HTMLInputElement>('#introduction-amount').value = '1';
-  element<HTMLInputElement>('#removal-amount').value = String(removalPresetAmount(simulation.getSnapshot().agents[species].length, .1));
+  element<HTMLInputElement>('#introduction-amount').value = species === 'fox' ? '4' : '1';
+  element<HTMLInputElement>('#removal-amount').value = String(removalPresetAmount((simulation.getSnapshot().agents[species]?.length ?? 0), .1));
   element('#intervention-error').textContent = '';
   updateInterventionDialog();
 }
@@ -1243,7 +1277,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-pyramid-mode]').forEach((but
 document.querySelectorAll<HTMLButtonElement>('[data-introduce]').forEach((button) => button.addEventListener('click', () => openInterventionDialog('introduce', button.dataset.introduce as Species, button)));
 element('#open-introduction').addEventListener('click', (event) => openInterventionDialog('introduce', 'rabbit', event.currentTarget as HTMLElement));
 element('#open-removal').addEventListener('click', (event) => {
-  const species = simulation.getActiveSpecies().find((item) => simulation.getSnapshot().agents[item].length > 0) ?? 'rabbit';
+  const species = simulation.getActiveSpecies().find((item) => (simulation.getSnapshot().agents[item]?.length ?? 0) > 0) ?? 'rabbit';
   openInterventionDialog('remove', species, event.currentTarget as HTMLElement);
 });
 element('#intervention-species').addEventListener('change', resetInterventionAmount);
@@ -1261,7 +1295,7 @@ for (const [id, delta] of [['decrease-removal', -1], ['increase-removal', 1]] as
 }
 document.querySelectorAll<HTMLButtonElement>('[data-removal-fraction]').forEach(button => button.addEventListener('click', () => {
   const species = element<HTMLSelectElement>('#intervention-species').value as Species;
-  element<HTMLInputElement>('#removal-amount').value = String(removalPresetAmount(simulation.getSnapshot().agents[species].length, Number(button.dataset.removalFraction)));
+  element<HTMLInputElement>('#removal-amount').value = String(removalPresetAmount((simulation.getSnapshot().agents[species]?.length ?? 0), Number(button.dataset.removalFraction)));
   updateInterventionDialog();
 }));
 element('#introduction-amount').addEventListener('input', updateInterventionDialog);

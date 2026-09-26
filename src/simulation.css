@@ -791,3 +791,22 @@ dialog::backdrop { background: rgba(10,29,18,.5); backdrop-filter: none; }
   .initial-ecosystem { min-height: 475px; }
   .parameters-dialog .parameter-scroll { overflow: visible; }
 }
+.hud-readings:has([data-population="fox"]) { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); }
+.mini-population.fox { color: #913a1b; }
+.food-web-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; align-items: center; }
+.food-web-chain { display: grid; gap: 4px; min-width: 0; }
+.food-web-chain .pyramid-level > div { min-width: min(100%,105px); }
+.food-web-chain .pyramid-level span { white-space: normal; }
+.fox-card { padding: 9px; border: 1px solid #e8c1a9; border-radius: 9px; background: #fff8f0; color: #663d2b; min-width: 0; }
+.fox-card-heading { display: flex; gap: 6px; justify-content: space-between; align-items: start; flex-wrap: wrap; font-size: 13px; font-weight: 750; }
+.fox-card-heading small { display: block; font-size: 10px; font-weight: 500; }
+.fox-card-heading strong { color: #913a1b; font-size: 21px; line-height: 1.1; }
+.fox-card p, .fox-diet h3 { margin: 6px 0; font-size: 11px; line-height: 1.5; }
+.fox-diet { border-top: 1px solid #eddbcd; margin-top: 7px; padding-top: 3px; }
+.fox-diet-shares { display: grid; gap: 4px; margin: 5px 0 0; font-size: 12px; }
+.fox-diet-shares > div { display: flex; justify-content: space-between; gap: 5px; }
+.fox-diet-shares dd { margin: 0; font-weight: 750; }
+.fox-energy small { font-size: 10px; }
+.food-web-edges { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 0 2px; }
+.food-web-edges span { background: #e8efe7; border-radius: 4px; padding: 3px 6px; color: #36573e; font-size: 10px; }
+.fox-proxy-help { margin: 4px 0; color: #526a58; font-size: 11px; line-height: 1.6; }

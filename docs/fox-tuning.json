@@ -1,0 +1,110 @@
+{
+  "seeds": "FOX-CAL-001 through FOX-CAL-030",
+  "steps": 600,
+  "scenario": "full-web",
+  "startingValues": {
+    "basalEnergyCost": 1.7,
+    "nominalFoodGainAtTenPercent": 8,
+    "plantNominalGain": 0.5,
+    "huntSuccess": 0.65
+  },
+  "initial": {
+    "seeds": 30,
+    "foxSurvive": 0,
+    "rabbitExtinct": 23,
+    "wolfExtinct": 25,
+    "earlyFoxExtinct20": 0,
+    "earlyRabbitExtinct20": 0,
+    "earlyWolfExtinct20": 0,
+    "foxSurvive100": 30,
+    "capHits": 0,
+    "maxPeakFox": 33,
+    "meanBirths": 15.133333333333333,
+    "medianSurvival": 154,
+    "meanPlantShare": 12.384032433851223,
+    "medianPlantShare": 11.955980043643745,
+    "meanForestPercent": 67.30399925595239
+  },
+  "candidates": [
+    {
+      "tuning": {
+        "omnivory": {
+          "huntSuccess": 0.7
+        }
+      },
+      "summary": {
+        "seeds": 30,
+        "foxSurvive": 1,
+        "rabbitExtinct": 23,
+        "wolfExtinct": 29,
+        "earlyFoxExtinct20": 0,
+        "earlyRabbitExtinct20": 0,
+        "earlyWolfExtinct20": 0,
+        "foxSurvive100": 30,
+        "capHits": 0,
+        "maxPeakFox": 32,
+        "meanBirths": 13.7,
+        "medianSurvival": 148.5,
+        "meanPlantShare": 13.38616320967201,
+        "medianPlantShare": 13.684449971926231,
+        "meanForestPercent": 72.06519097222225
+      }
+    },
+    {
+      "tuning": {
+        "basalEnergyCost": 1.6,
+        "nominalFoodGainAtTenPercent": 9,
+        "omnivory": {
+          "huntSuccess": 0.7
+        }
+      },
+      "summary": {
+        "seeds": 30,
+        "foxSurvive": 4,
+        "rabbitExtinct": 26,
+        "wolfExtinct": 29,
+        "earlyFoxExtinct20": 0,
+        "earlyRabbitExtinct20": 0,
+        "earlyWolfExtinct20": 0,
+        "foxSurvive100": 30,
+        "capHits": 0,
+        "maxPeakFox": 44,
+        "meanBirths": 24.7,
+        "medianSurvival": 173,
+        "meanPlantShare": 13.300125882335056,
+        "medianPlantShare": 12.90144643993428,
+        "meanForestPercent": 71.63876074735451
+      }
+    },
+    {
+      "tuning": {
+        "basalEnergyCost": 1.6,
+        "nominalFoodGainAtTenPercent": 9,
+        "omnivory": {
+          "huntSuccess": 0.6
+        }
+      },
+      "summary": {
+        "seeds": 30,
+        "foxSurvive": 1,
+        "rabbitExtinct": 26,
+        "wolfExtinct": 29,
+        "earlyFoxExtinct20": 0,
+        "earlyRabbitExtinct20": 0,
+        "earlyWolfExtinct20": 0,
+        "foxSurvive100": 30,
+        "capHits": 0,
+        "maxPeakFox": 27,
+        "meanBirths": 17.866666666666667,
+        "medianSurvival": 158.5,
+        "meanPlantShare": 13.234540644909686,
+        "medianPlantShare": 13.522414459154444,
+        "meanForestPercent": 75.51383721891537
+      }
+    }
+  ],
+  "selected": {
+    "huntSuccess": 0.7,
+    "reason": "Only hunt probability changes; no early crash or cap saturation. Avoid extra gains/cost changes that increased rabbit extinction."
+  }
+}

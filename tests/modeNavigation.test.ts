@@ -6,7 +6,7 @@ import ts from 'typescript';
 import { BOARD_TAB_MARKUP } from '../src/leaderboardView.ts';
 import { SERIES_COLORS } from '../src/charts.ts';
 import { APEX_CHALLENGE_CONFIG, ApexChallengeSession, apexParameters } from '../src/challenge.ts';
-import { SPECIES_ORDER, DEFAULT_PARAMETERS, ForestSimulation, SPECIES_LABELS, activeSpecies, validateParameters } from '../src/model.ts';
+import { RUNTIME_SPECIES, DEFAULT_PARAMETERS, ForestSimulation, SPECIES_LABELS, activeSpecies, validateParameters } from '../src/model.ts';
 
 // Reuse the project's node:test/VM boundary to exercise the actual template and
 // click listeners. Geometry and native keyboard focus are checked in the browser.
@@ -43,7 +43,7 @@ function setup() {
   };
   const parameters = { ...DEFAULT_PARAMETERS, seed: 'navigation-test', initialRabbits: 72 };
   const context = vm.createContext({
-    SPECIES_ORDER, DEFAULT_PARAMETERS, APEX_CHALLENGE_CONFIG, BOARD_TAB_MARKUP, BOARD_GROUPS: [],
+    RUNTIME_SPECIES, DEFAULT_PARAMETERS, APEX_CHALLENGE_CONFIG, BOARD_TAB_MARKUP, BOARD_GROUPS: [],
     ForestSimulation, SPECIES_LABELS, SERIES_COLORS, activeSpecies, apexParameters, validateParameters,
     app: { innerHTML: '' }, initialFreeParameters: parameters, parameters, appMode: 'free',
     freeParameters: parameters, apexDesignParameters: apexParameters(parameters), hasApexDesign: false,

@@ -3,11 +3,11 @@ import {
   type FoodChainDepth,
   type PopulationMetric,
   type SimulationParameters,
-  type Species,
+  type CoreSpecies,
 } from './model.ts';
 
 export type ChallengePhase = 'setup' | 'active' | 'over';
-export type RequiredTrophicLevel = 'vegetation' | Species;
+export type RequiredTrophicLevel = 'vegetation' | CoreSpecies;
 
 export interface ChallengeDefinition {
   id: string;

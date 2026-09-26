@@ -12,7 +12,7 @@ export function populationComparison(history: readonly PopulationMetric[]): Popu
 
 export function populationChange(current: number, species: Species, comparison: PopulationMetric | undefined) {
   const previous = species === 'rabbit' ? comparison?.rabbits : species === 'wolf' ? comparison?.wolves
-    : species === 'tertiary' ? comparison?.tertiary : comparison?.quaternary;
+    : species === 'fox' ? comparison?.fox ?? 0 : species === 'tertiary' ? comparison?.tertiary : comparison?.quaternary;
   const delta = current - (previous ?? current);
   return { previous: previous ?? current, delta, text: delta === 0 ? '순변화 0' : `${delta > 0 ? '+' : ''}${delta}` };
 }
@@ -32,7 +32,7 @@ export const PERSONAL_BEST_FEEDBACK_MS = 1200;
 
 // Retain the pre-action count, but only highlight individuals actually removed.
 export function captureRemovalFeedback(snapshot: SimulationSnapshot, species: Species, startedAt: number, survivors: readonly Agent[] = []): RemovalFeedback {
-  const agents = snapshot.agents[species];
+  const agents = snapshot.agents[species] ?? [];
   const remainingIds = new Set(survivors.map(agent => agent.id));
   return { species, step: snapshot.step, count: agents.length, positions: agents.filter(agent => !remainingIds.has(agent.id)).map(({ x, y }) => ({ x, y })), startedAt };
 }

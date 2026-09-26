@@ -1,4 +1,6 @@
-export type Species = 'rabbit' | 'wolf' | 'tertiary' | 'quaternary';
+export type CoreSpecies = 'rabbit' | 'wolf' | 'tertiary' | 'quaternary';
+export type Species = CoreSpecies | 'fox';
+export type SpeciesRecord<T> = Record<CoreSpecies, T> & { fox?: T };
 export type ConsumerSpecies = Species;
 export type FoodSource = 'vegetation' | Species;
 export type FoodChainDepth = 2 | 3 | 4;
@@ -58,7 +60,7 @@ export interface SimulationParameters {
 export interface SpeciesConfig {
   id: Species;
   label: string;
-  trophicLevel: 1 | 2 | 3 | 4;
+  trophicLevel: 1 | 2 | 3 | 4 | null;
   preyType: FoodSource;
   initialPopulation: number;
   movement: { probability: number; distance: number };
@@ -67,13 +69,16 @@ export interface SpeciesConfig {
   reproductionProbability: number;
   nominalFoodGainAtTenPercent: number;
   maxAge: number;
+  omnivory?: { huntSuccess: number; plantNominalGain: number };
+  populationCap?: number;
 }
 
 export interface CumulativeStats {
-  births: Record<Species, number>;
-  deaths: Record<Species, number>;
-  feedingEvents: Record<Species, number>;
+  births: SpeciesRecord<number>;
+  deaths: SpeciesRecord<number>;
+  feedingEvents: SpeciesRecord<number>;
   forestEaten: number;
+  foxPlantEaten?: number;
 }
 
 export interface PopulationMetric {
@@ -82,6 +87,7 @@ export interface PopulationMetric {
   wolves: number;
   tertiary: number;
   quaternary: number;
+  fox?: number;
   forestPercent: number;
   forestAbundance: number;
 }
@@ -108,7 +114,7 @@ export interface SimulationSnapshot {
   height: number;
   maxForestStage: number;
   forest: Uint8Array;
-  agents: Readonly<Record<Species, readonly Agent[]>>;
+  agents: Readonly<SpeciesRecord<readonly Agent[]>>;
   rabbits: readonly Agent[];
   wolves: readonly Agent[];
   tertiary: readonly Agent[];
@@ -119,15 +125,32 @@ export interface SimulationSnapshot {
   interventions: readonly Intervention[];
 }
 
-export const SPECIES_ORDER: readonly Species[] = ['rabbit', 'wolf', 'tertiary', 'quaternary'];
+export const CORE_CHAIN_ORDER: readonly CoreSpecies[] = ['rabbit', 'wolf', 'tertiary', 'quaternary'];
+// Compatibility name: depth always describes the original linear chain.
+export const SPECIES_ORDER = CORE_CHAIN_ORDER;
+export const RUNTIME_SPECIES: readonly Species[] = ['rabbit', 'wolf', 'fox', 'tertiary', 'quaternary'];
+export const FOOD_SOURCES: Readonly<Record<Species, readonly FoodSource[]>> = Object.freeze({
+  rabbit: ['vegetation'], wolf: ['rabbit'], fox: ['rabbit', 'vegetation'],
+  tertiary: ['wolf'], quaternary: ['tertiary'],
+});
+// Dimensionless educational tuning values, not measured red-fox physiology.
+// Vegetation stands in for plant-derived food such as berries, not grazing grass.
+export const FOX_CONFIG: Readonly<SpeciesConfig> = Object.freeze({
+  id: 'fox', label: '붉은여우', trophicLevel: null, preyType: 'rabbit', initialPopulation: 0,
+  movement: Object.freeze({ probability: 0.94, distance: 1 }),
+  basalEnergyCost: 1.7, reproductionThreshold: 24, reproductionProbability: 0.018,
+  nominalFoodGainAtTenPercent: 8, maxAge: 110, populationCap: 80,
+  omnivory: Object.freeze({ huntSuccess: 0.70, plantNominalGain: 0.5 }),
+});
 // Existing initial-population domain, also used as a per-introduction batch cap.
 // Runtime occupancy is additionally limited by the shared one-animal-per-cell rule.
 export const POPULATION_LIMITS: Readonly<Record<Species, number>> = Object.freeze({
-  rabbit: 400, wolf: 160, tertiary: 40, quaternary: 20,
+  rabbit: 400, wolf: 160, tertiary: 40, quaternary: 20, fox: 80,
 });
 export const SPECIES_LABELS: Readonly<Record<Species, string>> = Object.freeze({
   rabbit: '토끼',
   wolf: '늑대',
+  fox: '붉은여우',
   tertiary: '3차 소비자',
   quaternary: '4차 소비자',
 });
@@ -234,12 +257,13 @@ export function validateParameters(input: SimulationParameters): SimulationParam
   };
 }
 
-export function activeSpecies(depth: FoodChainDepth): Species[] {
+export function activeSpecies(depth: FoodChainDepth): CoreSpecies[] {
   return SPECIES_ORDER.slice(0, depth);
 }
 
 export function speciesConfigs(parameters: SimulationParameters): Readonly<Record<Species, SpeciesConfig>> {
   return {
+    fox: FOX_CONFIG,
     rabbit: {
       id: 'rabbit', label: SPECIES_LABELS.rabbit, trophicLevel: 1, preyType: 'vegetation',
       initialPopulation: parameters.initialRabbits,
@@ -329,7 +353,7 @@ class SeededRandom {
 interface Position { x: number; y: number }
 interface FeedingEvent { step: number; source: FoodSource; target: Species; energy: number }
 
-function emptySpeciesRecord(): Record<Species, number> {
+function emptySpeciesRecord(): SpeciesRecord<number> {
   return { rabbit: 0, wolf: 0, tertiary: 0, quaternary: 0 };
 }
 
@@ -337,7 +361,7 @@ function emptyStats(): CumulativeStats {
   return { births: emptySpeciesRecord(), deaths: emptySpeciesRecord(), feedingEvents: emptySpeciesRecord(), forestEaten: 0 };
 }
 
-function emptyAgents(): Record<Species, Agent[]> {
+function emptyAgents(): SpeciesRecord<Agent[]> {
   return { rabbit: [], wolf: [], tertiary: [], quaternary: [] };
 }
 
@@ -346,7 +370,7 @@ export class ForestSimulation {
   private configs: Readonly<Record<Species, SpeciesConfig>>;
   private random: SeededRandom;
   private forest: Uint8Array = new Uint8Array();
-  private agents: Record<Species, Agent[]> = emptyAgents();
+  private agents: SpeciesRecord<Agent[]> = emptyAgents();
   private width = 0;
   private height = 0;
   private stepNumber = 0;
@@ -357,6 +381,9 @@ export class ForestSimulation {
   private runtimeSpecies = new Set<Species>();
   private interventions: Intervention[] = [];
   private feedingLog: FeedingEvent[] = [];
+  // Per-step aggregates keep complete fox diet energy even if the legacy event
+  // log reaches its cap. At most 480 records; no unbounded event history.
+  private foxFoodWindow = new Map<number, { rabbit: number; vegetation: number; rabbitCount: number; vegetationCount: number }>();
 
   constructor(parameters: SimulationParameters = { ...DEFAULT_PARAMETERS }) {
     this.parameters = validateParameters(parameters);
@@ -381,6 +408,7 @@ export class ForestSimulation {
     this.runtimeSpecies = new Set(activeSpecies(this.parameters.foodChainDepth));
     this.interventions = [];
     this.feedingLog = [];
+    this.foxFoodWindow.clear();
     this.initializeForest();
     this.initializeAgents();
     this.recordMetric();
@@ -389,7 +417,7 @@ export class ForestSimulation {
   getParameters(): SimulationParameters { return { ...this.parameters }; }
   getHistory(): readonly PopulationMetric[] { return this.history; }
   getInterventions(): readonly Intervention[] { return this.interventions; }
-  getActiveSpecies(): Species[] { return SPECIES_ORDER.filter((species) => this.runtimeSpecies.has(species)); }
+  getActiveSpecies(): Species[] { return RUNTIME_SPECIES.filter((species) => this.runtimeSpecies.has(species)); }
 
   getSnapshot(): SimulationSnapshot {
     return {
@@ -412,15 +440,29 @@ export class ForestSimulation {
   step(): PopulationMetric {
     this.growForest();
     if (!this.removed.has('rabbit')) this.processRabbits();
-    for (const species of this.getActiveSpecies().slice(1)) {
-      if (!this.removed.has(species)) this.processPredator(species);
+    // Absolutely no additional RNG draw without a living fox. Core predators
+    // retain their Phase 1.1 algorithm and ordering relative to higher consumers.
+    const predators: Species[] = this.getActiveSpecies().filter(species => species !== 'rabbit' && species !== 'fox');
+    if ((this.agents.fox?.length ?? 0) > 0) {
+      const wolfIndex = predators.indexOf('wolf');
+      predators.splice(wolfIndex < 0 ? 0 : wolfIndex + (this.random.next() < 0.5 ? 0 : 1), 0, 'fox');
+    }
+    for (const species of predators) {
+      if (!this.removed.has(species)) {
+        if (this.configs[species].omnivory) this.processOmnivore(species);
+        else this.processPredator(species);
+      }
     }
     this.stepNumber += 1;
+    for (const step of this.foxFoodWindow.keys()) {
+      if (step <= this.stepNumber - HISTORY_LIMIT) this.foxFoodWindow.delete(step);
+      else break;
+    }
     return this.recordMetric();
   }
 
-  removeSpecies(species: Species, amount = this.agents[species].length): boolean {
-    const agents = this.agents[species];
+  removeSpecies(species: Species, amount = this.agents[species]?.length ?? 0): boolean {
+    const agents = this.agents[species] ?? [];
     // Invalid actions are atomic, including the RNG and event/history state.
     if (!Number.isInteger(amount) || amount < 1 || amount > agents.length) return false;
     if (amount === agents.length) {
@@ -439,14 +481,15 @@ export class ForestSimulation {
       // Keep survivor objects and their order intact; they continue acting normally.
       this.agents[species] = agents.filter((_, index) => !selected.has(index));
     }
-    this.interventions.push({ kind: 'remove', step: this.stepNumber, species, amount, resultingCount: this.agents[species].length });
+    this.interventions.push({ kind: 'remove', step: this.stepNumber, species, amount, resultingCount: this.agents[species]!.length });
     this.recordMetric(true);
     return true;
   }
 
   getIntroductionLimit(species: Species): number {
-    const occupied = SPECIES_ORDER.reduce((count, item) => count + this.agents[item].length, 0);
-    return Math.min(POPULATION_LIMITS[species], this.width * this.height - occupied);
+    const occupied = RUNTIME_SPECIES.reduce((count, item) => count + (this.agents[item]?.length ?? 0), 0);
+    const capRoom = (this.configs[species].populationCap ?? Infinity) - (this.agents[species]?.length ?? 0);
+    return Math.max(0, Math.min(POPULATION_LIMITS[species], capRoom, this.width * this.height - occupied));
   }
 
   introduceSpecies(species: Species, amount: number): boolean {
@@ -455,10 +498,14 @@ export class ForestSimulation {
     const occupied = this.occupiedMap();
     const positions = this.availablePositions(occupied);
     this.random.shuffle(positions);
+    if (!this.agents[species]) {
+      this.agents[species] = [];
+      this.stats.births[species] = 0; this.stats.deaths[species] = 0; this.stats.feedingEvents[species] = 0;
+    }
     this.populateSpecies(species, amount, positions);
     this.runtimeSpecies.add(species);
     this.removed.delete(species);
-    this.interventions.push({ kind: 'introduce', step: this.stepNumber, species, amount, resultingCount: this.agents[species].length });
+    this.interventions.push({ kind: 'introduce', step: this.stepNumber, species, amount, resultingCount: this.agents[species]!.length });
     this.recordMetric(true);
     return true;
   }
@@ -469,13 +516,21 @@ export class ForestSimulation {
     const elapsed = Math.max(1, Math.min(safeWindow, this.stepNumber || 1));
     const totals = new Map<string, { source: FoodSource; target: Species; energy: number; count: number }>();
     for (const species of this.getActiveSpecies()) {
-      const config = this.configs[species];
-      totals.set(`${config.preyType}:${species}`, { source: config.preyType, target: species, energy: 0, count: 0 });
+      for (const source of FOOD_SOURCES[species]) {
+        totals.set(`${source}:${species}`, { source, target: species, energy: 0, count: 0 });
+      }
     }
     for (const event of this.feedingLog) {
-      if (event.step < firstStep) continue;
+      if (event.step < firstStep || event.target === 'fox') continue;
       const item = totals.get(`${event.source}:${event.target}`);
       if (item) { item.energy += event.energy; item.count += 1; }
+    }
+    for (const [step, entry] of this.foxFoodWindow) {
+      if (step < firstStep) continue;
+      for (const source of ['rabbit', 'vegetation'] as const) {
+        const item = totals.get(`${source}:fox`);
+        if (item) { item.energy += entry[source]; item.count += entry[`${source}Count`]; }
+      }
     }
     return [...totals.values()].map((item) => ({
       source: item.source,
@@ -485,6 +540,16 @@ export class ForestSimulation {
       rate: item.energy / elapsed,
       window: safeWindow,
     }));
+  }
+
+  getFoxDiet(window = 50): { window: number; rabbitEnergy: number; plantEnergy: number; rabbitPercent: number | null; plantPercent: number | null } {
+    const flows = this.getEnergyFlow(window).filter(flow => flow.target === 'fox');
+    const rabbitEnergy = flows.find(flow => flow.source === 'rabbit')?.transferredEnergy ?? 0;
+    const plantEnergy = flows.find(flow => flow.source === 'vegetation')?.transferredEnergy ?? 0;
+    const total = rabbitEnergy + plantEnergy;
+    return { window: whole(window, 1, HISTORY_LIMIT), rabbitEnergy, plantEnergy,
+      rabbitPercent: total > 0 ? rabbitEnergy / total * 100 : null,
+      plantPercent: total > 0 ? plantEnergy / total * 100 : null };
   }
 
   private initializeForest(): void {
@@ -520,7 +585,7 @@ export class ForestSimulation {
       const position = positions.pop()!;
       const initialFraction = species === 'wolf' ? 0.52 : 0.55;
       const energy = config.reproductionThreshold * (initialFraction + this.random.next() * 0.3);
-      this.agents[species].push(this.createAgent(species, position, energy));
+      this.agents[species]!.push(this.createAgent(species, position, energy));
     }
   }
 
@@ -534,7 +599,7 @@ export class ForestSimulation {
   private occupiedMap(): Map<number, Agent> {
     const occupied = new Map<number, Agent>();
     for (const species of this.getActiveSpecies()) {
-      for (const agent of this.agents[species]) occupied.set(this.index(agent.x, agent.y), agent);
+      for (const agent of this.agents[species] ?? []) occupied.set(this.index(agent.x, agent.y), agent);
     }
     return occupied;
   }
@@ -568,7 +633,13 @@ export class ForestSimulation {
     const energy = energyGainFromFood(nominalGain, this.parameters.transferEfficiency);
     this.feedingLog.push({ step: this.stepNumber + 1, source, target, energy });
     if (this.feedingLog.length > ENERGY_EVENT_LIMIT) this.feedingLog.splice(0, this.feedingLog.length - ENERGY_EVENT_LIMIT);
-    this.stats.feedingEvents[target] += 1;
+    this.stats.feedingEvents[target] = (this.stats.feedingEvents[target] ?? 0) + 1;
+    if (target === 'fox' && (source === 'rabbit' || source === 'vegetation')) {
+      const step = this.stepNumber + 1;
+      const entry = this.foxFoodWindow.get(step) ?? { rabbit: 0, vegetation: 0, rabbitCount: 0, vegetationCount: 0 };
+      entry[source] += energy; entry[`${source}Count`] += 1;
+      this.foxFoodWindow.set(step, entry);
+    }
     return energy;
   }
 
@@ -595,12 +666,7 @@ export class ForestSimulation {
         }
       }
 
-      const cellIndex = this.index(rabbit.x, rabbit.y);
-      if (this.forest[cellIndex] > 0) {
-        this.forest[cellIndex] -= 1;
-        rabbit.energy += this.recordFeeding('vegetation', 'rabbit', config.nominalFoodGainAtTenPercent);
-        this.stats.forestEaten += 1;
-      }
+      this.eatPlant(rabbit, config.nominalFoodGainAtTenPercent);
 
       this.tryReproduce(rabbit, config, occupied, newborns);
       if (rabbit.energy <= 0 || rabbit.age >= config.maxAge) {
@@ -621,7 +687,7 @@ export class ForestSimulation {
     const dead = new Set<number>();
     const hunted = new Set<number>();
     const newborns: Agent[] = [];
-    const ordered = this.random.shuffle([...this.agents[species]]);
+    const ordered = this.random.shuffle([...(this.agents[species] ?? [])]);
 
     for (const predator of ordered) {
       predator.age += 1;
@@ -641,7 +707,7 @@ export class ForestSimulation {
           predator.x = destination.x; predator.y = destination.y;
           occupied.set(this.positionKey(destination), predator);
           predator.energy += this.recordFeeding(preySpecies, species, config.nominalFoodGainAtTenPercent);
-          this.stats.deaths[preySpecies] += 1;
+          this.stats.deaths[preySpecies] = (this.stats.deaths[preySpecies] ?? 0) + 1;
         }
       } else if (this.random.next() < config.movement.probability) {
         const available = nearby.filter((position) => !occupied.has(this.positionKey(position)));
@@ -657,16 +723,73 @@ export class ForestSimulation {
       if (predator.energy <= 0 || predator.age >= config.maxAge) {
         dead.add(predator.id);
         occupied.delete(this.index(predator.x, predator.y));
-        this.stats.deaths[species] += 1;
+        this.stats.deaths[species] = (this.stats.deaths[species] ?? 0) + 1;
       }
     }
-    this.agents[preySpecies] = this.agents[preySpecies].filter((agent) => !hunted.has(agent.id));
-    this.agents[species] = this.agents[species].filter((agent) => !dead.has(agent.id));
-    this.agents[species].push(...newborns);
+    this.agents[preySpecies] = (this.agents[preySpecies] ?? []).filter((agent) => !hunted.has(agent.id));
+    this.agents[species] = (this.agents[species] ?? []).filter((agent) => !dead.has(agent.id));
+    this.agents[species]!.push(...newborns);
+  }
+
+  private eatPlant(agent: Agent, nominalGain: number): void {
+    const cellIndex = this.index(agent.x, agent.y);
+    if (this.forest[cellIndex] === 0) return;
+    this.forest[cellIndex] -= 1;
+    agent.energy += this.recordFeeding('vegetation', agent.species, nominalGain);
+    this.stats.forestEaten += 1;
+    if (agent.species === 'fox') this.stats.foxPlantEaten = (this.stats.foxPlantEaten ?? 0) + 1;
+  }
+
+  private processOmnivore(species: Species): void {
+    const config = this.configs[species];
+    const diet = config.omnivory!;
+    const preySpecies = config.preyType as Species;
+    const occupied = this.occupiedMap();
+    const dead = new Set<number>(), hunted = new Set<number>();
+    const newborns: Agent[] = [];
+    for (const animal of this.random.shuffle([...(this.agents[species] ?? [])])) {
+      animal.age += 1; animal.energy -= config.basalEnergyCost;
+      const nearby = this.neighbors(animal, config.movement.distance);
+      const preyCells = nearby.filter(position => occupied.get(this.positionKey(position))?.species === preySpecies);
+      if (preyCells.length > 0) {
+        // Match legacy seeded candidate selection, then one probabilistic hunt.
+        const destination = preyCells[this.random.integer(preyCells.length)];
+        if (this.random.next() < diet.huntSuccess) {
+          const prey = occupied.get(this.positionKey(destination))!;
+          hunted.add(prey.id);
+          occupied.delete(this.index(animal.x, animal.y));
+          animal.x = destination.x; animal.y = destination.y;
+          occupied.set(this.positionKey(destination), animal);
+          animal.energy += this.recordFeeding(preySpecies, species, config.nominalFoodGainAtTenPercent);
+          this.stats.deaths[preySpecies] = (this.stats.deaths[preySpecies] ?? 0) + 1;
+        }
+        // Failed hunts end feeding: deliberately no plant fallback or second meal.
+      } else {
+        if (this.random.next() < config.movement.probability) {
+          const available = nearby.filter(position => !occupied.has(this.positionKey(position)));
+          if (available.length > 0) {
+            const destination = available[this.random.integer(available.length)];
+            occupied.delete(this.index(animal.x, animal.y));
+            animal.x = destination.x; animal.y = destination.y;
+            occupied.set(this.positionKey(destination), animal);
+          }
+        }
+        this.eatPlant(animal, diet.plantNominalGain);
+      }
+      this.tryReproduce(animal, config, occupied, newborns);
+      if (animal.energy <= 0 || animal.age >= config.maxAge) {
+        dead.add(animal.id); occupied.delete(this.index(animal.x, animal.y));
+        this.stats.deaths[species] = (this.stats.deaths[species] ?? 0) + 1;
+      }
+    }
+    this.agents[preySpecies] = (this.agents[preySpecies] ?? []).filter(agent => !hunted.has(agent.id));
+    this.agents[species] = (this.agents[species] ?? []).filter(agent => !dead.has(agent.id));
+    this.agents[species]!.push(...newborns);
   }
 
   private tryReproduce(agent: Agent, config: SpeciesConfig, occupied: Map<number, Agent>, newborns: Agent[]): void {
     if (this.removed.has(config.id)) return;
+    if (config.populationCap !== undefined && (this.agents[config.id]?.length ?? 0) + newborns.length >= config.populationCap) return;
     if (agent.energy < config.reproductionThreshold || this.random.next() >= config.reproductionProbability) return;
     const birthCells = this.neighbors(agent, 1).filter((position) => !occupied.has(this.positionKey(position)));
     if (birthCells.length === 0) return;
@@ -676,7 +799,7 @@ export class ForestSimulation {
     const child = this.createAgent(config.id, position, childEnergy);
     newborns.push(child);
     occupied.set(this.positionKey(position), child);
-    this.stats.births[config.id] += 1;
+    this.stats.births[config.id] = (this.stats.births[config.id] ?? 0) + 1;
   }
 
   private recordMetric(intervention = false): PopulationMetric {
@@ -692,6 +815,7 @@ export class ForestSimulation {
       forestPercent: maximumForest === 0 ? 0 : (forestTotal / maximumForest) * 100,
       forestAbundance: forestTotal,
     };
+    if (this.runtimeSpecies.has('fox')) metric.fox = this.agents.fox?.length ?? 0;
     // Preserve every existing sample at the intervention boundary, including its
     // pre-action count. The next ordinary tick resumes the existing rolling window.
     this.history.push(metric);

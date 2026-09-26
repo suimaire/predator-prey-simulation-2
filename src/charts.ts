@@ -7,6 +7,7 @@ export const SERIES_COLORS: Readonly<Record<ChartSeries, string>> = Object.freez
   forest: '#2f7b4c',
   rabbit: '#dc7b2c',
   wolf: '#506b87',
+  fox: '#b44820',
   tertiary: '#8e4e78',
   quaternary: '#26243f',
 });
@@ -57,6 +58,7 @@ function configureCanvas(canvas: HTMLCanvasElement): { ctx: CanvasRenderingConte
 function populationValue(metric: PopulationMetric, series: Species): number {
   if (series === 'rabbit') return metric.rabbits;
   if (series === 'wolf') return metric.wolves;
+  if (series === 'fox') return metric.fox ?? 0;
   if (series === 'tertiary') return metric.tertiary;
   return metric.quaternary;
 }
