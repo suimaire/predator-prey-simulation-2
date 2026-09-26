@@ -1,4 +1,4 @@
-// Run against Vite with Playwright available (same isolated fixture as modeEffects).
+// Run against Vite with Playwright available. Uses isolated local storage and blocks external requests.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -6,10 +6,10 @@ import { fileURLToPath } from 'node:url';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const origin = process.env.TEST_ORIGIN ?? 'http://127.0.0.1:5173';
 const base = `${origin}/predator-prey-simulation-2/`;
-const output = fileURLToPath(new URL('../verification.local/border-flames/', import.meta.url));
+const output = fileURLToPath(new URL('../verification.local/ember-border/', import.meta.url));
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ channel: process.env.TEST_BROWSER ?? 'msedge', headless: true });
-const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+const context = await browser.newContext({ viewport: { width: 1877, height: 1000 } });
 await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
 const page = await context.newPage();
 const errors = [], results = [];
@@ -19,174 +19,181 @@ const choose = async mode => {
   await page.locator(`[data-app-mode=${mode}]`).click();
   await page.waitForFunction(phase => document.querySelector('.board-card').dataset.modePhase === phase, mode === 'apex' ? 'steady' : 'idle');
 };
-const capture = name => page.screenshot({ path: `${output}/${name}.png`, fullPage: false });
+const capture = (name, fullPage = false) => page.screenshot({ path: `${output}/${name}.png`, fullPage });
 const inspect = () => page.evaluate(() => {
-  const panel = document.querySelector('.board-card'), layer = panel.querySelector('.apex-edge-flames');
-  const p = panel.getBoundingClientRect();
-  const flames = [...layer.querySelectorAll('.apex-flame-orbit')].filter(el => !el.hidden).map(el => {
-    const body = el.firstElementChild, b = body.getBoundingClientRect(), m = el.getBoundingClientRect();
-    return { x: m.x - p.x - 1, y: m.y - p.y - 1, width: b.width, height: b.height,
-      bounds: { x: b.x, y: b.y, right: b.right, bottom: b.bottom },
-      transform: getComputedStyle(body).transform,
-      cornerScale: parseFloat(getComputedStyle(body).scale),
-      opacity: +getComputedStyle(body).opacity,
-      frames: [...body.querySelectorAll('g')].map(g => +getComputedStyle(g).opacity),
-      rotate: getComputedStyle(el).offsetRotate,
-    };
-  });
-  return { phase: panel.dataset.modePhase, travel: layer.dataset.travel, width: p.width - 2, height: p.height - 2,
-    radius: parseFloat(getComputedStyle(panel).borderRadius) - 1, flames,
-    pool: layer.querySelectorAll('.apex-flame-orbit').length, embers: layer.querySelectorAll('.apex-border-ember').length,
-    activeEmbers: [...layer.querySelectorAll('.apex-border-ember')].filter(e => +getComputedStyle(e).opacity > 0).length,
+  const panel = document.querySelector('.board-card'), layer = panel.querySelector('.apex-panel-heat');
+  const p = panel.getBoundingClientRect(), svg = layer.querySelector('svg');
+  return {
+    phase: panel.dataset.modePhase, width: p.width - 2, height: p.height - 2,
+    viewBox: svg.getAttribute('viewBox'), paths: [...layer.querySelectorAll('.apex-perimeter')].map(p => p.getAttribute('d')),
+    sprites: layer.querySelectorAll('.apex-flame-orbit, .apex-flame-body, .apex-flame-frame').length,
+    licks: [...layer.querySelectorAll('.apex-edge-lick')].map(p => ({ d: p.getAttribute('d'), opacity: +getComputedStyle(p).opacity })),
+    embers: layer.querySelectorAll('.apex-border-ember').length,
+    activeEmbers: [...layer.querySelectorAll('.apex-border-ember')].filter(p => +getComputedStyle(p).opacity > .05).length,
+    hotOffset: parseFloat(getComputedStyle(layer.querySelector('.apex-heat-hot')).strokeDashoffset),
     running: panel.getAnimations({ subtree: true }).filter(a => a.playState === 'running').length,
     overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-    heat: +getComputedStyle(panel.querySelector('.apex-panel-heat')).opacity };
+    heat: +getComputedStyle(layer).opacity,
+  };
 });
-function onBorder(state) {
-  const { width: w, height: h, radius: r } = state;
-  for (const { x, y, cornerScale, opacity } of state.flames) {
-    const cx = Math.max(r, Math.min(w - r, x)), cy = Math.max(r, Math.min(h - r, y));
-    assert.ok(Math.abs(Math.hypot(x - cx, y - cy) - r) < 1, `point (${x}, ${y}) follows rounded border ${w}×${h}`);
-    const cornerDistance = Math.max(Math.min(x, w - x), Math.min(y, h - y));
-    if (cornerDistance < r - 1) {
-      assert.ok(cornerScale <= .66 && opacity < .7, 'corners soften size and brightness');
-    } else if (cornerDistance > r + 32) {
-      assert.ok(cornerScale > .99 && opacity > .93, `straight-edge flames retain their original strength: ${JSON.stringify({ w, h, r, x, y, cornerScale, opacity })}`);
-    }
-  }
+function continuous(state) {
+  assert.equal(state.sprites, 0, 'no travelling or nested flame sprites');
+  assert.equal(new Set(state.paths).size, 1, 'all heat layers share one continuous rounded path');
+  assert.ok(state.paths[0].endsWith('Z'));
+  assert.equal((state.paths[0].match(/ A /g) ?? []).length, 4, 'four rounded arcs, no special corner assets');
+  const [x, y, w, h] = state.viewBox.split(' ').map(Number);
+  assert.equal(x, 0); assert.equal(y, 0);
+  assert.ok(Math.abs(w - state.width) < .02 && Math.abs(h - state.height) < .02);
+  assert.equal(state.licks.length, 6); assert.equal(state.embers, 2);
+  assert.equal(state.overflow, false);
 }
 try {
   await page.goto(`${base}tests/browser.html`);
   await choose('apex');
-  await page.evaluate(() => { window.originalFlames = [...document.querySelectorAll('.apex-flame-orbit')]; });
-  const first = await inspect(); onBorder(first);
-  assert.equal(first.travel, 'motion-path'); assert.equal(first.flames.length, 12);
-  await capture('desktop-t0');
-  await page.waitForTimeout(2700);
-  const later = await inspect(); onBorder(later);
-  assert.ok(later.flames.every((f, i) => Math.hypot(f.x - first.flames[i].x, f.y - first.flames[i].y) > 30));
-  assert.ok(later.flames.some((f, i) => Math.abs(f.height - first.flames[i].height) > 1));
-  assert.ok(later.flames.some((f, i) => f.frames.join() !== first.flames[i].frames.join()));
-  assert.ok(later.flames.every(f => f.rotate === '0deg'));
-  await capture('desktop-t2700');
-  results.push({ sustained: { first, later } });
-
-  // Observe natural animation across all four corners; do not alter animation clocks.
-  const continuity = await page.evaluate(async () => {
-    const nodes = [...document.querySelectorAll('.apex-flame-orbit')];
-    const panel = document.querySelector('.board-card'), rect = panel.getBoundingClientRect();
-    const corners = new Set(), softenedCorners = new Set(); let last = null, lastTime = 0, maxSpeed = 0, activeEmbers = 0;
-    const start = performance.now();
-    await new Promise(resolve => {
-      function sample(now) {
-        const points = nodes.map(n => { const r = n.getBoundingClientRect(); return { x: r.x - rect.x - 1, y: r.y - rect.y - 1 }; });
-        points.forEach((p, i) => {
-          if ((p.x < 17 || p.x > rect.width - 19) && (p.y < 17 || p.y > rect.height - 19)) corners.add(`${p.x < 17 ? 'left' : 'right'}-${p.y < 17 ? 'top' : 'bottom'}`);
-          if ((p.x < 14 || p.x > rect.width - 16) && (p.y < 14 || p.y > rect.height - 16)) {
-            const scale = parseFloat(getComputedStyle(nodes[i].firstElementChild).scale);
-            if (scale <= .66) softenedCorners.add(`${p.x < 14 ? 'left' : 'right'}-${p.y < 14 ? 'top' : 'bottom'}`);
-          }
-          if (last) maxSpeed = Math.max(maxSpeed, Math.hypot(p.x - last[i].x, p.y - last[i].y) / (now - lastTime));
-        });
-        activeEmbers = Math.max(activeEmbers, [...panel.querySelectorAll('.apex-border-ember')].filter(e => +getComputedStyle(e).opacity > 0).length);
-        last = points; lastTime = now;
-        if (now - start < 4400) requestAnimationFrame(sample); else resolve();
-      }
-      requestAnimationFrame(sample);
-    });
-    return { corners: [...corners].sort(), softenedCorners: [...softenedCorners].sort(), maxSpeed, activeEmbers };
+  await page.evaluate(() => {
+    window.originalHeat = document.querySelector('.apex-panel-heat');
+    window.originalHot = document.querySelector('.apex-heat-hot').getAnimations()[0];
+    window.originalParticles = [...document.querySelectorAll('.apex-edge-lick, .apex-border-ember')];
   });
-  assert.equal(continuity.corners.length, 4); assert.ok(continuity.maxSpeed < .6);
-  assert.equal(continuity.softenedCorners.length, 4, 'all four corners soften during natural travel');
-  assert.ok(continuity.activeEmbers > 0 && continuity.activeEmbers <= 4);
-  results.push({ continuity });
+  const first = await inspect(); continuous(first);
+  const geometry = await page.evaluate(async () => {
+    const { createBorderSampler } = await import('/predator-prey-simulation-2/src/borderFlames.ts');
+    const panel = document.querySelector('.board-card'), bounds = panel.getBoundingClientRect();
+    const r = parseFloat(getComputedStyle(panel).borderTopLeftRadius) - 1;
+    const sampler = createBorderSampler(bounds.width - 2, bounds.height - 2, r);
+    const path = panel.querySelector('.apex-perimeter');
+    let maxError = 0, maxNormalError = 0;
+    for (let i = 0; i < 400; i++) {
+      const d = sampler.length * i / 400, actual = sampler.point(d), expected = path.getPointAtLength(d);
+      maxError = Math.max(maxError, Math.hypot(actual.x - expected.x, actual.y - expected.y));
+      maxNormalError = Math.max(maxNormalError, Math.abs(Math.hypot(actual.tx, actual.ty) - 1));
+    }
+    return { maxError, maxNormalError };
+  });
+  assert.ok(geometry.maxError < .2 && geometry.maxNormalError < .001, 'slivers follow the actual SVG boundary and its normals');
+  await capture('desktop-t0');
+  const temporal = await page.evaluate(async () => {
+    const samples = [], shapes = new Set();
+    for (let i = 0; i < 24; i++) {
+      await new Promise(resolve => setTimeout(resolve, 220));
+      const licks = [...document.querySelectorAll('.apex-edge-lick')];
+      licks.forEach(p => { if (+getComputedStyle(p).opacity > .05) shapes.add(p.getAttribute('d')); });
+      samples.push({
+        licks: licks.filter(p => +getComputedStyle(p).opacity > .05).length,
+        embers: [...document.querySelectorAll('.apex-border-ember')].filter(p => +getComputedStyle(p).opacity > .05).length,
+      });
+    }
+    return { samples, uniqueShapes: shapes.size };
+  });
+  const later = await inspect(); continuous(later);
+  assert.notEqual(first.hotOffset, later.hotOffset, 'bright patches evolve without moving standalone icons');
+  assert.ok(temporal.uniqueShapes >= 7, 'temporary slivers appear at changing, irregular positions');
+  assert.ok(temporal.samples.every(s => s.licks <= 6 && s.embers <= 2));
+  assert.ok(temporal.samples.some(s => s.licks >= 3));
+  assert.ok(temporal.samples.some(s => s.embers > 0));
+  await capture('desktop-t5');
+  results.push({ continuousBoundary: { first, later, temporal, geometry } });
 
-  // Rendering, same-mode selection, and reversal must preserve the pool and clocks.
-  const clockBefore = await page.evaluate(() => document.querySelector('.apex-flame-orbit').getAnimations()[0].currentTime);
+  const clockBefore = await page.evaluate(() => window.originalHot.currentTime);
   await choose('apex'); await page.locator('#reset-button').click();
-  const clockAfter = await page.evaluate(() => document.querySelector('.apex-flame-orbit').getAnimations()[0].currentTime);
-  assert.ok(clockAfter >= clockBefore);
+  const identity = await page.evaluate(() => ({
+    sameLayer: window.originalHeat === document.querySelector('.apex-panel-heat'),
+    sameAnimation: window.originalHot === document.querySelector('.apex-heat-hot').getAnimations()[0],
+    clock: window.originalHot.currentTime,
+  }));
+  assert.ok(identity.sameLayer && identity.sameAnimation && identity.clock >= clockBefore);
   for (let i = 0; i < 10; i++) {
     await page.evaluate(() => document.querySelector('[data-app-mode=free]').click());
-    await page.waitForTimeout(35 + i * 9);
+    await page.waitForTimeout(30 + i * 9);
     await page.evaluate(() => document.querySelector('[data-app-mode=apex]').click());
-    await page.waitForTimeout(45);
+    await page.waitForTimeout(40);
   }
-  await choose('apex'); await page.waitForTimeout(500);
-  assert.ok(await page.evaluate(() => window.originalFlames.every((node, i) => node === document.querySelectorAll('.apex-flame-orbit')[i])));
-  assert.equal((await inspect()).pool, 12); assert.equal((await inspect()).embers, 4);
+  await choose('apex');
+  assert.ok(await page.evaluate(() => window.originalParticles.every((n, i) => n === document.querySelectorAll('.apex-edge-lick, .apex-border-ember')[i])));
   const exit = await page.evaluate(async () => {
     const layer = document.querySelector('.apex-panel-heat');
     const start = performance.now(); document.querySelector('[data-app-mode=free]').click();
-    await new Promise(r => setTimeout(r, 140)); const midway = +getComputedStyle(layer).opacity;
+    await new Promise(resolve => setTimeout(resolve, 140)); const midway = +getComputedStyle(layer).opacity;
     await new Promise(resolve => {
       function frame() { if (document.querySelector('.board-card').dataset.modePhase === 'idle') resolve(); else requestAnimationFrame(frame); }
       frame();
     });
     return { midway, elapsed: performance.now() - start };
   });
-  assert.ok(exit.midway > 0 && exit.midway < 1); assert.ok(exit.elapsed >= 250 && exit.elapsed < 450);
+  console.log('Exit observation', exit);
+  assert.ok(exit.midway > 0 && exit.midway < 1); assert.ok(exit.elapsed >= 250 && exit.elapsed < 480);
+  await page.waitForTimeout(900);
   const free = await inspect(); assert.equal(free.heat, 0); assert.equal(free.running, 0); assert.equal(free.activeEmbers, 0);
-  await page.waitForTimeout(1100); assert.equal((await inspect()).running, 0);
-  results.push({ exit, idle: free });
+  results.push({ identity, rapidReversalAndExit: exit, idle: free });
 
-  for (const [width, height] of [[1920, 1080], [1024, 768], [600, 850], [390, 844], [320, 740], [1440, 1000]]) {
-    await page.setViewportSize({ width, height }); await choose('apex'); await page.waitForTimeout(100);
-    const state = await inspect(); onBorder(state);
-    if (state.overflow) {
-      await capture(`overflow-${width}`);
-      console.log('Overflow details', width, await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth,
-        nodes: [...document.querySelectorAll('body *')].filter(e => e.getBoundingClientRect().right > document.documentElement.clientWidth).map(e => ({ cls: e.className.baseVal ?? e.className, right: e.getBoundingClientRect().right })).slice(0, 20) })));
-    }
-    assert.equal(state.overflow, false);
-    assert.equal(state.flames.length, state.width <= 600 ? 6 : 12);
-    assert.ok(state.flames.every(f => f.bounds.x >= 0 && f.bounds.right <= width));
-    // Removing decoration changes no content geometry, even at narrow breakpoints.
+  for (const [width, height] of [[1920, 1080], [1440, 900], [1024, 768], [600, 850], [390, 844], [320, 740]]) {
+    await page.setViewportSize({ width, height }); await choose('apex'); await page.waitForTimeout(160);
+    const state = await inspect(); continuous(state);
     assert.ok(await page.evaluate(() => {
       const selectors = ['.board-card', '.board-heading', '.mode-switch', '.population-hud', '.canvas-frame', '.board-footnote'];
       const boxes = () => selectors.map(s => JSON.stringify(document.querySelector(s).getBoundingClientRect()));
       const before = boxes(), layer = document.querySelector('.apex-panel-heat'); layer.hidden = true;
       const unchanged = JSON.stringify(boxes()) === JSON.stringify(before); layer.hidden = false; return unchanged;
     }));
-    await capture(`resized-${width}`); results.push({ resized: [width, height], state });
+    // Full-card hit area and keyboard access retain the existing dialog/return focus.
+    const card = page.locator('#toggle-parameters');
+    await card.focus();
+    await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab');
+    assert.ok(await card.evaluate(e => e.matches(':focus-visible') && getComputedStyle(e).outlineStyle === 'solid'));
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#parameters-dialog').isVisible(), true);
+    await page.keyboard.press('Escape');
+    assert.ok(await card.evaluate(e => document.activeElement === e));
+    const cardBounds = await card.boundingBox(), cta = await page.locator('.parameter-entry-action').boundingBox();
+    assert.ok(cta.x >= cardBounds.x && cta.x + cta.width <= cardBounds.x + cardBounds.width);
+    await card.click(); assert.equal(await page.locator('#parameters-dialog').isVisible(), true);
+    await page.keyboard.press('Escape');
+    await page.locator('.board-card').scrollIntoViewIfNeeded();
+    await capture(`apex-${width}`, width <= 600);
+    await choose('free');
+    assert.match(await page.locator('#parameter-entry-hint').textContent(), /실험을 설계/);
+    await card.click(); await page.keyboard.press('Escape');
+    await capture(`free-${width}`, width <= 600);
+    results.push({ resized: [width, height], state });
   }
 
+  await page.setViewportSize({ width: 1877, height: 1000 }); await choose('apex');
+  const card = page.locator('#toggle-parameters');
+  await card.hover(); await page.waitForTimeout(200); await capture('parameters-hover');
+  await page.mouse.move(1850, 10); await card.focus();
+  await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab'); await capture('parameters-focus');
+  assert.equal(await page.locator('.apex-panel-heat').getAttribute('aria-hidden'), 'true');
+  assert.equal(await page.locator('.apex-panel-heat').evaluate(e => getComputedStyle(e).pointerEvents), 'none');
   await page.locator('#forest-board').click({ position: { x: 80, y: 80 } });
-  assert.ok(await page.locator('#cell-inspector').isVisible());
-  await page.locator('[data-app-mode=free]').focus(); await page.keyboard.press('Enter'); await choose('free');
-  await page.locator('[data-app-mode=apex]').focus(); await page.keyboard.press('Enter'); await choose('apex');
-  assert.ok(await page.evaluate(() => document.querySelector('.apex-panel-heat').getAttribute('aria-hidden') === 'true' && getComputedStyle(document.querySelector('.apex-panel-heat')).pointerEvents === 'none'));
-
-  await page.emulateMedia({ reducedMotion: 'reduce' }); await page.waitForTimeout(100);
-  const reduced = await inspect(); assert.equal(reduced.running, 0); assert.equal(reduced.heat, 1);
+  assert.equal(await page.locator('#cell-inspector').isVisible(), true);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForFunction(() => document.querySelector('.board-card').getAnimations({ subtree: true }).filter(a => a.playState === 'running').length === 0);
+  const reduced = await inspect(); assert.equal(reduced.heat, 1); assert.equal(reduced.activeEmbers, 0);
   assert.equal(await page.locator('.apex-edge-flames').isVisible(), false); await capture('reduced-motion');
   await choose('free'); await choose('apex'); assert.equal((await inspect()).running, 0);
-  await page.emulateMedia({ reducedMotion: 'no-preference' }); await page.waitForTimeout(100);
+  await page.emulateMedia({ reducedMotion: 'no-preference' }); await page.waitForTimeout(180);
   const visibility = await page.evaluate(async () => {
-    const mover = document.querySelector('.apex-flame-orbit');
+    const hot = document.querySelector('.apex-heat-hot');
     Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange'));
-    const clock = () => mover.getAnimations()[0].currentTime;
-    const before = clock();
-    // Repeated hidden notifications must not restart already-paused embers.
-    document.dispatchEvent(new Event('visibilitychange'));
-    await new Promise(r => setTimeout(r, 600));
-    const after = clock();
-    const running = document.querySelector('.board-card').getAnimations({ subtree: true }).filter(a => a.playState === 'running').length;
+    const clock = () => hot.getAnimations()[0].currentTime;
+    const before = clock(); document.dispatchEvent(new Event('visibilitychange'));
+    await new Promise(resolve => setTimeout(resolve, 600));
+    const after = clock(), running = document.querySelector('.board-card').getAnimations({ subtree: true }).filter(a => a.playState === 'running').length;
     delete document.hidden; document.dispatchEvent(new Event('visibilitychange'));
-    await new Promise(r => setTimeout(r, 150));
+    await new Promise(resolve => setTimeout(resolve, 160));
     return { before, after, running, resumed: clock() };
   });
   assert.ok(Math.abs(visibility.after - visibility.before) < 25); assert.equal(visibility.running, 0);
   assert.ok(visibility.resumed > visibility.after + 50); results.push({ reduced, simulatedVisibility: visibility });
 
-  // Same seed, real application at maximum speed, with and without decoration.
+  // Actual application, same challenge seed, maximum speed, with/without animation.
   const highSpeed = [];
   for (const preference of ['no-preference', 'reduce']) {
     await choose('free'); await choose('apex'); await page.emulateMedia({ reducedMotion: preference });
     await page.locator('#speed-control').fill('40'); await page.locator('#speed-control').dispatchEvent('input');
     const performanceResult = await page.evaluate(async () => {
       const deltas = [], completedSteps = []; let last;
-      const panel = document.querySelector('.board-card'), flame = panel.querySelector('.apex-flame-orbit');
+      const panel = document.querySelector('.board-card'), heat = panel.querySelector('.apex-panel-heat');
       const start = performance.now(); document.querySelector('[data-challenge-action=start]').click();
       await new Promise(resolve => {
         function frame(t) {
@@ -205,65 +212,64 @@ try {
       const step = +document.querySelector('#step-value').textContent;
       return { step, completedSteps, totalSteps: completedSteps.reduce((a, b) => a + b, step),
         medianFrameMs: deltas[Math.floor(deltas.length / 2)], p95FrameMs: deltas[Math.floor(deltas.length * .95)],
-        frames: deltas.length, sameFlame: flame === panel.querySelector('.apex-flame-orbit'), phase: panel.dataset.modePhase,
-        challengePhase: document.querySelector('#challenge-panel').dataset.phase };
+        frames: deltas.length, sameHeat: heat === panel.querySelector('.apex-panel-heat'), phase: panel.dataset.modePhase };
     });
-    console.log('High-speed observation', preference, performanceResult);
-    assert.ok(performanceResult.totalSteps >= 120);
-    assert.ok(performanceResult.sameFlame); assert.equal(performanceResult.phase, 'steady');
+    assert.ok(performanceResult.totalSteps >= 120); assert.ok(performanceResult.sameHeat); assert.equal(performanceResult.phase, 'steady');
+    await card.click();
+    assert.equal(await page.locator('#parameter-entry-action').textContent(), '설정 보기');
+    assert.equal(await page.locator('#apply-parameters').isDisabled(), true);
+    await page.keyboard.press('Escape');
     highSpeed.push({ preference, ...performanceResult });
   }
-  assert.ok(highSpeed.every(run => run.completedSteps.every(step => step === highSpeed[0].completedSteps[0])), 'same seed collapses at the same step with effects enabled/disabled');
+  assert.ok(highSpeed.every(run => run.completedSteps.every(step => step === highSpeed[0].completedSteps[0])), 'animation cannot change seeded outcomes');
   results.push({ highSpeed });
 
-  // Force the capability branch to verify the fallback's real rendering and cleanup.
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await page.addInitScript(() => {
-    const supports = CSS.supports.bind(CSS);
-    CSS.supports = (...args) => args[0] === 'offset-path' ? false : supports(...args);
-  });
-  await page.reload(); await choose('apex');
-  const fallbackFirst = await inspect(); onBorder(fallbackFirst); assert.equal(fallbackFirst.travel, 'keyframes');
-  await page.waitForTimeout(1400);
-  const fallbackLater = await inspect(); onBorder(fallbackLater);
-  assert.ok(fallbackLater.flames.every((f, i) => Math.hypot(f.x - fallbackFirst.flames[i].x, f.y - fallbackFirst.flames[i].y) > 20));
-  await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(100); onBorder(await inspect());
-  await choose('free'); assert.equal((await inspect()).running, 0);
-  await choose('apex'); await page.emulateMedia({ reducedMotion: 'reduce' }); await page.waitForTimeout(100);
-  assert.equal((await inspect()).running, 0); results.push({ fallbackFirst, fallbackLater });
-
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await choose('free'); await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.locator('#step-button').click(); assert.equal(await page.locator('#step-value').textContent(), '001');
+  await page.locator('#run-button').click(); await page.waitForTimeout(160); await page.locator('#pause-button').click();
+  const pausedStep = await page.locator('#step-value').textContent(); await page.waitForTimeout(150);
+  assert.equal(await page.locator('#step-value').textContent(), pausedStep);
+  await page.locator('#reset-button').click(); assert.equal(await page.locator('#step-value').textContent(), '000');
+  await page.locator('#toggle-graph').click();
+  assert.equal((await inspect()).phase, 'idle');
+  await choose('free');
   const lifecycle = await page.evaluate(async () => {
     const { createModeEffects } = await import('/predator-prey-simulation-2/src/modeEffects.ts');
     const panel = document.querySelector('.board-card').cloneNode(true);
     panel.querySelector('.apex-panel-heat').remove();
     for (const key of Object.keys(panel.dataset)) delete panel.dataset[key];
     document.body.append(panel);
-    const nativeSet = window.setInterval, nativeClear = window.clearInterval, timers = new Set();
-    window.setInterval = (...args) => { const id = nativeSet(...args); timers.add(id); return id; };
-    window.clearInterval = id => { timers.delete(id); nativeClear(id); };
+    const nativeSet = window.setTimeout, nativeClear = window.clearTimeout, timers = new Set();
+    const NativeResize = window.ResizeObserver, NativeMutation = window.MutationObserver, observers = new Set();
+    window.setTimeout = (fn, delay, ...args) => { const id = nativeSet(() => { timers.delete(id); fn(...args); }, delay); timers.add(id); return id; };
+    window.clearTimeout = id => { timers.delete(id); nativeClear(id); };
+    window.ResizeObserver = class extends NativeResize { constructor(fn) { super(fn); observers.add(this); } disconnect() { observers.delete(this); super.disconnect(); } };
+    window.MutationObserver = class extends NativeMutation { constructor(fn) { super(fn); observers.add(this); } disconnect() { observers.delete(this); super.disconnect(); } };
+    const delay = ms => new Promise(resolve => nativeSet(resolve, ms));
     let effects;
     try {
       effects = createModeEffects(panel, 'apex', matchMedia('(prefers-reduced-motion: reduce)'));
-      const initial = { phase: panel.dataset.modePhase, timers: timers.size,
-        finite: panel.getAnimations({ subtree: true }).filter(a => Number.isFinite(a.effect.getTiming().iterations)).length };
-      effects.sync('free');
-      await new Promise(resolve => setTimeout(resolve, 420));
+      const initial = { phase: panel.dataset.modePhase, timers: timers.size, observers: observers.size };
+      effects.sync('free'); const emissionTimersOnExit = timers.size;
+      await delay(420);
       const idle = { timers: timers.size, animations: panel.querySelector('.apex-panel-heat').getAnimations({ subtree: true }).length };
-      if (idle.animations) console.log('Lifecycle idle detail', panel.dataset.modePhase, panel.getAnimations({ subtree: true }).map(a => [a.animationName, a.playState, a.currentTime, a.effect.target.className.baseVal ?? a.effect.target.className]));
-      effects.sync('apex');
-      const activeTimers = timers.size;
-      const layer = panel.querySelector('.apex-panel-heat'); panel.remove();
-      await new Promise(resolve => setTimeout(resolve, 0));
-      return { initial, idle, activeTimers, cleaned: !panel.querySelector('.apex-panel-heat'), timers: timers.size,
-        animations: layer.getAnimations({ subtree: true }).length };
+      effects.sync('apex'); const activeTimers = timers.size;
+      const layer = panel.querySelector('.apex-panel-heat'); panel.remove(); await delay(0);
+      return { initial, emissionTimersOnExit, idle, activeTimers, cleaned: !panel.querySelector('.apex-panel-heat'), timers: timers.size,
+        observers: observers.size, animations: layer.getAnimations({ subtree: true }).length };
     } finally {
-      effects?.destroy(); panel.remove(); window.setInterval = nativeSet; window.clearInterval = nativeClear;
+      effects?.destroy(); panel.remove(); window.setTimeout = nativeSet; window.clearTimeout = nativeClear;
+      window.ResizeObserver = NativeResize; window.MutationObserver = NativeMutation;
     }
   });
-  assert.deepEqual(lifecycle, { initial: { phase: 'steady', timers: 1, finite: 0 }, idle: { timers: 0, animations: 0 }, activeTimers: 1, cleaned: true, timers: 0, animations: 0 });
+  assert.deepEqual(lifecycle, { initial: { phase: 'steady', timers: 1, observers: 2 }, emissionTimersOnExit: 0,
+    idle: { timers: 0, animations: 0 }, activeTimers: 1, cleaned: true, timers: 0, observers: 0, animations: 0 });
   results.push({ lifecycle });
   assert.deepEqual(errors, []);
+  await choose('apex');
+  await page.setViewportSize({width:1877,height:1000}); await page.locator('.board-card').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(2400); await capture('final-desktop');
   await writeFile(`${output}/results.json`, JSON.stringify({ browser: browser.version(), results, errors }, null, 2));
-  console.log(`PASS: ${results.length} groups; screenshots and temporal measurements: ${output}`);
+  console.log(`PASS: ${results.length} groups; screenshots and measurements: ${output}`);
+  console.log('High-speed observations:', highSpeed);
 } finally { await browser.close(); }

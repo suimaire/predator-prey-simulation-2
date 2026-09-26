@@ -215,8 +215,8 @@ app.innerHTML = `
               <section class="challenge-panel" id="challenge-panel" aria-live="polite" hidden></section>
               <button type="button" class="parameter-entry" id="toggle-parameters" aria-label="생태계 설계 · Parameters" aria-describedby="parameter-entry-hint" aria-haspopup="dialog" aria-controls="parameters-dialog" aria-expanded="false">
                 <span class="parameter-entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h7m5 0h4M4 17h3m5 0h8"/><circle cx="13.5" cy="7" r="2.5"/><circle cx="9.5" cy="17" r="2.5"/></svg></span>
-                <span class="parameter-entry-copy"><span class="parameter-entry-title"><b>생태계 설계</b><small>Parameters</small></span><span class="parameter-entry-hint" id="parameter-entry-hint">개체수와 환경 조건을 직접 조정하세요.</span></span>
-                <span class="parameter-entry-arrow" aria-hidden="true">→</span>
+                <span class="parameter-entry-copy"><span class="parameter-entry-title"><b>생태계 설계</b><small>Parameters</small></span><span class="parameter-entry-hint" id="parameter-entry-hint">개체수와 환경 조건을 조정해 실험을 설계하세요.</span></span>
+                <span class="parameter-entry-action" aria-hidden="true"><span id="parameter-entry-action">설계 열기</span><span>→</span></span>
               </button>
       <section class="pyramid-card ecological-pyramid--dashboard" aria-label="실시간 생태 피라미드">
         <div class="pyramid-toolbar"><h2>실시간 생태 피라미드</h2><div class="segmented-control" role="group" aria-label="피라미드 표현 방식"><button type="button" data-pyramid-mode="numbers" aria-pressed="true">개체수</button><button type="button" data-pyramid-mode="energy" aria-pressed="false">에너지 흐름</button></div></div>
@@ -727,7 +727,8 @@ function updateControlAvailability(): void {
   element<HTMLButtonElement>('#restore-defaults').disabled = locked;
   element('#parameter-lock-note').hidden = !locked;
   parameterToggle.setAttribute('data-locked', String(locked));
-  element('#parameter-entry-hint').textContent = locked ? '도전 중에는 설정을 확인할 수 있어요.' : appMode === 'apex' ? '다음 도전의 개체수와 환경 조건을 설계하세요.' : '개체수와 환경 조건을 직접 조정하세요.';
+  element('#parameter-entry-hint').textContent = locked ? '도전 중에는 설정을 확인할 수 있어요.' : appMode === 'apex' ? '다음 도전의 개체수와 환경 조건을 설계하세요.' : '개체수와 환경 조건을 조정해 실험을 설계하세요.';
+  element('#parameter-entry-action').textContent = locked ? '설정 보기' : '설계 열기';
   const prepared = parameterDraft?.prepare(parameters, appMode, state.phase);
   const startsChallenge = parameterIntent === 'edit-and-start-challenge' && appMode === 'apex' && state.phase === 'over';
   applyParametersButton.textContent = startsChallenge ? '설정 적용 및 도전 시작' : '설정 적용';

@@ -1,30 +1,49 @@
-import { createBorderFlames } from './borderFlames.ts';
+import { createBorderFlames, createBorderSampler } from './borderFlames.ts';
 
 type Mode = 'free' | 'apex';
 type VisualElement = HTMLElement | SVGElement;
+let effectId = 0;
 
 /** Decoration only. The caller supplies the committed mode; this never changes it. */
 export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion: MediaQueryList) {
-  const tab = panel.querySelector<HTMLButtonElement>('[data-app-mode="apex"]')!;
   const flame = panel.querySelector<HTMLElement>('.apex-tab-ignition')!;
   const glow = panel.querySelector<HTMLElement>('.apex-tab-glow')!;
   const layer = document.createElement('div');
   layer.className = 'apex-panel-heat';
   layer.setAttribute('aria-hidden', 'true');
-  layer.innerHTML = `<svg class="apex-panel-outline" focusable="false">
-    <g class="apex-heat-steady">
-      ${Array.from({ length: 4 }, (_, i) => `<g class="apex-heat-section apex-heat-section-${i}"><path class="apex-heat-halo"/><path class="apex-heat-line"/></g>`).join('')}
+  const id = `apex-ember-${++effectId}`;
+  layer.innerHTML = `<div class="apex-heat-steady"><svg class="apex-panel-outline apex-static-outline" focusable="false">
+    <defs>
+      <linearGradient id="${id}-color" gradientUnits="userSpaceOnUse" x2="193" y2="137" spreadMethod="reflect">
+        <stop stop-color="#a8311c"/><stop offset=".18" stop-color="#f25820"/>
+        <stop offset=".43" stop-color="#ffb333"/><stop offset=".56" stop-color="#ffdb72"/>
+        <stop offset=".7" stop-color="#ff7a23"/><stop offset="1" stop-color="#c63b1b"/>
+      </linearGradient>
+      <linearGradient id="${id}-core" gradientUnits="userSpaceOnUse" x2="271" y2="89" spreadMethod="reflect">
+        <stop stop-color="#ff8730"/><stop offset=".34" stop-color="#ffe8a0"/>
+        <stop offset=".53" stop-color="#fff1b6"/><stop offset=".78" stop-color="#ffb43c"/>
+        <stop offset="1" stop-color="#ed6226"/>
+      </linearGradient>
+      <clipPath id="${id}-outside"><path class="apex-heat-clip" clip-rule="evenodd"/></clipPath>
+    </defs>
+    <g clip-path="url(#${id}-outside)">
+        <path class="apex-perimeter apex-heat-halo"/>
+        <path class="apex-perimeter apex-heat-base"/>
+        <path class="apex-perimeter apex-heat-line" stroke="url(#${id}-color)"/>
+        <path class="apex-perimeter apex-heat-core" stroke="url(#${id}-core)"/>
+        <path class="apex-heat-grain" stroke="url(#${id}-core)"/>
     </g>
-    <g class="apex-heat-sweep">
-      <path class="apex-heat-halo" pathLength="1"/><path class="apex-heat-line" pathLength="1"/>
-      <path class="apex-heat-halo" pathLength="1"/><path class="apex-heat-line" pathLength="1"/>
+  </svg><svg class="apex-panel-outline apex-active-outline" focusable="false">
+    <g clip-path="url(#${id}-outside)">
+        <path class="apex-perimeter apex-heat-hot" pathLength="1000"/>
+        <path class="apex-perimeter apex-heat-hot apex-heat-hot-secondary" pathLength="1000"/>
+      <g class="apex-edge-flames"></g>
     </g>
-  </svg><div class="apex-edge-flames"></div>`;
+  </svg></div>`;
   panel.append(layer);
-  const svg = layer.querySelector<SVGSVGElement>('svg')!;
-  const steady = layer.querySelector<SVGGElement>('.apex-heat-steady')!;
-  const sweep = layer.querySelector<SVGGElement>('.apex-heat-sweep')!;
-  const flames = layer.querySelector<HTMLElement>('.apex-edge-flames')!;
+  const outlines = layer.querySelectorAll<SVGSVGElement>('.apex-panel-outline');
+  const steady = layer.querySelector<HTMLElement>('.apex-heat-steady')!;
+  const flames = layer.querySelector<SVGGElement>('.apex-edge-flames')!;
   const borderFlames = createBorderFlames(flames);
   let mode = initialMode;
   let disposed = false;
@@ -33,7 +52,7 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
   const styles = getComputedStyle(panel);
   const value = (name: string) => Number.parseFloat(styles.getPropertyValue(`--apex-${name}`));
   const timing = {
-    tab: value('tab-delay'), panel: value('panel-delay'), spread: value('spread-ms'),
+    tab: value('tab-delay'), panel: value('panel-delay'),
     settle: value('settle-ms'), cool: value('cool-ms'), tabGlow: value('tab-glow'), tabPeak: value('tab-peak'),
   };
   const animations = new Map<Animation, { target: VisualElement; properties: string[] }>();
@@ -70,8 +89,6 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
     panel.dataset.modePhase = apex ? 'steady' : 'idle';
     layer.style.opacity = apex ? '1' : '0';
     steady.style.opacity = apex ? '1' : '0';
-    sweep.style.opacity = '0';
-    sweep.style.strokeDashoffset = '1';
     flames.style.opacity = apex ? '1' : '0';
     flame.style.opacity = apex ? '1' : '0';
     flame.style.transform = apex ? 'scale(1)' : 'scale(.35)';
@@ -83,23 +100,30 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
     if (disposed) return;
     // Only called on initial layout and ResizeObserver notifications, never per frame.
     const bounds = panel.getBoundingClientRect();
-    const tabBounds = tab.getBoundingClientRect();
     const w = bounds.width - 2, h = bounds.height - 2;
-    const r = Math.max(1, Number.parseFloat(getComputedStyle(panel).borderTopLeftRadius) - 1);
-    const x = Math.max(r, Math.min(w - r, tabBounds.x + tabBounds.width / 2 - bounds.x));
-    const mid = w / 2;
-    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    const upperLeft = `M ${x} 0 H ${r} Q 0 0 0 ${r} V ${h / 2}`;
-    const upperRight = `M ${x} 0 H ${w - r} Q ${w} 0 ${w} ${r} V ${h / 2}`;
-    const lowerLeft = `M 0 ${h / 2} V ${h - r} Q 0 ${h} ${r} ${h} H ${mid}`;
-    const lowerRight = `M ${w} ${h / 2} V ${h - r} Q ${w} ${h} ${w - r} ${h} H ${mid}`;
-    [upperLeft, upperRight, lowerLeft, lowerRight].forEach((d, i) => {
-      layer.querySelectorAll(`.apex-heat-section-${i} path`).forEach(path => path.setAttribute('d', d));
-    });
-    const paths = sweep.querySelectorAll('path');
-    const left = `${upperLeft} V ${h - r} Q 0 ${h} ${r} ${h} H ${mid}`;
-    const right = `${upperRight} V ${h - r} Q ${w} ${h} ${w - r} ${h} H ${mid}`;
-    paths.forEach((path, i) => path.setAttribute('d', i < 2 ? left : right));
+    if (w <= 0 || h <= 0) return;
+    const r = Math.max(1, Math.min(w / 2, h / 2, Number.parseFloat(getComputedStyle(panel).borderTopLeftRadius) - 1));
+    outlines.forEach(svg => svg.setAttribute('viewBox', `0 0 ${w} ${h}`));
+    const rounded = (inset: number) => {
+      const cr = Math.max(.1, r - inset), right = w - inset, bottom = h - inset;
+      return `M ${r} ${inset} H ${w - r} A ${cr} ${cr} 0 0 1 ${right} ${r} V ${h - r} A ${cr} ${cr} 0 0 1 ${w - r} ${bottom} H ${r} A ${cr} ${cr} 0 0 1 ${inset} ${h - r} V ${r} A ${cr} ${cr} 0 0 1 ${r} ${inset} Z`;
+    };
+    const d = rounded(0);
+    layer.querySelectorAll('.apex-perimeter').forEach(path => path.setAttribute('d', d));
+    // A single connected, slightly uneven hot edge, sampled only on resize.
+    // Subpixel grain breaks the mechanically smooth outline without adding icons.
+    const perimeter = createBorderSampler(w, h, r);
+    const { length } = perimeter, samples = Math.ceil(length / 3);
+    const grain = Array.from({ length: samples }, (_, i) => {
+      const distance = i / samples * length;
+      const p = perimeter.point(distance);
+      const noise = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+      const outward = .15 + (noise - Math.floor(noise)) * .9;
+      return `${i ? 'L' : 'M'} ${(p.x + p.ty * outward).toFixed(2)} ${(p.y - p.tx * outward).toFixed(2)}`;
+    }).join(' ');
+    layer.querySelector('.apex-heat-grain')!.setAttribute('d', `${grain} Z`);
+    // Exclude the white interior; retain at most .55px of the border's inner half.
+    layer.querySelector('.apex-heat-clip')!.setAttribute('d', `M -12 -12 H ${w + 12} V ${h + 12} H -12 Z ${rounded(.55)}`);
     borderFlames.geometry(w, h, r);
   }
 
@@ -136,11 +160,9 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
       { opacity: opacity(glow) }, { opacity: timing.tabPeak, offset: .3 }, { opacity: timing.tabGlow },
     ], timing.settle - timing.tab, resume ? 0 : timing.tab);
     animate(layer, [{ opacity: opacity(layer) }, { opacity: 1 }], timing.tab, delay);
-    const remaining = resume ? Number.parseFloat(getComputedStyle(sweep).strokeDashoffset) : 1;
-    animate(sweep, [{ strokeDashoffset: remaining }, { strokeDashoffset: 0 }], timing.spread * remaining, delay);
-    animate(sweep, [{ opacity: resume ? opacity(sweep) : 1 }, { opacity: 1, offset: .62 }, { opacity: 0 }], timing.settle - delay, delay);
-    animate(flames, [{ opacity: opacity(flames) }, { opacity: 1 }], timing.settle - timing.panel, delay);
-    const end = animate(steady, [{ opacity: opacity(steady) }, { opacity: 1 }], timing.settle - timing.panel - timing.spread, timing.panel + timing.spread);
+    animate(steady, [{ opacity: opacity(steady) }, { opacity: 1 }], timing.settle - delay, delay);
+    const flickerDelay = resume ? 0 : delay + 180;
+    const end = animate(flames, [{ opacity: opacity(flames) }, { opacity: 1 }], timing.settle - flickerDelay, flickerDelay);
     void end.finished.then(() => { if (currentRevision === revision && !disposed) settle(); }, () => {});
   }
 
@@ -160,7 +182,6 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
 
   const resize = new ResizeObserver(geometry);
   resize.observe(panel);
-  resize.observe(tab);
   // Also releases resources when the owning panel is removed by a future UI mount.
   const removal = new MutationObserver(() => { if (!panel.isConnected) destroy(); });
   removal.observe(document.body, { childList: true, subtree: true });

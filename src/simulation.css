@@ -84,29 +84,21 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
   --apex-slide-ms: 310ms;
   --apex-slide-ease: cubic-bezier(.22,.7,.25,1);
   --apex-tab-delay: 210;
-  --apex-panel-delay: 410;
-  --apex-spread-ms: 480;
-  --apex-settle-ms: 1200;
+  --apex-panel-delay: 290;
+  --apex-settle-ms: 780;
   --apex-cool-ms: 320;
   --apex-tab-glow: .3;
   --apex-tab-peak: .7;
-  --apex-panel-glow: .24;
-  --apex-line-opacity: .58;
-  --apex-orbit-count: 12;
-  --apex-orbit-seconds: 24;
-  --apex-flame-width: 11px;
-  --apex-flame-height: 18px;
-  --apex-flame-opacity: .94;
-  --apex-flame-glow: .22;
-  --apex-ember-interval: 500;
+  --apex-panel-glow: .22;
+  --apex-glow-blur: 2px;
+  --apex-line-width: 2.3px;
+  --apex-line-opacity: .96;
+  --apex-hot-seconds: 54s;
+  --apex-lick-interval: 470;
+  --apex-lick-height: 7;
   --apex-flame-sway: 1px;
-  /* Only the corner band softens; straight-edge flames and the ember line stay intact. */
-  --apex-corner-falloff: 30;
-  --apex-corner-scale: .64;
-  --apex-corner-opacity: .72;
-  --apex-corner-glow-blur: .55;
-  --apex-corner-brightness: .92;
-  --apex-corner-saturation: .86;
+  /* No corner assets or bursts; only incidental licks become 40% shorter. */
+  --apex-corner-scale: .6;
   position: relative;
   container-type: inline-size;
 }
@@ -131,46 +123,27 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
   42% { transform: translateX(calc(var(--apex-flame-sway) * -.35)) scale(.94,.9); opacity: .78; }
   73% { transform: scale(.96,1.04); opacity: 1; }
 }
-.apex-panel-heat { position: absolute; z-index: 1; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; }
+.apex-panel-heat { position: absolute; z-index: 1; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; clip-path: inset(-12px); }
 .apex-panel-outline { display: block; position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; fill: none; }
-.apex-heat-line { stroke: #c95739; stroke-width: 1.35; stroke-opacity: var(--apex-line-opacity); }
-.apex-heat-halo { stroke: #e66543; stroke-width: 5; stroke-opacity: var(--apex-panel-glow); filter: blur(3px); }
-.apex-heat-sweep { stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0; }
-.apex-heat-sweep .apex-heat-line { stroke: #ef8049; stroke-width: 1.8; stroke-opacity: .95; }
-.apex-heat-sweep .apex-heat-halo { stroke-width: 7; stroke-opacity: .5; }
+/* Cache the static gradient/glow separately so moving strokes never repaint its blur. */
+.apex-static-outline, .apex-active-outline { transform: translateZ(0); }
+.apex-heat-steady { position: absolute; inset: 0; }
+.apex-perimeter { stroke-linecap: round; stroke-linejoin: round; }
+.apex-heat-base { stroke: #e44c20; stroke-width: 3.4; stroke-opacity: .8; }
+.apex-heat-line { stroke-width: var(--apex-line-width); stroke-opacity: var(--apex-line-opacity); }
+.apex-heat-core { stroke-width: 1.1; stroke-opacity: .96; }
+.apex-heat-grain { stroke-width: .75; stroke-opacity: .9; stroke-linejoin: round; }
+.apex-heat-halo { stroke: #ef5626; stroke-width: 6; stroke-opacity: var(--apex-panel-glow); filter: blur(var(--apex-glow-blur)); }
 .apex-heat-steady, .apex-edge-flames { opacity: 0; }
-.apex-heat-section { animation: apex-edge-warmth 4.7s ease-in-out infinite; }
-.apex-heat-section-1 { animation-duration: 5.3s; animation-delay: -2.1s; }
-.apex-heat-section-2 { animation-duration: 6.1s; animation-delay: -3.7s; }
-.apex-heat-section-3 { animation-duration: 5.7s; animation-delay: -1.4s; }
-.apex-heat-section-2 .apex-heat-line, .apex-heat-section-3 .apex-heat-line { stroke-opacity: calc(var(--apex-line-opacity) * .8); }
-@keyframes apex-edge-warmth { 0%, 100% { opacity: .8; } 46% { opacity: 1; } 75% { opacity: .72; } }
-.apex-edge-flames { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; clip-path: inset(-14px -8px); }
-.apex-flame-orbit { position: absolute; left: 0; top: 0; width: 0; height: 0; offset-path: var(--apex-orbit-path); offset-rotate: 0deg; offset-anchor: 0 0; animation: apex-flame-travel calc(var(--apex-orbit-seconds) * 1s) linear var(--flame-delay) infinite; }
-.apex-edge-flames[data-travel=keyframes] .apex-flame-orbit { offset-path: none; animation: none; }
-/* Path movement belongs to the outer node; the upright SVG breathes independently. */
-.apex-flame-body { position: absolute; width: calc(var(--apex-flame-width) * var(--flame-size)); height: calc(var(--apex-flame-height) * var(--flame-size)); translate: -50% -50%; transform-origin: center; opacity: var(--apex-flame-opacity); filter: drop-shadow(0 0 1.5px rgb(235 91 26 / var(--apex-flame-glow))); animation: apex-flame-breathe var(--flame-beat) ease-in-out var(--flame-beat-delay) infinite; }
-.apex-flame-body svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.apex-flame-color-0 { fill: #b52c19; }
-.apex-flame-color-1 { fill: #ff821d; }
-.apex-flame-color-2 { fill: #ffe16a; }
-/* Three equally bright silhouettes vary the tip and core without a flashing phase. */
-.apex-flame-frame { animation: apex-flame-shape var(--flame-beat) steps(1, end) var(--flame-beat-delay) infinite; }
-.apex-flame-frame-1 { animation-name: apex-flame-shape-middle; }
-.apex-flame-frame-2 { animation-name: apex-flame-shape-last; }
-.apex-border-ember { position: absolute; left: 0; top: 0; width: 3px; height: 3px; background: #ef9434; opacity: 0; pointer-events: none; }
-@keyframes apex-flame-travel { from { offset-distance: 0%; } to { offset-distance: 100%; } }
-@keyframes apex-flame-breathe {
-  0%, 100% { transform: scale(.92, .87) rotate(-3deg); }
-  29% { transform: translateX(.4px) scale(1.08, 1.24) rotate(3deg); }
-  61% { transform: scale(.82, .76) rotate(-2deg); }
-  82% { transform: translateX(-.4px) scale(1.02, 1.1); }
-}
-@keyframes apex-flame-shape { 0%, 100% { opacity: 1; } 34% { opacity: 0; } }
-@keyframes apex-flame-shape-middle { 0%, 67%, 100% { opacity: 0; } 34% { opacity: 1; } }
-@keyframes apex-flame-shape-last { 0%, 100% { opacity: 0; } 67% { opacity: 1; } }
+.apex-heat-hot { stroke: #ffe99a; stroke-width: 1.2; stroke-opacity: .85; stroke-dasharray: .2 6.8 .65 12.35 .35 18.65 1 9 .4 20.6 .6 29.4; animation: apex-ember-drift var(--apex-hot-seconds) linear infinite, apex-ember-warmth 5.7s ease-in-out infinite; }
+.apex-heat-hot-secondary { stroke: #ffac32; stroke-width: 2; stroke-dasharray: .5 26 .3 13 1 38 .7 57.5; animation: apex-ember-drift-secondary 71s linear infinite, apex-ember-warmth 7.3s ease-in-out -2.7s infinite; }
+@keyframes apex-ember-drift { to { stroke-dashoffset: -100; } }
+@keyframes apex-ember-drift-secondary { from { stroke-dashoffset: 27; } to { stroke-dashoffset: 164; } }
+@keyframes apex-ember-warmth { 0%, 100% { opacity: .62; } 47% { opacity: 1; } 76% { opacity: .78; } }
+.apex-edge-lick { fill: #ff861d; stroke: #ffd56a; stroke-width: .65; stroke-linejoin: round; filter: drop-shadow(0 0 .7px rgb(238 72 15 / .55)); opacity: 0; }
+.apex-border-ember { fill: #ffbc48; opacity: 0; }
 @container (max-width: 600px) {
-  .apex-edge-flames { --apex-orbit-count: 6; --apex-flame-width: 9px; --apex-flame-height: 14px; }
+  .apex-edge-flames { --apex-lick-interval: 700; --apex-lick-height: 5; }
 }
 .board-card[data-mode-phase=idle] .apex-panel-heat * { animation: none; }
 .board-card[data-effects-paused=true] .apex-panel-heat *, .board-card[data-effects-paused=true] .apex-tab-flame { animation-play-state: paused; }
@@ -186,7 +159,7 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 @media (prefers-reduced-motion: reduce) {
   .board-card .mode-capsule, .board-card .mode-switch button { transition: none; }
   .board-card .apex-panel-heat *, .board-card .apex-tab-flame { animation: none; }
-  .board-card .apex-heat-halo, .board-card .apex-edge-flames, .board-card .apex-tab-glow { display: none; }
+  .board-card .apex-heat-halo, .board-card .apex-edge-flames, .board-card .apex-heat-hot, .board-card .apex-tab-glow { display: none; }
 }
 .challenge-panel { display: grid; gap: 13px; min-width: 0; padding: 0 0 16px; border-bottom: 1px solid #dce5dc; }
 .challenge-panel[data-phase=over] { border-bottom-color: #d5b9a8; }
@@ -544,28 +517,35 @@ html { scrollbar-gutter: stable; }
 /* The existing dialog opener, promoted above observation and transport controls. */
 .parameter-entry {
   --parameter-entry-bg: #eaf2e6;
-  --parameter-entry-border: #79997b;
+  --parameter-entry-border: #6f9273;
   --parameter-entry-hover: #e1ecdd;
   --parameter-entry-icon-bg: #d7e7d2;
   display: flex; align-items: center; gap: 11px; width: 100%; min-width: 0; min-height: 66px;
   padding: 11px 12px; border: 1px solid var(--parameter-entry-border); border-radius: 14px;
   color: #214e32; background: var(--parameter-entry-bg); text-align: left; touch-action: manipulation;
-  transition: background-color .15s ease, border-color .15s ease;
+  cursor: pointer; box-shadow: 0 2px 5px rgb(34 77 53 / .04);
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
-.parameter-entry-icon { display: grid; place-items: center; flex: 0 0 34px; height: 34px; border-radius: 9px; background: var(--parameter-entry-icon-bg); }
+.parameter-entry-icon { display: grid; place-items: center; flex: 0 0 36px; height: 36px; border: 1px solid rgb(55 101 62 / .18); border-radius: 9px; background: var(--parameter-entry-icon-bg); }
 .parameter-entry-icon svg { width: 23px; height: 23px; }
 .parameter-entry-copy { display: grid; gap: 3px; min-width: 0; }
 .parameter-entry-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; }
-.parameter-entry-title b { font-size: 15px; font-weight: 800; }
+.parameter-entry-title b { color: #193f29; font-size: 15px; font-weight: 850; }
 .parameter-entry-title small { color: #4e6e54; font-size: 11px; font-weight: 650; }
 .parameter-entry-hint { color: #506650; font-size: 11px; line-height: 1.5; word-break: keep-all; overflow-wrap: anywhere; }
-.parameter-entry-arrow { margin-left: auto; font-size: 19px; }
-.parameter-entry:hover { background: var(--parameter-entry-hover); border-color: #3c7148; }
+.parameter-entry-action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex: 0 0 auto; margin-left: auto; padding: 6px 9px; border: 1px solid #a5baa0; border-radius: 7px; color: #2d5837; background: rgb(255 255 255 / .6); font-size: 11px; font-weight: 750; white-space: nowrap; }
+.parameter-entry-action > span:last-child { font-size: 16px; line-height: 1; }
+.parameter-entry:hover { background: var(--parameter-entry-hover); border-color: #3c7148; box-shadow: 0 4px 10px rgb(34 77 53 / .09); transform: translateY(-1px); }
 .parameter-entry:active, .parameter-entry[aria-expanded=true] { background: #d8e8d2; border-color: #2e643f; }
 .parameter-entry:focus-visible { outline: 3px solid #245e3c; outline-offset: 3px; }
-.apex-mode .parameter-entry { --parameter-entry-bg: #f5f8ef; --parameter-entry-border: #a2b59a; --parameter-entry-hover: #eaf1e3; --parameter-entry-icon-bg: #e7eedd; }
+.apex-mode .parameter-entry { --parameter-entry-bg: #f0f5ea; --parameter-entry-border: #8da783; --parameter-entry-hover: #e8f0e1; --parameter-entry-icon-bg: #e0ead5; }
 .parameter-entry[data-locked=true] .parameter-entry-icon { background: #e9eee5; }
-@media (prefers-reduced-motion: reduce) { .parameter-entry { transition: none; } }
+@media (max-width: 480px) {
+  .parameter-entry { flex-wrap: wrap; gap: 7px 10px; }
+  .parameter-entry-copy { flex: 1 1 calc(100% - 46px); }
+  .parameter-entry-action { margin-left: 46px; padding: 4px 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .parameter-entry { transition: none; } .parameter-entry:hover { transform: none; } }
 .challenge-panel { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 5px 12px; align-items: center; }
 .challenge-title { grid-column: 1/-1; margin: 0; }
 .challenge-score { grid-column: 1; grid-row: 2/6; padding: 3px; gap: 2px; border: 0; }

@@ -27,12 +27,18 @@ const phase = () => page.locator('.board-card').getAttribute('data-mode-phase');
 const state = () => page.evaluate(() => {
   const q = s => document.querySelector(s);
   const css = s => getComputedStyle(q(s));
-  const rect = s => { const { x, y, width, height } = q(s).getBoundingClientRect(); return { x, y, width, height }; };
+  // The legend can change the header's height between modes. Compare alignment
+  // within that header instead of its unrelated absolute vertical centering.
+  const rect = s => {
+    const { x, y, width, height } = q(s).getBoundingClientRect();
+    const header = q('.board-heading').getBoundingClientRect();
+    return { x: x - header.x, y: y + height / 2 - header.y - header.height / 2, width, height };
+  };
   return {
     mode: q('.board-card').dataset.modeEffects, phase: q('.board-card').dataset.modePhase,
     capsule: rect('.mode-capsule'), tabs: rect('.mode-switch'), label: rect('.apex-tab-label'),
     heat: +css('.apex-panel-heat').opacity, flame: +css('.apex-tab-ignition').opacity,
-    sweep: parseFloat(css('.apex-heat-sweep').strokeDashoffset), steady: +css('.apex-heat-steady').opacity,
+    flicker: +css('.apex-edge-flames').opacity, steady: +css('.apex-heat-steady').opacity,
     step: q('#step-value').textContent, challengePhase: q('#challenge-panel').dataset.phase,
     overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
     animations: q('.board-card').getAnimations({ subtree: true }).filter(a => a.playState === 'running').length,
@@ -79,10 +85,10 @@ try {
   // Browser-side frame sampling verifies time ordering and continuous travel.
   const timeline = await page.evaluate(async () => {
     const q = s => document.querySelector(s);
-    const sample = t => ({ t, x: q('.mode-capsule').getBoundingClientRect().x,
+    const sample = t => ({ t, x: q('.mode-capsule').getBoundingClientRect().x - q('.board-heading').getBoundingClientRect().x,
       flame: +getComputedStyle(q('.apex-tab-ignition')).opacity,
       heat: +getComputedStyle(q('.apex-panel-heat')).opacity,
-      dash: parseFloat(getComputedStyle(q('.apex-heat-sweep')).strokeDashoffset),
+      flicker: +getComputedStyle(q('.apex-edge-flames')).opacity,
       steady: +getComputedStyle(q('.apex-heat-steady')).opacity,
       phase: q('.board-card').dataset.modePhase });
     const samples = []; const start = performance.now();
@@ -96,7 +102,8 @@ try {
   const after = await state();
   assert.ok(timeline.some(s => s.x > before.capsule.x + 5 && s.x < after.capsule.x - 5), 'capsule passes intermediate positions');
   assert.ok(timeline.some(s => s.flame > .1 && s.heat === 0), 'tab ignites before panel');
-  assert.ok(timeline.some(s => s.heat > .2 && s.dash > .1 && s.dash < .9 && s.steady === 0), 'outline progressively reveals before steady outline');
+  assert.ok(timeline.some(s => s.heat > .1 && s.steady > .1 && s.flicker === 0), 'hot boundary ignites before micro flickers');
+  assert.ok(timeline.find(s => s.phase === 'steady').t < 900, 'ignition settles in about 0.8 seconds');
   assert.equal(timeline.at(-1).phase, 'steady');
   results.push({ timeline });
 
