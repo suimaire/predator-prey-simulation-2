@@ -1,4 +1,4 @@
-import type { PopulationMetric, SimulationSnapshot, Species } from './model.ts';
+import type { Agent, PopulationMetric, SimulationSnapshot, Species } from './model.ts';
 
 // Keep the strip's existing five-step comparison, including its startup window.
 export function populationComparison(history: readonly PopulationMetric[]): PopulationMetric | undefined {
@@ -30,10 +30,11 @@ export const REMOVAL_FEEDBACK_MS = 950;
 export const REMOVAL_MARKER_MS = 1300;
 export const PERSONAL_BEST_FEEDBACK_MS = 1200;
 
-// Snapshot agent arrays belong to the model: copy only presentation data before removal.
-export function captureRemovalFeedback(snapshot: SimulationSnapshot, species: Species, startedAt: number): RemovalFeedback {
+// Retain the pre-action count, but only highlight individuals actually removed.
+export function captureRemovalFeedback(snapshot: SimulationSnapshot, species: Species, startedAt: number, survivors: readonly Agent[] = []): RemovalFeedback {
   const agents = snapshot.agents[species];
-  return { species, step: snapshot.step, count: agents.length, positions: agents.map(({ x, y }) => ({ x, y })), startedAt };
+  const remainingIds = new Set(survivors.map(agent => agent.id));
+  return { species, step: snapshot.step, count: agents.length, positions: agents.filter(agent => !remainingIds.has(agent.id)).map(({ x, y }) => ({ x, y })), startedAt };
 }
 
 export function removalEmphasis(feedback: RemovalFeedback, now: number, reducedMotion: boolean, duration = REMOVAL_FEEDBACK_MS): number {

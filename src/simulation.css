@@ -311,6 +311,17 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 .intervention-dialog #intervention-error { color: #8b402b; }
 .intervention-dialog .challenge-primary { color: #fff; background: #215d3b; }
 .intervention-dialog .confirm-removal { background: #a65431; }
+.intervention-dialog #removal-controls { display: grid; min-width: 0; gap: 10px; }
+.intervention-dialog #removal-controls[hidden] { display: none; }
+.intervention-dialog .removal-population { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px; margin: 0; font-size: 12px; }
+.removal-population strong { color: #284833; font-size: 18px; }
+#removal-range { width: 100%; min-width: 0; margin: 0; accent-color: #a65431; }
+.intervention-dialog .removal-range-labels { display: flex; justify-content: space-between; margin: -6px 0 0; font-size: 11px; }
+.removal-presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.intervention-dialog .removal-presets button { min-width: 0; min-height: 36px; padding: 6px 2px; font-size: 12px; }
+.removal-presets button[aria-pressed=true] { color: #813c22; background: #fff0e7; border-color: #a65431; }
+.intervention-dialog #removal-validation { margin: 0; color: #8b402b; font-size: 11px; }
+.intervention-dialog #confirm-intervention { min-width: 0; overflow-wrap: anywhere; }
 .support-grid:has(#challenge-description[hidden]) { display: none; }
 .pyramid-card .card-heading h2, .removal-card .card-heading h2, .graph-card .card-heading h2 { font-size: 16px; }
 .live-pill { display: flex; align-items: center; gap: 5px; padding: 5px 7px; border-radius: 99px; color: #2c6d48; background: #e7f1e8; font-size: 8px; font-weight: 800; }

@@ -1,7 +1,7 @@
 import './simulation.css';
 import { createModeEffects } from './modeEffects.ts';
 import { DialogController } from './dialog.ts';
-import { InterventionSession, groupInterventions, interventionLabel } from './interventions.ts';
+import { InterventionSession, groupInterventions, interventionLabel, removalPresetAmount } from './interventions.ts';
 import { ParameterDraft } from './parameterDraft.ts';
 import { drawPopulationChart, SERIES_COLORS, type ChartSeries } from './charts.ts';
 import {
@@ -228,8 +228,8 @@ app.innerHTML = `
                   <button type="button" data-introduce="quaternary" aria-haspopup="dialog" aria-controls="intervention-dialog">＋ 4차 소비자</button>
                 </div>
                 <div class="intervention-actions intervention-secondary">
-                  <button type="button" id="open-introduction" aria-haspopup="dialog" aria-controls="intervention-dialog">종 도입·재도입</button>
-                  <button type="button" id="open-removal" aria-haspopup="dialog" aria-controls="intervention-dialog">종 제거</button>
+                  <button type="button" id="open-introduction" aria-haspopup="dialog" aria-controls="intervention-dialog">＋ 종 도입</button>
+                  <button type="button" id="open-removal" aria-haspopup="dialog" aria-controls="intervention-dialog">− 개체 제거</button>
                 </div>
                 <p id="recent-intervention" aria-live="polite">최근 개입 없음</p>
               </section>
@@ -342,6 +342,16 @@ app.innerHTML = `
         <span class="intervention-field" id="introduction-field"><label for="introduction-amount">도입 개체 수</label>
           <span class="amount-control"><button type="button" id="decrease-introduction" aria-label="도입 개체 수 줄이기">−</button><input id="introduction-amount" type="number" min="1" step="1" value="1" required aria-describedby="introduction-limit"><button type="button" id="increase-introduction" aria-label="도입 개체 수 늘리기">＋</button></span>
         </span>
+        <section id="removal-controls" hidden aria-label="개체 제거량">
+          <p class="removal-population">현재 개체수 <strong id="removal-population"></strong></p>
+          <label class="intervention-field" for="removal-amount">제거할 개체 수</label>
+          <span class="amount-control intervention-field"><button type="button" id="decrease-removal" aria-label="제거 개체 수 줄이기">−</button><input id="removal-amount" type="number" min="1" step="1" value="1" required aria-describedby="removal-validation"><button type="button" id="increase-removal" aria-label="제거 개체 수 늘리기">＋</button></span>
+          <input id="removal-range" type="range" min="1" max="1" step="1" value="1" aria-label="제거할 개체 수" />
+          <p class="removal-range-labels" aria-hidden="true"><span id="removal-min">1</span><span id="removal-max"></span></p>
+          <div class="removal-presets" role="group" aria-label="제거 비율">${[[.1, '10%'], [.25, '25%'], [.5, '50%'], [1, '전체']].map(([fraction, label]) => `<button type="button" data-removal-fraction="${fraction}" aria-pressed="false">${label}</button>`).join('')}</div>
+          <p class="removal-population" aria-live="polite">제거 후 예상 개체수 <strong id="removal-preview"></strong></p>
+          <p id="removal-validation" role="status"></p>
+        </section>
         <p id="introduction-limit"></p><p id="intervention-warning" role="status"></p>
         <p id="intervention-step"></p><p id="intervention-error" role="alert"></p>
         <div><button type="button" id="cancel-intervention">취소</button><button type="submit" class="challenge-primary" id="confirm-intervention">도입</button></div>
@@ -767,7 +777,7 @@ function updateStructuralUi(): void {
 function renderPopulationStrip(snapshot: SimulationSnapshot): void {
   const comparison = populationComparison(simulation.getHistory());
   const fromStep = comparison?.step ?? snapshot.step;
-  element('#population-comparison').textContent = `순변화 · 최근 ${snapshot.step - fromStep} step (t=${fromStep} → ${snapshot.step}) · 종 제거는 제거 직전 기준`;
+  element('#population-comparison').textContent = `순변화 · 최근 ${snapshot.step - fromStep} step (t=${fromStep} → ${snapshot.step}) · 개체 제거는 제거 직전 기준`;
   element('#forest-population').textContent = simulation.getHistory().at(-1)!.forestAbundance.toLocaleString();
   const strip = element('#population-strip');
   if (strip.dataset.depth !== simulation.getActiveSpecies().join(',')) {
@@ -783,7 +793,7 @@ function renderPopulationStrip(snapshot: SimulationSnapshot): void {
     const removed = snapshot.removedSpecies.includes(species);
     const feedback = removalFeedback.get(species);
     const removing = feedback !== undefined && removalEmphasis(feedback, now, reducedMotion.matches) > 0;
-    const delta = removed ? -(feedback?.count ?? 0) : change.delta;
+    const delta = removing ? -feedback.positions.length : removed ? -(feedback?.count ?? 0) : change.delta;
     const label = item.querySelector<HTMLElement>('em')!;
     const signature = `${change.previous}:${current}`;
     if (!removed) {
@@ -796,9 +806,9 @@ function renderPopulationStrip(snapshot: SimulationSnapshot): void {
     item.querySelector('small')!.textContent = `${SPECIES_LABELS[species]}${removing && delta !== 0 ? ' · 실험적 제거' : ''}`;
     item.classList.toggle('is-removed', removed);
     item.classList.toggle('is-removal-feedback', removing);
-    item.title = removed ? `실험적 제거 · ${feedback?.count ?? 0} → ${current} · t=${feedback?.step ?? snapshot.step}`
+    item.title = removed || removing ? `실험적 제거 · ${feedback?.count ?? 0} → ${current} · t=${feedback?.step ?? snapshot.step}`
       : `t=${fromStep} → ${snapshot.step} · ${change.previous} → ${current} · ${change.text}`;
-    label.textContent = removed ? (removing && delta !== 0 ? `${delta} ↓` : '실험적 제거') : `${change.text}${delta === 0 ? '' : delta > 0 ? ' ↑' : ' ↓'}`;
+    label.textContent = removing ? `${delta} ↓` : removed ? '실험적 제거' : `${change.text}${delta === 0 ? '' : delta > 0 ? ' ↑' : ' ↓'}`;
     label.classList.toggle('has-delta', (!removed || removing) && delta !== 0);
     label.classList.toggle('is-changing', delta !== 0 && (removing || !removed && populationFeedbackUntil.has(species)));
     label.title = item.title;
@@ -1069,6 +1079,7 @@ function switchMode(nextMode: AppMode): void {
 }
 
 function updateInterventionDialog(): void {
+  element('#intervention-error').textContent = '';
   const species = element<HTMLSelectElement>('#intervention-species').value as Species;
   const introducing = interventionKind === 'introduce';
   const limit = simulation.getIntroductionLimit(species);
@@ -1082,15 +1093,48 @@ function updateInterventionDialog(): void {
   element<HTMLButtonElement>('#decrease-introduction').disabled = !Number.isInteger(amount) || amount <= 1;
   element<HTMLButtonElement>('#increase-introduction').disabled = !Number.isInteger(amount) || amount >= limit;
   const count = simulation.getSnapshot().agents[species].length;
-  element('#intervention-title').textContent = `${SPECIES_LABELS[species]} ${introducing ? '도입' : '제거'}`;
-  element('#intervention-copy').textContent = introducing ? '현재 생태계에 새 개체를 넣습니다. 확인 후에는 일시정지를 유지합니다.' : `현재 살아 있는 ${count}마리를 모두 제거합니다. 다른 종은 유지되며, 나중에 새 개체를 다시 도입할 수 있습니다.`;
+  const removalInput = element<HTMLInputElement>('#removal-amount');
+  const removalAmount = removalInput.valueAsNumber;
+  const validRemoval = Number.isInteger(removalAmount) && removalAmount >= 1 && removalAmount <= count;
+  removalInput.min = count === 0 ? '0' : '1';
+  removalInput.max = String(count);
+  removalInput.disabled = introducing || count === 0;
+  removalInput.setAttribute('aria-invalid', String(!introducing && count > 0 && !validRemoval));
+  element('#removal-controls').hidden = introducing;
+  element('#removal-population').textContent = `${count.toLocaleString('ko-KR')}마리`;
+  element('#removal-preview').textContent = count === 0 ? '0마리' : validRemoval ? `${(count - removalAmount).toLocaleString('ko-KR')}마리` : '—';
+  element('#removal-validation').textContent = count === 0 ? '제거할 개체가 없습니다.' : validRemoval ? '' : `1–${count} 사이의 정수를 입력하세요.`;
+  element<HTMLButtonElement>('#decrease-removal').disabled = introducing || !validRemoval || removalAmount <= 1;
+  element<HTMLButtonElement>('#increase-removal').disabled = introducing || !validRemoval || removalAmount >= count;
+  const range = element<HTMLInputElement>('#removal-range');
+  range.min = removalInput.min;
+  range.max = String(count);
+  range.value = String(validRemoval ? removalAmount : removalPresetAmount(count, .1));
+  range.disabled = introducing || count === 0;
+  element('#removal-min').textContent = range.min;
+  element('#removal-max').textContent = count.toLocaleString('ko-KR');
+  document.querySelectorAll<HTMLButtonElement>('[data-removal-fraction]').forEach(button => {
+    button.disabled = introducing || count === 0;
+    button.setAttribute('aria-pressed', String(validRemoval && removalAmount === removalPresetAmount(count, Number(button.dataset.removalFraction))));
+  });
+  element('#intervention-title').textContent = `${SPECIES_LABELS[species]} ${introducing ? '도입' : '개체 제거'}`;
+  element('#intervention-copy').textContent = introducing ? '현재 생태계에 새 개체를 넣습니다. 확인 후에는 일시정지를 유지합니다.' : '현재 개체군에서 무작위로 실험적 제거를 합니다. 확인 후에는 일시정지를 유지합니다.';
   const prey = speciesConfigs(simulation.getParameters())[species].preyType;
   const noPrey = introducing && prey !== 'vegetation' && simulation.getSnapshot().agents[prey].length === 0;
   element('#intervention-warning').textContent = noPrey ? `현재 주요 먹이인 ${SPECIES_LABELS[prey as Species]}가 없습니다. 도입 후 먹이 부족의 영향을 받을 수 있습니다.` : '';
   const confirm = element<HTMLButtonElement>('#confirm-intervention');
-  confirm.textContent = introducing ? `${Number.isInteger(amount) && amount > 0 ? amount : ''}마리 도입` : `${SPECIES_LABELS[species]} 제거`;
+  confirm.textContent = introducing ? `${Number.isInteger(amount) && amount > 0 ? amount : ''}마리 도입`
+    : `${SPECIES_LABELS[species]} ${validRemoval ? removalAmount === count ? '전체 제거' : `${removalAmount.toLocaleString('ko-KR')}마리 제거` : '개체 제거'}`;
   confirm.classList.toggle('confirm-removal', !introducing);
-  confirm.disabled = introducing ? !Number.isInteger(amount) || amount < 1 || amount > limit : count === 0;
+  confirm.disabled = introducing ? !Number.isInteger(amount) || amount < 1 || amount > limit : !validRemoval;
+}
+
+function resetInterventionAmount(): void {
+  const species = element<HTMLSelectElement>('#intervention-species').value as Species;
+  element<HTMLInputElement>('#introduction-amount').value = '1';
+  element<HTMLInputElement>('#removal-amount').value = String(removalPresetAmount(simulation.getSnapshot().agents[species].length, .1));
+  element('#intervention-error').textContent = '';
+  updateInterventionDialog();
 }
 
 function openInterventionDialog(kind: Intervention['kind'], species: Species, opener: HTMLElement): void {
@@ -1099,25 +1143,27 @@ function openInterventionDialog(kind: Intervention['kind'], species: Species, op
   if (step === null) return;
   interventionKind = kind;
   element<HTMLSelectElement>('#intervention-species').value = species;
-  element<HTMLInputElement>('#introduction-amount').value = '1';
   element('#intervention-step').textContent = `현재 Step: ${step.toLocaleString('ko-KR')} · 일시정지`;
   element('#intervention-error').textContent = '';
-  updateInterventionDialog();
+  resetInterventionAmount();
   if (!dialogs.open(interventionDialog, opener, element('#intervention-species'))) interventionSession.cancel();
 }
 
 function confirmIntervention(event: SubmitEvent): void {
   event.preventDefault();
   const species = element<HTMLSelectElement>('#intervention-species').value as Species;
-  const feedback = interventionKind === 'remove' ? captureRemovalFeedback(simulation.getSnapshot(), species, performance.now()) : null;
-  const result = interventionSession.confirm(interventionKind, species, element<HTMLInputElement>('#introduction-amount').valueAsNumber);
+  const snapshot = simulation.getSnapshot();
+  // Copy the array map, not the individuals: the model replaces the target array.
+  const before = { ...snapshot, agents: { ...snapshot.agents } };
+  const amount = element<HTMLInputElement>(interventionKind === 'remove' ? '#removal-amount' : '#introduction-amount').valueAsNumber;
+  const result = interventionSession.confirm(interventionKind, species, amount);
   if (!result) {
-    element('#intervention-error').textContent = '현재 개체 수와 도입 가능 수를 확인하세요.';
     updateInterventionDialog();
+    element('#intervention-error').textContent = '현재 개체 수와 개입 수량을 확인하세요.';
     return;
   }
-  if (feedback) {
-    removalFeedback.set(species, feedback);
+  if (result.kind === 'remove') {
+    removalFeedback.set(species, captureRemovalFeedback(before, species, performance.now(), simulation.getSnapshot().agents[species]));
     removalNeedsRedraw = true;
   } else removalFeedback.delete(species);
   populationFeedbackUntil.delete(species);
@@ -1200,7 +1246,24 @@ element('#open-removal').addEventListener('click', (event) => {
   const species = simulation.getActiveSpecies().find((item) => simulation.getSnapshot().agents[item].length > 0) ?? 'rabbit';
   openInterventionDialog('remove', species, event.currentTarget as HTMLElement);
 });
-element('#intervention-species').addEventListener('change', () => { element<HTMLInputElement>('#introduction-amount').value = '1'; updateInterventionDialog(); });
+element('#intervention-species').addEventListener('change', resetInterventionAmount);
+element('#removal-amount').addEventListener('input', updateInterventionDialog);
+element('#removal-range').addEventListener('input', () => {
+  element<HTMLInputElement>('#removal-amount').value = element<HTMLInputElement>('#removal-range').value;
+  updateInterventionDialog();
+});
+for (const [id, delta] of [['decrease-removal', -1], ['increase-removal', 1]] as const) {
+  element(`#${id}`).addEventListener('click', () => {
+    const input = element<HTMLInputElement>('#removal-amount');
+    input.value = String(input.valueAsNumber + delta);
+    updateInterventionDialog();
+  });
+}
+document.querySelectorAll<HTMLButtonElement>('[data-removal-fraction]').forEach(button => button.addEventListener('click', () => {
+  const species = element<HTMLSelectElement>('#intervention-species').value as Species;
+  element<HTMLInputElement>('#removal-amount').value = String(removalPresetAmount(simulation.getSnapshot().agents[species].length, Number(button.dataset.removalFraction)));
+  updateInterventionDialog();
+}));
 element('#introduction-amount').addEventListener('input', updateInterventionDialog);
 for (const [id, delta] of [['decrease-introduction', -1], ['increase-introduction', 1]] as const) {
   element(`#${id}`).addEventListener('click', () => {

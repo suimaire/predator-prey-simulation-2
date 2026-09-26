@@ -24,12 +24,12 @@
 - 초기 생성과 런타임 도입이 `availablePositions()`, `populateSpecies()`, `createAgent()`를 공유한다. 기존 에너지 초기 비율, 나이 0, ID 발급 및 한 칸 한 동물 규칙을 사용한다.
 - 기존 초기 개체 수 제한(토끼 400, 늑대 160, 3차 40, 4차 20)을 `POPULATION_LIMITS`로 공유한다. 한 번의 도입 상한은 이 값과 현재 빈 칸 수 중 작은 값이다. 현재 총 개체 수의 안전 상한은 기존 공간 규칙으로 제한된다.
 - 정수가 아니거나 빈 칸 수/기존 한도를 초과하는 요청은 부분 적용 없이 거부하며 RNG를 소비하지 않는다.
-- RNG 알고리즘이나 seed 생성 계약을 바꾸지 않는다. 도입은 해당 실험의 RNG를 소비하고, 제거는 RNG를 소비하지 않는다. 같은 초기 조건과 같은 개입 순서·step·종·수량이면 같은 결과를 재현한다.
+- RNG 알고리즘이나 seed 생성 계약을 바꾸지 않는다. 도입과 부분 제거는 해당 실험의 RNG를 소비하고, 전체 제거는 RNG를 소비하지 않는다. 같은 초기 조건과 같은 개입 순서·step·종·수량이면 같은 결과를 재현한다.
 - 주요 먹이가 없으면 안내만 표시하고 도입을 허용한다. 이후 변화는 기존 사냥·에너지·기아·자연사 규칙으로 결정된다.
 
 ## UI와 정지 의미론
 
-생태계 설계와 실시간 생태 피라미드 사이에 작은 생태계 개입 카드를 추가했다. 3차·4차 바로 도입 버튼, 전체 종 도입·재도입, 종 제거와 최근 개입 한 건을 제공한다. 토끼·늑대도 같은 대화상자에서 다시 도입할 수 있다.
+생태계 설계와 실시간 생태 피라미드 사이에 작은 생태계 개입 카드를 추가했다. 3차·4차 바로 도입 버튼, ‘＋ 종 도입’, ‘− 개체 제거’와 최근 개입 한 건을 제공한다. 토끼·늑대도 같은 대화상자에서 다시 도입할 수 있다.
 
 1. 개입 버튼의 클릭 처리 중 즉시 `setRunning(false)`를 호출한다. 같은 JavaScript 작업에서 step을 고정하므로 다음 animation tick 전에 정지한다.
 2. 대화상자가 열려 있는 동안 simulation tick은 진행하지 않는다.
@@ -41,7 +41,17 @@
 
 ## 제거와 재도입
 
-`removeSpecies()`는 대상의 현재 살아 있는 개체만 제거한다. 제거 수량과 결과 0을 이벤트에 저장한다. 다른 종, 식생, step, RNG와 기존 그래프 데이터는 유지한다. 3차 제거 시 4차는 그대로 남아 기존 규칙으로 이후 행동한다.
+`removeSpecies(species, amount?)`는 대상의 현재 살아 있는 개체 중 지정한 수량을 제거한다. 수량을 생략한 기존 호출은 전체 제거로 유지한다. 실제 제거 수량과 남은 개체수를 기존 `kind: 'remove'` 이벤트에 저장하며 별도 partial kind를 만들지 않는다. 다른 종, 식생, step과 기존 그래프 데이터는 유지한다. 3차 제거 시 4차는 그대로 남아 기존 규칙으로 이후 행동한다.
+
+부분 제거는 현재 개체 배열의 인덱스에 partial Fisher–Yates를 적용한다. 각 선택은 기존 `this.random.integer(remaining)`를 사용하며 이미 선택한 인덱스를 다시 뽑지 않는다. 개체의 ID·위치·나이·에너지로 순위를 매기지 않는다. 선택되지 않은 기존 객체는 원래 배열 순서대로 유지하며 재생성하지 않는다. 살아남은 종은 처리·번식을 계속한다. 작업량은 개입 시에만 O(N + 제거량), 추가 메모리는 O(N)이며 tick 경로에 추가 순회를 넣지 않는다.
+
+전체 제거는 원래처럼 배열을 비우고 `removedSpecies`에 기록한다. 선택 RNG를 호출하지 않아 기존 전체 제거 후의 결정적 궤적과 호환된다. 부분 제거는 기존 RNG의 현재 상태를 소비하며 초기화하지 않는다. 같은 seed·초기 조건·simulation 이력·개입 이력·step·종·수량이면 같은 개체가 제거되고 이후 궤적도 동일하다.
+
+제거는 실험자가 수행한 개체군 조작이다. 기존 `stats.deaths`, `feedingEvents`, 출생·섭식/에너지 기록에 추가하지 않는다. 자연사·포식 사망과 구분하여 최근 개입·그래프/이력에 `토끼 −50 (실험적 제거)` 또는 `토끼 −224 (실험적 전체 제거)`로 표시한다. 제거 피드백은 변경 전 개체수를 유지하되 실제 제거된 개체의 위치만 강조한다.
+
+기존 제거 대화상자에서 토끼·늑대·3차·4차 소비자를 선택할 수 있다. 열기/종 변경 시 기본 수량은 `clamp(round(population × 0.1), 1, population)`이다. −/＋, 정수 입력, 슬라이더와 10%·25%·50%·전체 preset을 동기화하며, preset도 같은 반올림·범위 규칙을 적용한다. 예: 224 → 22/56/112/224, 3마리의 10% → 1. 같은 수량에 해당하는 preset은 모두 선택 표시한다.
+
+0마리는 표시하되 수량·preset·확인을 비활성화한다. 직접 입력의 빈 값·NaN·음수·0·소수·최대 초과·overflow는 유효한 수량으로 간주하지 않고 확인을 막는다. 모델도 현재 개체수를 기준으로 원자적으로 거부하여 상태·RNG·이력을 변경하지 않는다. `InterventionSession`이 수량을 전달하고 확인 시 재검증하므로 대화상자 이후 외부 변경에도 초과 제거하지 않는다. 유효한 값이 되면 예상 잔여 수량과 정확한 확인 라벨을 표시한다.
 
 재도입은 새로운 ID·나이·초기 에너지를 가진 개체를 현재의 빈 칸에 넣는 새 이벤트다. 과거 생태계나 과거 개체를 복원하는 Undo가 아니다. 제거 표시를 해제하여 다시 동작·번식할 수 있게 한다.
 
@@ -79,7 +89,7 @@ Reset, 실험 조건 적용, 새 simulation 생성과 mode 전환 시 런타임 
 | `package.json` | `test:browser:interventions` 실행 명령 |
 | `docs/runtime-ecosystem-interventions.md` | 이 구현·검증 기록 |
 
-## 검증
+## Phase 1 검증 기록
 
 - 단위/통합 테스트: `npm test` — 114개 통과. 기존 challenge, seed, leaderboard와 PGlite DB 테스트 포함.
 - 타입/배포용 bundle: `npx tsc --noEmit`, `npm run build` 통과.
@@ -101,10 +111,27 @@ npm run test:browser:interventions
 
 서버 주소는 `TEST_ORIGIN`, 브라우저 channel은 `TEST_BROWSER`로 조정할 수 있다. 기본 channel은 `msedge`다. fixture는 브라우저 저장소를 격리하고 runner는 외부 요청을 차단한다. 운영 점수 제출이나 DB 변경은 없다.
 
+## Phase 1.1 — 부분 개체군 제거 검증
+
+- 작업 branch: `feat/partial-population-removal`.
+- 원격 fetch 후 `main`/`origin/main`은 `19d0bac`, runtime branch는 clean `34c3c51a3dd6c4a43b9ebb4649eb8c12fbe0e313`임을 확인했다. runtime 기능은 main 미병합 상태여서 해당 커밋에서 분기했다. 적용할 `AGENTS.md`는 없었다.
+- 변경 파일: `src/model.ts`, `src/interventions.ts`, `src/main.ts`, `src/feedback.ts`, `src/simulation.css`, `tests/interventions.test.ts`, `tests/feedback.test.ts`, `tests/interventions.browser.mjs`, 이 문서와 `README.md`.
+- 관련 개입/피드백 테스트 35개, 전체 테스트 124개(기존 114 + 신규 10개) 통과. 무개입 및 Apex baseline hash·점수·붕괴 회귀도 그대로 통과했다.
+- 정확한 100→75 제거, 네 종 생존 개체의 객체 동일성·ID·위치·나이·에너지/순서, 25개 중복 없는 선택, seeded RNG 소비 및 `Math.random` 미사용, 같은 이력의 후속 궤적, 다른 seed의 선택 차이, 전체 제거 RNG 무소비, 1마리/0마리, 부정 입력의 원자적 거부를 검증했다.
+- 기존 자연사·포식/출생/섭식 통계와 에너지 기록, 파라미터, 다른 종, 식생, step, 기존 history 보존 및 Reset 후 초기 snapshot·RNG 재현을 검증했다. 같은 step의 부분/전체 제거가 하나의 그래프 marker로 묶이고 모든 변경 전·후 표본을 유지한다.
+- 실제 Microsoft Edge headless에서 `npm run test:browser:interventions` 통과. animation clock을 제어하여 실제 UI/DOM/dialog/canvas 동작을 확인했다. 토끼는 Step 9의 336마리에서 10%인 34마리 제거 후 302마리가 되었고, step·그래프·다른 종·식생·통계·40 step/s 설정·paused가 유지됐다. 제거 직후 HUD도 `336 → 302`, `−34`를 표시한다.
+- 늑대 부분 제거 → Run → 부분 제거 → Run → 전체 제거 → 재도입, 3차 6→3→5, Reset, 먹이 없는 단독 4차 4→2를 같은 실험 안에서 검증했다. Apex에서는 강제 버튼 이벤트로도 개입할 수 없다.
+- 종 변경 시 현재 수량/기본 10%/slider 범위/preset/잔여량/확인 문구 동기화, 숫자·버튼·slider·preset, 0/1/3마리, 잘못된 값, Tab/Shift+Tab·Enter·Space·방향키·ESC, 취소 시 실행 복구·focus 복원을 검증했다.
+- 1440×900, 1024×768, 390×844, 320×740에서 페이지/dialog 가로 overflow, control 겹침/잘림이 없었다. 320px에서 `4차 소비자 10마리 제거`도 줄바꿈되어 잘리지 않는다. 네 폭의 스크린샷과 그래프를 직접 확인했다.
+- `npx tsc --noEmit`, `npm run build`, `npm run db:check`, `git diff --check` 통과. DB 검사는 로컬 SQL 생성물 일치 검사이며 운영 DB를 변경하지 않았다.
+- 추가 회귀 검사도 통과했다. `npm run test:browser:leaderboard`는 합성 데이터로 1440/1024/390px, 순위·오류·폼·키보드·Personal Best를 검증했고 외부 요청은 0건이었다. `tests/modeEffects.browser.mjs`는 기존 Apex 전환 9개 그룹에서 console 오류·외부 쓰기 없이 통과했다.
+- 브라우저 결과/스크린샷: gitignore된 `verification.local/interventions/results.json`, `removal-dialog-{320,390,1024,1440}.png`, `removal-long-label-320.png`, `partial-rabbit-graph-1440.png`. JavaScript 오류와 외부 쓰기 0건.
+- Apex 규칙·score·seed·`simulationVersion`, leaderboard/Supabase, Pages workflow를 수정하지 않았다. 다른 브라우저 엔진이나 실제 모바일 장치는 이번 검증 범위에 포함하지 않았다.
+
 ## 다음 단계의 확장 지점
 
 - 새 종의 정의: `Species`, `SPECIES_ORDER`, `speciesConfigs()`, `POPULATION_LIMITS` 및 기존 색상/그리기 registry.
-- 도입/제거 생명주기: `introduceSpecies()`, `removeSpecies()`, `InterventionSession`과 이벤트 그룹은 종 이름에 의존하지 않으므로 재사용 가능하다.
+- 도입/제거 생명주기: `introduceSpecies()`, 수량을 받는 `removeSpecies()`, `InterventionSession`과 기존 remove 이벤트/그룹은 종 이름에 의존하지 않으므로 재사용 가능하다. `removalPresetAmount()`와 기존 선택 UI는 새 종의 population에도 같은 비율/수량 규칙을 적용할 수 있다.
 - 잡식 모델: 현재 `SpeciesConfig.preyType`과 `processPredator()`는 기존의 단일 먹이를 전제로 한다. 다음 단계에서 다중 먹이 선택·에너지 획득 계약을 별도로 설계하고 deterministic 검증을 추가해야 한다. 이번 변경에는 이 설계를 선행 적용하지 않았다.
 - 초기 조건과 runtime 활성 종은 분리되어 있어, 새로운 먹이 관계를 추가하더라도 개입이 초기 설정이나 Reset 의미를 바꾸지 않는다.
 

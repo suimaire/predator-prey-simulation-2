@@ -104,9 +104,22 @@ test('chart emphasis reuses exactly one existing marker and restores its normal 
       removalHighlights: [{ species: 'wolf', step: 1, emphasis }],
     });
     assert.deepEqual(strokes.filter((stroke) => stroke.color === SERIES_COLORS.wolf), [{ color: SERIES_COLORS.wolf, width: 1.5 + 3 * emphasis }]);
-    assert.deepEqual(labels.filter((label) => label.includes('제거')), ['늑대 제거']);
+    assert.deepEqual(labels.filter((label) => label.includes('제거')), ['늑대 −8 (실험적 전체 제거)']);
     assert.deepEqual(simulation.getHistory(), history);
   }
+});
+
+test('partial removal highlights only removed individuals while retaining the original population count', () => {
+  const simulation = new ForestSimulation({ ...DEFAULT_PARAMETERS, initialRabbits: 100 });
+  const snapshot = simulation.getSnapshot();
+  const before = { ...snapshot, agents: { ...snapshot.agents } };
+  simulation.removeSpecies('rabbit', 25);
+  const survivors = simulation.getSnapshot().rabbits;
+  const feedback = captureRemovalFeedback(before, 'rabbit', 1000, survivors);
+  const ids = new Set(survivors.map(agent => agent.id));
+  assert.equal(feedback.count, 100);
+  assert.equal(feedback.positions.length, 25);
+  assert.deepEqual(feedback.positions, before.rabbits.filter(agent => !ids.has(agent.id)).map(({ x, y }) => ({ x, y })));
 });
 
 test('population effects finish at their original deadline and same-step redraws cannot replay them', () => {

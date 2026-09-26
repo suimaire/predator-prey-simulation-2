@@ -1,7 +1,13 @@
 import { SPECIES_LABELS, type ForestSimulation, type Intervention, type Species } from './model.ts';
 
 export function interventionLabel(event: Intervention): string {
-  return `${SPECIES_LABELS[event.species]} ${event.kind === 'introduce' ? `+${event.amount.toLocaleString('ko-KR')}` : '제거'}`;
+  const amount = event.amount.toLocaleString('ko-KR');
+  return `${SPECIES_LABELS[event.species]} ${event.kind === 'introduce' ? `+${amount}` : `−${amount} (실험적 ${event.resultingCount === 0 ? '전체 ' : ''}제거)`}`;
+}
+
+export function removalPresetAmount(population: number, fraction: number): number {
+  if (!Number.isSafeInteger(population) || population < 1 || !Number.isFinite(fraction)) return 0;
+  return Math.min(population, Math.max(1, Math.round(population * fraction)));
 }
 
 export function groupInterventions(events: readonly Intervention[], firstStep: number, lastStep: number): { step: number; events: Intervention[] }[] {
@@ -44,10 +50,10 @@ export class InterventionSession {
       && this.pending.step === this.controls.simulation().getSnapshot().step;
   }
 
-  confirm(kind: Intervention['kind'], species: Species, amount = 1): Intervention | null {
+  confirm(kind: Intervention['kind'], species: Species, amount?: number): Intervention | null {
     if (!this.isCurrent()) return null;
     const simulation = this.pending!.simulation;
-    const changed = kind === 'introduce' ? simulation.introduceSpecies(species, amount) : simulation.removeSpecies(species);
+    const changed = kind === 'introduce' ? simulation.introduceSpecies(species, amount ?? 1) : simulation.removeSpecies(species, amount);
     if (!changed) return null;
     this.pending = null;
     this.controls.setRunning(false);
