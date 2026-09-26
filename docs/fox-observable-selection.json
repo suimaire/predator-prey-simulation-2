@@ -1,0 +1,22 @@
+{
+  "phase": "2.1b",
+  "protocolCommit": "b5fd078",
+  "guardrailCandidates": [
+    "p0.67-n4",
+    "p0.67-n6",
+    "p0.67-n8"
+  ],
+  "selectedCandidate": "p0.67-n4",
+  "status": "retain-current-after-guardrails; short observation supported, long coexistence not claimed",
+  "productChange": false,
+  "rationale": "Current .67/4 already offers >=100 steps in 100/100 runs; Q25=134, median=145.5 (near the lower edge of the approximate 150–200 soft target), interaction within 50=100/100. This supports short observation, not a strong 200-step guarantee (11/100). .67/6 changes median by only +4.5, Q25 by +6, and P>=200 by +1pp; no clear UX reason to increase the default. .67/8 improves the tail but requires double the introduction and still does not give most runs 200 steps. .80/8 has the highest median and P>=200 but changes both variables; current sufficiency and smallest-change principle take priority over maximizing a score.",
+  "guardrailRationale": "All three fixed-preference introduction amounts directly assess the simplest UX alternative. Retain current, the minimal +2 alternative, and the larger +4 alternative. Other preferences are fully reported, not deleted, but are not pursued as defaults after current short-window sufficiency.",
+  "guardrailOutcome": "700 additional runs completed. Rabbit+Fox .67/4: P>=100 100/100, P>=200 98/100, censored600 85/100, rabbit extinction<=100/200/600 0/1/6, cap0. Plant-only n4/n6/n8: zero births, zero growth, zero cap hits; median17. Selected n4 at verified UI max30%: median93.5, max102, zero births/growth/caps. Rabbit+Fox n6/n8 offer no default advantage: censored600 71/77, early rabbit<=200 0/6; n8 full-web mean vegetation55.87% versus current65.05%.",
+  "decision": "Case A: retain weighted preference .67, plant gain .5, default introduction4. Product src and exact fixtures unchanged. This is a scoped educational short-observation assessment, not a release/deployment action or a claim of meeting every soft target.",
+  "caveats": [
+    "Median is below 150 by 4.5 steps and only 11% reach 200; report this without rounding into a hard pass.",
+    "At 40 step/s the median is only 3.6375 seconds, so slower playback/pause remains important.",
+    "Vegetation sustained-low flag is frequent in all candidates (74–91/100) and current is 91 versus fallback 80; do not claim ecology is stable or all side effects absent.",
+    "600-step coexistence is auxiliary, never selection criterion."
+  ]
+}

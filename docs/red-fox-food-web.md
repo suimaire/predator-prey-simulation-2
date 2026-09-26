@@ -1,4 +1,6 @@
-# Red Fox Food Web — Phase 2 / Phase 2.1
+# Red Fox Food Web — Phase 2 / Phase 2.1 / Phase 2.1b
+
+**최신 Phase 2.1b: 관찰 가능한 짧은 변화 흐름을 기준으로 재평가했으며, `.67 / 도입 4마리`의 제품 변경은 불필요하다.** 600-step 장기 공존은 여전히 낮고, 200-step 관찰을 대부분의 시행에 보장하는 것도 아니다. 아래 Phase 2.1의 BLOCKED 기록은 당시 장기 공존 목표에 대한 역사적 결론으로 그대로 보존한다. 새 판정과 한계는 문서 끝 **Observable Dynamics Reassessment** 절에 있다. main/Pages에는 반영하지 않는다.
 
 **현재 Phase 2.1 판정: weighted choice 구현·회귀 검증은 통과했지만, 공존 기본값 튜닝은 BLOCKED다.**
 이 feature branch의 평가값은 rabbitPreference **0.67**, plantGain **0.5**다. 정식 배포 기본값으로 채택했다는 뜻이 아니다.
@@ -323,3 +325,141 @@ npm run calibrate:fox:coexistence -- validate
 **weighted choice만으로 늑대와 장기 공존을 확보할 수 있다는 가설은 지지되지 않았다.** RF 개선과 Full Web 개선은 구분한다. Release default tuning은 계속 BLOCKED이며 이번에는 main merge/Pages deploy를 하지 않는다.
 
 다음은 parameter 범위를 넓히기 전에 (1) 공유 토끼의 증가·자원 고갈·붕괴 과정, (2) 나이 상한과 에너지 조건부 번식의 계통 대체율, (3) 국소 이동/탐색 규모와 늑대·여우 간접 경쟁, (4) 현재 칸 식생 proxy의 자원 의미를 하나씩 독립 실험으로 재검토하는 것이다. 각 후보의 인과 가설과 비악화 조건을 먼저 정하고 별도의 제3 seed set으로 검증한다. 과일 객체·계절·직접 공격 등을 이번 변경에 추가하지 않는다.
+
+## Observable Dynamics Reassessment — Phase 2.1b
+
+### 목표, Git 기준과 사전 고정
+
+이번 질문은 “600 step에 세 종이 공존하는가”에서 **“학생이 여우·토끼·늑대·식생의 변화 흐름을 보기 전에 여우가 사라지는가”**로 바꿨다. 이 모델에 장기 공존을 일반적 결과로 강제하지 않는다. 600 step은 여우 도입 이후의 분석 horizon이며 생존·공존 수는 보조 지표다. 위의 coexistence tuning BLOCKED 기록은 삭제하거나 성공으로 소급 변경하지 않는다.
+
+- 시작: clean `feat/fox-coexistence-tuning`, 정확한 base `bc7787d5eafc4c0508424fbc4f081589f9f6670b`. 새 branch는 `feat/fox-observable-dynamics`. 적용할 AGENTS.md는 없었다.
+- main/origin/main은 시작 시 `2fce748f38d734b9c1c0cfef800b1cb4ea91439b`. origin은 기존 GitHub 저장소 그대로다. main 병합·Pages 배포·Supabase·leaderboard 변경은 없다.
+- **결과를 보기 전** [평가 규약](fox-observable-protocol.json)을 `b5fd0782bd155add9f67587a8d49831a99621b66`에 커밋했다. `FOX-OBS-001`부터 `FOX-OBS-100`까지 100개 문자열 seed를 전부 고정했다. 기존 FOX-CAL/FOX-HOLDOUT과 다른 domain이며 검증된 정규화와 초기 RNG 상태 100개도 모두 달랐다. 삭제·교체·선별은 하지 않았다.
+- 이 set은 이번 평가와 2–3개 후보의 추가 guardrail에만 쓴다. 결과를 확인한 이후의 새로운 tuning에는 fresh seed domain이 필요하다. 별도 미사용 holdout 결과라고 주장하지 않는다.
+- Full Web은 기존과 같은 32열, 토끼50, 늑대8, 초기 숲밀도78%, 재생.1, 전달효율10%, **step 0 도입**이다. 이전 calibration도 step 0이었다. 그러므로 도입 전 50-step 자료는 **없음/N/A**으로 기록하고, 실제 도입 직전 초기 상태와 post100/post200 endpoint 및 window mean을 비교했다. 도입 시점을 임의로500으로 바꾸지 않았다.
+- Phase 2 `e476ff83d08168a9f9e2d8d44fb49c73a3ec6c3d` fallback과 Phase 2.1 base의 모델 원문을 gitignored 경로에 읽어 평가했다. 제품 코드를 되돌리거나 baseline용 toggle을 bundle에 넣지 않았다.
+- fox basal1.7, rabbit gain8, plant gain.5, hunt.70, 번식문턱24/확률.018/이전42%, 최대나이110, 탐색1/이동.94, cap80은 그대로다. 변수는 preference .67/.75/.80과 도입4/6/8뿐이다.
+
+**아래 수치는 교육용 모델의 관찰 시간·게임성 비교다. 자연계 여우 생존확률, 실제 수명·식단 추정치로 해석하면 안 된다.**
+
+### 지표와 재현 가능한 산출물
+
+여우 생존은 최초 도입 개체만의 수명이 아니라 **자손을 포함한 여우 개체군이 처음0이 될 때까지**의 경과 step이다. 예를 들어500에 도입해680에 멸종하면180이다. 절대 멸종 step과 경과 시간을 별도 저장하고, 도입 후600에도 남은 run은 right-censored로 기록한다. 정확히600에서 멸종한 event와 검열을 구분한다.
+
+P(T≥100)은 정확히100에 멸종한 run도 포함한다. “100-step 종료 후 살아 있음”은 T>100으로 다른 경계다. 분위수는 **모든 run의 min(T,600)** 에 대한 type-7 선형 보간이다. 검열된 관측값이 보간에 들어간 분위수는 lower bound로 표시하며, 멸종 run만으로 중앙값을 다시 계산하지 않는다. 이번 Full Web은 Q75까지 검열되지 않았고 max만≥600이다. Rabbit+Fox의 검열된 중앙값≥600은 실제 중앙 멸종 시간이600이라는 뜻이 아니다.
+
+상호작용은 도입 후1…50/100/200 step에 successful rabbit kill≥1 **또는** plant feeding event≥1로 정의했다. 사냥 시도, 성공, 식물 섭식, 두 먹이의 실제 전달에너지, 출생을 각 window마다 raw run과 집계에 기록한다. 개발용 관찰 wrapper는 실제 foraging map을 읽으며 추가 RNG를 뽑지 않는다. 두 commit × 네 scenario의 관찰 유/무가 전체 state hash·RNG·trajectory에서 같음을 audit했다.
+
+- [전체 Markdown 표](fox-observable-results.md): 9개 후보·fallback, 모든 생존 분위수/threshold, 토끼·늑대50/100/200/300/600 멸종, 상호작용 window 총계, 식생, 식단, 변화 방향, 시간 환산, 대표 궤적.
+- [CSV 요약](fox-observable-summary.csv), [JSON 요약](fox-observable-summary.json): count/비율, 분포, window별 평균·분위수, post100/200 endpoint와 window-mean 변화, raw 파일 SHA-256, 대표 seed. N/A 종은 멸종0%로 오인하지 않도록 denominator0/null로 기록한다.
+- [선택 근거](fox-observable-selection.json). Raw 1,700회와 모든 step의 trajectory, baseline 원문, 대표 trajectory CSV, Edge 결과/스크린샷/build는 `verification.local/fox-observable/`에 있고 gitignored다. 결과 파일의 조용한 덮어쓰기는 거부한다.
+
+### Full Web 결과와 선택
+
+각 행100개 seed. 생존/멸종/상호작용 열의 숫자는 **count/100이며 같은 수치의 %**다. Cap은 도달 run 수이고 모든 후보에서 도달 step·번식 cap guard 호출도0이다.
+
+| Preference | 도입 | Q25 | Median | ≥50 | ≥100 | ≥150 | ≥200 | ≥300 | 토끼≤200 | 늑대≤200 | 상호작용≤100 | peak max | cap |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **.67 유지** | **4** | **134** | **145.5** | **100** | **100** | **40** | **11** | **7** | **60** | **72** | **100** | **35** | **0** |
+| .67 | 6 | 140 | 150 | 100 | 100 | 51 | 12 | 5 | 62 | 69 | 100 | 38 | 0 |
+| .67 | 8 | 138 | 153 | 100 | 100 | 52 | 20 | 12 | 41 | 62 | 100 | 41 | 0 |
+| .75 | 4 | 134.75 | 149.5 | 100 | 100 | 50 | 15 | 10 | 57 | 68 | 100 | 37 | 0 |
+| .75 | 6 | 138 | 149 | 100 | 100 | 48 | 19 | 11 | 53 | 68 | 100 | 38 | 0 |
+| .75 | 8 | 140 | 150 | 100 | 100 | 50 | 17 | 12 | 63 | 73 | 100 | 39 | 0 |
+| .80 | 4 | 134.5 | 145.5 | 100 | 100 | 42 | 12 | 7 | 65 | 71 | 100 | 33 | 0 |
+| .80 | 6 | 141 | 155 | 100 | 100 | 58 | 16 | 13 | 61 | 74 | 100 | 40 | 0 |
+| .80 | 8 | 144 | 163 | 100 | 100 | 62 | 25 | 18 | 52 | 64 | 100 | 36 | 0 |
+
+| Reference | min | P10 | Q25 | median | Q75 | max | ≥500 | alive600 | 세 종 공존600 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Phase 2 fallback /4 | 110 | 126 | 140 | 149 | 165.25 | ≥600 검열 | 2/100 | 2/100 | 1/100 |
+| Phase 2.1 weighted .67/4 | 110 | 119.8 | 134 | 145.5 | 155 | ≥600 검열 | 3/100 | 2/100 | 1/100 |
+
+**선택은 Case A, `.67 / 4마리` 유지이며 product code 변경은 없다.** 가장 작은 변경을 우선하라는 원칙과 현재100/100의≥100, Q25=134, 모든 run의 실제 상호작용을 근거로 삼는다. 중앙값145.5는 soft target150의 아래쪽에 가깝지만 정확히 충족했다고 반올림하지 않는다. 200 step을 넘는 시행이11%라는 점도 분명한 한계다. 판정은 **8 step/s 또는 일시정지를 사용하는 100–150-step 정도의 짧은 관찰에는 충분**, 대다수 시행에서200-step 이상을 요구하는 수업 흐름에는 부족하다는 것이다. 실제 학생 사용성 실험의 증거는 아니다.
+
+.67에서4→6은 중앙값+4.5, Q25+6, ≥200은+1pp에 그쳤다. 8 step/s에서 중앙 관찰 시간이 늘어나는 양은0.56초다. 4→8은 중앙값+7.5, ≥200은+9pp지만 도입량을2배로 하고 평균 식생도65.05→55.87%로 낮춘다. `.80/8`은 중앙163, ≥200=25%로 가장 긴 쪽이나 두 변수를 바꾸며 여전히75%는200 전에 끝난다. 이 표를 단일 점수로 정렬하거나 soft target 경계에 숫자를 맞추지 않았다. Weighted choice는 두 먹이를 실제 선택하는 현재 잡식 모델의 의미를 유지하고 결정적 실행을 보존하므로, 600 공존이 개선되지 않았다는 이유로 되돌리지 않는다.
+
+### 상호작용과 토끼·늑대·식생의 부작용
+
+현재 `.67/4`의 상호작용 확률은50/100/200 window 모두100/100이다. 첫50 step의 100-run 합계는 사냥시도12,378, 성공8,670, 식물섭식8,399, 토끼에너지69,360, 식물에너지4,199.5, 출생255다. 출생이 있는 run은84/100이다. 첫100/200의 출생은837/1,010이고 출생 run은98/98이다. 단순 생존만 한 것은 아니다. 모든 후보의 window별 수치는 별도 표와 JSON에 있다.
+
+| 지표(count/100) | Fallback/4 | Current .67/4 | .67/6 | .67/8 |
+|---|---:|---:|---:|---:|
+| 토끼 멸종≤100 / ≤200 / ≤600 | 24 / 66 / 75 | 19 / 60 / 69 | 20 / 62 / 68 | 8 / 41 / 59 |
+| 늑대 멸종≤100 / ≤200 / ≤600 | 0 / 79 / 93 | 0 / 72 / 86 | 0 / 69 / 87 | 0 / 62 / 88 |
+| 식생 평균 / 중앙 / 최소 % | 69.25 / 98.96 / .04 | 65.05 / 91.18 / .07 | 65.35 / 92.11 / .07 | 55.87 / 68.34 / .07 |
+| 초기 지속 저식생 flag | 80 | 91 | 87 | 83 |
+
+현재 설정은 baseline 대비 토끼·늑대의 빠른 멸종 빈도가 낮았지만, 식생에는 불리한 변화가 있다. 결과 확인 전에 정의한 **도입 후200 이내 식생5% 미만10연속 step**의 비율이80→91%이고, 1% 미만을 한 번이라도 기록한 비율도48→67%다. 따라서 “부작용이 없다/식생이 안정적이다”라고 결론 내리지 않는다. 이 flag는 교육용 descriptive 기준이며 전 세계적 생태 붕괴의 측정값이 아니다. 토끼의 증식·고갈·소비자 멸종 뒤 식생 회복이 포함되어 최종100% 역시 건강한 공존을 뜻하지 않는다. 6/8 도입이 현재보다 초기 collapse flag를 늘리지는 않았고 cap 폭증도 없지만,8의 낮은 전체 평균 식생과 추가 RF 부작용은 default 확대를 피하는 근거다.
+
+실제600-step 누적 전달에너지의 current 식단은 pooled **토끼87.44% / 식물12.56%**, run별 비율 중앙값은 **85.88 / 14.12%**다. 토끼가 에너지의 주된 비중인 run은100/100이다. `.67`을 실제67:33 식단으로 맞추지 않았다. UI는 계속 최근50 step의 실제 에너지를 보여준다.
+
+### 추가 guardrail과 최대 효율
+
+Full Web을 모두 본 다음 `.67/4`, `.67/6`, `.67/8`을 추가 검사 대상으로 명시했다. physiology를 바꾸기 전 도입량만 바꾸는 가장 단순한 대안을 비교하기 위해 preference를 고정했다. 다른6개 후보의 결과도 모두 남긴다. 각 후보×Rabbit+Fox/Plant-only×100회, 선택후보×최대효율Plant-only100회로 추가700회, 전체1,700회다.
+
+| 조건 | 도입 | ≥100 | ≥200 | alive600 | 토끼≤100/200/600 | 여우 출생 합계 | peak max | cap |
+|---|---:|---:|---:|---:|---|---:|---:|---:|
+| Rabbit+Fox | 4 | 100/100 | 98/100 | 85/100 | 0 / 1 / 6 | 13,168 | 44 | 0 |
+| Rabbit+Fox | 6 | 100/100 | 97/100 | 71/100 | 0 / 0 / 3 | 13,068 | 49 | 0 |
+| Rabbit+Fox | 8 | 100/100 | 94/100 | 77/100 | 0 / 6 / 11 | 12,891 | 50 | 0 |
+| Plant-only10% | 4 / 6 / 8 | 각각0 | 각각0 | 각각0 | N/A | 각각0 | 4 / 6 / 8 | 0 |
+| Plant-only30% | 4 | 18/100 | 0/100 | 0/100 | N/A | 0 | 4 | 0 |
+
+Plant-only10%는 세 도입량 모두 중앙17 step이고 population growth/repeated growth/birth/cap이 전부0이다. UI의 전달효율 상한은 실제 코드에서 **30%**임을 재확인했다. 그 조건의 current 생존 Q25=90, median=93.5, max=102이고 성장·번식·cap은0이다. plant gain1.5<basal1.7이어서 buffer로 오래 남을 수는 있어도 증식 엔진이 되지 않았다. 평균 식생99.60%, 초기collapse0이다.
+
+RF의 current는 즉시 멸종하지 않고 토끼≤200 멸종1/100, cap0이지만, 세 도입량 모두 지속 저식생flag100/100이고 평균 식생은19.89/20.66/24.97%다. RF를 안정된 식생으로 기술하면 안 된다. Intro8은 토끼≤200/600 멸종이current1/6에서6/11로 늘어, Full Web의 긴 tail만 보고 채택하지 않는다.
+
+### 실제 변화, 대표 seed와 재생 속도
+
+Current의 step100 endpoint Δ 중앙값은 초기 대비 토끼−46, 늑대+18, 식생−20.70pp다. 증가/같음/감소 run 수는 토끼2/0/98, 늑대100/0/0, 식생0/0/100이다. step200에서는 토끼−50, 늑대−8, 식생+21.74pp이고 방향 수는39/0/61, 4/2/94, 61/0/39다. 초기 증식 후 붕괴·회복 방향이 보이며 seed별 후반 흐름도 달라진다. 이는 시간 변화의 관측이고 fox-free counterfactual을 사용한 인과 효과 추정이 아니다.
+
+대표 seed는 **Q25에 가장 가까움 / 중앙값에 가장 가까움 / 최장 관측시간**, 동률은 seed 오름차순이라는 사전 규칙으로 골랐다. 전체 결과에서 다른 seed를 빼지 않았다.
+
+- Q25 `FOX-OBS-086`: 134 step 멸종, peak11. 50 step에는 토끼186/늑대13/여우8, 식생1.90%;134에는토끼0/늑대4/여우0, 식생93.56%다.
+- 중앙 `FOX-OBS-021`: 145 step 멸종, peak5. 50에는토끼251/늑대12/여우2, 식생.74%;100에는6/26/4, 식생48.85%;145에는0/6/0, 식생92.52%다. 여우 증가가 작아도 실제 두 먹이 섭식과 전체 궤적 변화가 있다.
+- 긴 관측 `FOX-OBS-038`: 600에서검열, peak35. 200에는토끼200/늑대0/여우4, 식생.56%;600에는15/0/1, 식생85.97%다. 여우의 긴 생존이 늑대까지 포함한 공존이라는 뜻은 아니다.
+
+| 재생 속도 | Current Q25=134 | Current median=145.5 | 200 steps |
+|---|---:|---:|---:|
+| 8 step/s | 16.75초 | 18.1875초 | 25초 |
+| 20 step/s | 6.70초 | 7.275초 | 10초 |
+| 40 step/s | 3.35초 | 3.6375초 | 5초 |
+
+높은 속도에서는 짧다. 기존 속도/일시정지를 사용해야 관찰 시간을 확보할 수 있고, speed control 자체는 바꾸지 않았다. 새 Edge 검사에서 같은 중앙 대표 seed를8/20/40으로 재생했으며, 25/50/100/145 step의 **전체 snapshot·식단·RNG**가 headless oracle과 정확히 같았다. 145까지 브라우저 가상 시계 경과는18.134/7.260/3.630초다. 이는 실제 Edge renderer의 scheduler 검사이며 stopwatch로 실제 사용자 장치의 wall time을 측정한 것은 아니다. 백그라운드 throttling·렌더링 지연은 실제 시간을 늘릴 수 있다.
+
+### 검증과 제품 변경 범위
+
+- 새 통계/관찰 test10개: 늦은 도입의 경과시간,600 event와 censor 구분,threshold 경계,quantile 보간/검열bound,식생연속조건,seed·matrix,4/6/8 도입,실제pre50,계측의 state/RNG·에너지 회계. 전체 결과 숫자를 snapshot으로 고정하지 않았다. 과거 commit의 계측 검사는 명시적 audit에서만 하므로 일반 단위 test는 shallow checkout에서도 동작한다.
+- Focused fox **43/43**, 전체 **167/167** 통과. 기존 fox-free9 scenario/**3,742시점** fixture를 갱신하지 않았다. RNG·graph·energy와 intervention exact 회귀 유지. Apex trajectory/RNG/collapse/score exact: 기본44/43, 밀집18/17, 효율20%71/70.
+- 프로젝트 TypeScript와 production build 통과. 새로운 Node harness/test도 bundled Node type definitions로 별도 strict TypeScript 검사를 통과했다. 저장소 기본설정에는 Node type definitions가 없어 최초 별도 검사만 이를 찾지 못했으며, 제품 의존성을 추가하지 않고 번들 경로를 지정했다. Build 출력은 `verification.local/fox-observable/build`이다.
+- Microsoft Edge **153.0.4234.48**, 설치된 실제 Edge의 headless 실행에서 기존fox suite와 새observable speed/flow suite 통과. step500 Run→여우 기본4 도입, 자연섭식/식단 변화, graph/intervention marker, 부분제거·재도입·Reset, Apex격리, JavaScript오류0/외부write0을 확인했다. 새 suite는 대표seed의 step5 실행중 도입→계속실행→부분제거→재도입→Reset도 검사했다.
+- 제품UI 변경은 없으며 기존fox suite에 포함된1440×900,1024×768,390×844,320×740 overflow/겹침과 Tab/Shift+Tab/Enter/Space/ESC/focus복귀도 통과했다. 중앙대표step50 화면을 시각 확인했다. 별도screen reader·실기기 학생 관찰은 하지 않았다.
+- `src/` 전체, 기존fixture, simulationVersion, Apex, leaderboard, Supabase, 배포workflow는 base와 동일하다. **기본 도입량4, preference.67, plantGain.5 모두 변경 불필요**다. 변경은 개발 평가 도구·통계/브라우저검사·package scripts·보고 문서뿐이다. 최종diff검사·commit/push 상태는 feature branch 이력과 최종 응답에 기록한다.
+
+재현 순서(기존raw가 있는 경우 덮어쓰지 않으며 보존 후 별도 깨끗한 checkout에서 실행):
+
+```text
+npm run calibrate:fox:observable -- audit
+npm run calibrate:fox:observable -- references
+npm run calibrate:fox:observable -- matrix
+npm run report:fox:observable
+# Full Web 결과 검토 후 selection JSON에 guardrail 대상/선택 근거 기록
+npm run calibrate:fox:observable -- guardrails
+npm run calibrate:fox:observable -- max-efficiency
+npm run report:fox:observable
+npm run test:fox
+npm test
+npm run build -- --configLoader native --outDir verification.local/fox-observable/build
+# 로컬 Vite origin 127.0.0.1:5177 실행 후
+npm run test:browser:fox
+npm run test:browser:fox-observable
+```
+
+### 결론과 다음 단계
+
+**A. 600-step coexistence는 낮다.** Current의 여우생존2/100, 토끼·늑대·여우 동시공존1/100이다.
+
+**B. 학생이 관찰 가능한 transient dynamics는 느린 재생에서 짧은100–150-step 관찰 목적에는 충분하다고 판단한다.** 100/100이100 step을 확보하고 실제섭식이 발생하며 Q25도134다. 다수 run의200-step 이상 관찰,40 step/s에서 여유로운 읽기,안정된 식생까지 확보했다는 뜻은 아니다.
+
+따라서 default를 건드리지 않는다. 다음 단계는 새 parameter sweep보다8 step/s·일시정지에서 실제 학생이 먹이·식단·그래프 변화를 읽을 수 있는지 확인하는 사용성 관찰이다. 추가 생태 분석을 한다면 식생고갈과 토끼붕괴를 별도 fox-free 대조군/새 seed set으로 조사하고 도입시점 다양성도 독립 설계한다. 이번100 seeds는 이미 결과를 본 set이다. 과일·새종·피난처·handling time·life-history 변경을 이번 결론에서 추가하지 않는다.
