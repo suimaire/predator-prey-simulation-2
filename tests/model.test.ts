@@ -69,15 +69,16 @@ test('전달 효율은 섭식 에너지에 정확히 한 번 선형 적용된다
   assert.equal(energyGainFromFood(10, 0.3), 30);
 });
 
-test('종 제거는 개체를 즉시 0으로 만들고 Reset 전까지 고정한다', () => {
+test('종 제거 후 재도입하지 않으면 해당 종은 계속 0이다', () => {
   const simulation = new ForestSimulation({ ...DEFAULT_PARAMETERS, foodChainDepth: 4, seed: 'REMOVAL' });
   for (let index = 0; index < 5; index += 1) simulation.step();
+  const removedCount = simulation.getSnapshot().wolves.length;
   assert.equal(simulation.removeSpecies('wolf'), true);
   const interventionStep = simulation.getSnapshot().step;
   assert.equal(simulation.getSnapshot().wolves.length, 0);
   for (let index = 0; index < 100; index += 1) simulation.step();
   assert.equal(simulation.getSnapshot().wolves.length, 0);
-  assert.deepEqual(simulation.getInterventions(), [{ step: interventionStep, species: 'wolf' }]);
+  assert.deepEqual(simulation.getInterventions(), [{ kind: 'remove', step: interventionStep, species: 'wolf', amount: removedCount, resultingCount: 0 }]);
   assert.equal(simulation.removeSpecies('wolf'), false);
 });
 

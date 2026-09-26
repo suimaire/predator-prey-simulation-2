@@ -87,8 +87,11 @@ export interface PopulationMetric {
 }
 
 export interface Intervention {
+  kind: 'introduce' | 'remove';
   step: number;
   species: Species;
+  amount: number;
+  resultingCount: number;
 }
 
 export interface EnergyFlowMetric {
@@ -117,6 +120,11 @@ export interface SimulationSnapshot {
 }
 
 export const SPECIES_ORDER: readonly Species[] = ['rabbit', 'wolf', 'tertiary', 'quaternary'];
+// Existing initial-population domain, also used as a per-introduction batch cap.
+// Runtime occupancy is additionally limited by the shared one-animal-per-cell rule.
+export const POPULATION_LIMITS: Readonly<Record<Species, number>> = Object.freeze({
+  rabbit: 400, wolf: 160, tertiary: 40, quaternary: 20,
+});
 export const SPECIES_LABELS: Readonly<Record<Species, string>> = Object.freeze({
   rabbit: '토끼',
   wolf: '늑대',
@@ -186,10 +194,10 @@ export function validateParameters(input: SimulationParameters): SimulationParam
     gridColumns: whole(input.gridColumns, 20, 48),
     foodChainDepth: depth,
     transferEfficiency: clamp(input.transferEfficiency, 0.05, 0.3),
-    initialRabbits: whole(input.initialRabbits, 0, 400),
-    initialWolves: whole(input.initialWolves, 0, 160),
-    initialTertiary: whole(input.initialTertiary, 0, 40),
-    initialQuaternary: whole(input.initialQuaternary, 0, 20),
+    initialRabbits: whole(input.initialRabbits, 0, POPULATION_LIMITS.rabbit),
+    initialWolves: whole(input.initialWolves, 0, POPULATION_LIMITS.wolf),
+    initialTertiary: whole(input.initialTertiary, 0, POPULATION_LIMITS.tertiary),
+    initialQuaternary: whole(input.initialQuaternary, 0, POPULATION_LIMITS.quaternary),
     initialForestDensity: whole(input.initialForestDensity, 0, 100),
     forestRegrowth: clamp(input.forestRegrowth, 0, 0.25),
     forestMaxStage: whole(input.forestMaxStage, 1, 4),
@@ -346,6 +354,7 @@ export class ForestSimulation {
   private stats: CumulativeStats = emptyStats();
   private history: PopulationMetric[] = [];
   private removed = new Set<Species>();
+  private runtimeSpecies = new Set<Species>();
   private interventions: Intervention[] = [];
   private feedingLog: FeedingEvent[] = [];
 
@@ -369,6 +378,7 @@ export class ForestSimulation {
     this.stats = emptyStats();
     this.history = [];
     this.removed = new Set();
+    this.runtimeSpecies = new Set(activeSpecies(this.parameters.foodChainDepth));
     this.interventions = [];
     this.feedingLog = [];
     this.initializeForest();
@@ -379,6 +389,7 @@ export class ForestSimulation {
   getParameters(): SimulationParameters { return { ...this.parameters }; }
   getHistory(): readonly PopulationMetric[] { return this.history; }
   getInterventions(): readonly Intervention[] { return this.interventions; }
+  getActiveSpecies(): Species[] { return SPECIES_ORDER.filter((species) => this.runtimeSpecies.has(species)); }
 
   getSnapshot(): SimulationSnapshot {
     return {
@@ -401,7 +412,7 @@ export class ForestSimulation {
   step(): PopulationMetric {
     this.growForest();
     if (!this.removed.has('rabbit')) this.processRabbits();
-    for (const species of activeSpecies(this.parameters.foodChainDepth).slice(1)) {
+    for (const species of this.getActiveSpecies().slice(1)) {
       if (!this.removed.has(species)) this.processPredator(species);
     }
     this.stepNumber += 1;
@@ -409,10 +420,30 @@ export class ForestSimulation {
   }
 
   removeSpecies(species: Species): boolean {
-    if (!activeSpecies(this.parameters.foodChainDepth).includes(species) || this.removed.has(species)) return false;
+    const amount = this.agents[species].length;
+    if (amount === 0) return false;
     this.agents[species] = [];
     this.removed.add(species);
-    this.interventions.push({ step: this.stepNumber, species });
+    this.interventions.push({ kind: 'remove', step: this.stepNumber, species, amount, resultingCount: 0 });
+    this.recordMetric(true);
+    return true;
+  }
+
+  getIntroductionLimit(species: Species): number {
+    const occupied = SPECIES_ORDER.reduce((count, item) => count + this.agents[item].length, 0);
+    return Math.min(POPULATION_LIMITS[species], this.width * this.height - occupied);
+  }
+
+  introduceSpecies(species: Species, amount: number): boolean {
+    // Reject the entire action before consuming RNG or changing any state.
+    if (!Number.isInteger(amount) || amount < 1 || amount > this.getIntroductionLimit(species)) return false;
+    const occupied = this.occupiedMap();
+    const positions = this.availablePositions(occupied);
+    this.random.shuffle(positions);
+    this.populateSpecies(species, amount, positions);
+    this.runtimeSpecies.add(species);
+    this.removed.delete(species);
+    this.interventions.push({ kind: 'introduce', step: this.stepNumber, species, amount, resultingCount: this.agents[species].length });
     this.recordMetric(true);
     return true;
   }
@@ -422,7 +453,7 @@ export class ForestSimulation {
     const firstStep = Math.max(0, this.stepNumber - safeWindow + 1);
     const elapsed = Math.max(1, Math.min(safeWindow, this.stepNumber || 1));
     const totals = new Map<string, { source: FoodSource; target: Species; energy: number; count: number }>();
-    for (const species of activeSpecies(this.parameters.foodChainDepth)) {
+    for (const species of this.getActiveSpecies()) {
       const config = this.configs[species];
       totals.set(`${config.preyType}:${species}`, { source: config.preyType, target: species, energy: 0, count: 0 });
     }
@@ -450,21 +481,31 @@ export class ForestSimulation {
   }
 
   private initializeAgents(): void {
-    const positions: Position[] = [];
-    for (let y = 0; y < this.height; y += 1) {
-      for (let x = 0; x < this.width; x += 1) positions.push({ x, y });
-    }
+    const positions = this.availablePositions();
     this.random.shuffle(positions);
     for (const species of activeSpecies(this.parameters.foodChainDepth)) {
-      const config = this.configs[species];
-      const count = Math.min(config.initialPopulation, positions.length);
-      for (let index = 0; index < count; index += 1) {
-        const position = positions.pop();
-        if (!position) break;
-        const initialFraction = species === 'wolf' ? 0.52 : 0.55;
-        const energy = config.reproductionThreshold * (initialFraction + this.random.next() * 0.3);
-        this.agents[species].push(this.createAgent(species, position, energy));
+      this.populateSpecies(species, this.configs[species].initialPopulation, positions);
+    }
+  }
+
+  private availablePositions(occupied = new Map<number, Agent>()): Position[] {
+    const positions: Position[] = [];
+    for (let y = 0; y < this.height; y += 1) {
+      for (let x = 0; x < this.width; x += 1) {
+        if (!occupied.has(this.index(x, y))) positions.push({ x, y });
       }
+    }
+    return positions;
+  }
+
+  private populateSpecies(species: Species, amount: number, positions: Position[]): void {
+    const config = this.configs[species];
+    const count = Math.min(amount, positions.length);
+    for (let index = 0; index < count; index += 1) {
+      const position = positions.pop()!;
+      const initialFraction = species === 'wolf' ? 0.52 : 0.55;
+      const energy = config.reproductionThreshold * (initialFraction + this.random.next() * 0.3);
+      this.agents[species].push(this.createAgent(species, position, energy));
     }
   }
 
@@ -477,7 +518,7 @@ export class ForestSimulation {
 
   private occupiedMap(): Map<number, Agent> {
     const occupied = new Map<number, Agent>();
-    for (const species of activeSpecies(this.parameters.foodChainDepth)) {
+    for (const species of this.getActiveSpecies()) {
       for (const agent of this.agents[species]) occupied.set(this.index(agent.x, agent.y), agent);
     }
     return occupied;
@@ -623,7 +664,7 @@ export class ForestSimulation {
     this.stats.births[config.id] += 1;
   }
 
-  private recordMetric(replaceSameStep = false): PopulationMetric {
+  private recordMetric(intervention = false): PopulationMetric {
     let forestTotal = 0;
     for (const stage of this.forest) forestTotal += stage;
     const maximumForest = this.forest.length * this.parameters.forestMaxStage;
@@ -636,9 +677,10 @@ export class ForestSimulation {
       forestPercent: maximumForest === 0 ? 0 : (forestTotal / maximumForest) * 100,
       forestAbundance: forestTotal,
     };
-    if (replaceSameStep && this.history.at(-1)?.step === this.stepNumber) this.history[this.history.length - 1] = metric;
-    else this.history.push(metric);
-    if (this.history.length > HISTORY_LIMIT) this.history.shift();
+    // Preserve every existing sample at the intervention boundary, including its
+    // pre-action count. The next ordinary tick resumes the existing rolling window.
+    this.history.push(metric);
+    if (!intervention && this.history.length > HISTORY_LIMIT) this.history.splice(0, this.history.length - HISTORY_LIMIT);
     return metric;
   }
 }

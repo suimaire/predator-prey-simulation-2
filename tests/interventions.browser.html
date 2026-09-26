@@ -1,0 +1,18 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>생태계 개입 브라우저 검증</title><div id="app"></div>
+<script type="module">
+  // Vite-only test entry, excluded from production. Storage is isolated and all
+  // service requests are blocked by the browser runner.
+  import { ForestSimulation } from '../src/model.ts';
+  const storage = new Map();
+  Object.defineProperty(window, 'localStorage', { value: {
+    getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value),
+  } });
+  let current;
+  const getSnapshot = ForestSimulation.prototype.getSnapshot;
+  ForestSimulation.prototype.getSnapshot = function () { current = this; return getSnapshot.call(this); };
+  window.__runtime = {
+    read: () => structuredClone({ snapshot: getSnapshot.call(current), history: current.getHistory(), parameters: current.getParameters(), storage: [...storage] }),
+  };
+  await import('../src/main.ts');
+</script></html>

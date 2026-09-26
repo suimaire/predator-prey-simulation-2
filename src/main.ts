@@ -1,6 +1,7 @@
 import './simulation.css';
 import { createModeEffects } from './modeEffects.ts';
 import { DialogController } from './dialog.ts';
+import { InterventionSession, groupInterventions, interventionLabel } from './interventions.ts';
 import { ParameterDraft } from './parameterDraft.ts';
 import { drawPopulationChart, SERIES_COLORS, type ChartSeries } from './charts.ts';
 import {
@@ -31,13 +32,15 @@ import {
   DEFAULT_PARAMETERS,
   ForestSimulation,
   SPECIES_LABELS,
-  activeSpecies,
+  SPECIES_ORDER,
+  speciesConfigs,
   validateParameters,
   type Agent,
   type FoodChainDepth,
   type SimulationParameters,
   type SimulationSnapshot,
   type Species,
+  type Intervention,
 } from './model.ts';
 import { createFreeExplorationSeed, createInitialFreeParameters } from './seed.ts';
 import { captureRemovalFeedback, personalBestFeedback, populationChange, populationComparison, populationFeedbackDeadline, removalEmphasis, REMOVAL_FEEDBACK_MS, REMOVAL_MARKER_MS, PERSONAL_BEST_FEEDBACK_MS, type PersonalBestFeedback, type RemovalFeedback } from './feedback.ts';
@@ -217,6 +220,19 @@ app.innerHTML = `
                 <span class="parameter-entry-copy"><span class="parameter-entry-title"><b>생태계 설계</b><small>Parameters</small></span><span class="parameter-entry-hint" id="parameter-entry-hint">개체수와 환경 조건을 조정해 실험을 설계하세요.</span></span>
                 <span class="parameter-entry-action" aria-hidden="true"><span id="parameter-entry-action">설계 열기</span><span>→</span></span>
               </button>
+              <section class="intervention-card" id="intervention-card" aria-labelledby="intervention-heading">
+                <h2 id="intervention-heading">생태계 개입</h2>
+                <p>현재 생태계에 종을 도입하거나 제거합니다.</p>
+                <div class="intervention-actions">
+                  <button type="button" data-introduce="tertiary" aria-haspopup="dialog" aria-controls="intervention-dialog">＋ 3차 소비자</button>
+                  <button type="button" data-introduce="quaternary" aria-haspopup="dialog" aria-controls="intervention-dialog">＋ 4차 소비자</button>
+                </div>
+                <div class="intervention-actions intervention-secondary">
+                  <button type="button" id="open-introduction" aria-haspopup="dialog" aria-controls="intervention-dialog">종 도입·재도입</button>
+                  <button type="button" id="open-removal" aria-haspopup="dialog" aria-controls="intervention-dialog">종 제거</button>
+                </div>
+                <p id="recent-intervention" aria-live="polite">최근 개입 없음</p>
+              </section>
       <section class="pyramid-card ecological-pyramid--dashboard" aria-label="실시간 생태 피라미드">
         <div class="pyramid-toolbar"><h2>실시간 생태 피라미드</h2><div class="segmented-control" role="group" aria-label="피라미드 표현 방식"><button type="button" data-pyramid-mode="numbers" aria-pressed="true">개체수</button><button type="button" data-pyramid-mode="energy" aria-pressed="false">에너지 흐름</button></div></div>
         <div class="pyramid" id="pyramid" aria-describedby="pyramid-note"></div>
@@ -241,16 +257,11 @@ app.innerHTML = `
           </div>
         </section>
 
-        <section class="support-grid" aria-label="도전 안내와 종 제거">              <div class="challenge-copy" id="challenge-description" hidden>
+        <section class="support-grid" aria-label="도전 안내">              <div class="challenge-copy" id="challenge-description" hidden>
                 <h2>전체 먹이사슬을 가장 오래 유지하세요</h2>
                 <p>식생부터 4차 소비자까지 모든 영양 단계를 유지하는 조건을 탐색합니다. 도전을 시작하면 설정이 잠기며, 어느 한 단계라도 사라지는 순간 기록이 결정됩니다.</p>
                 <small>Challenge Seed <b>${APEX_CHALLENGE_CONFIG.seed}</b> · ${APEX_CHALLENGE_CONFIG.simulationVersion} · 같은 조건과 seed에서는 같은 결과가 재현됩니다.</small>
               </div>
-              <section class="removal-card">
-                <div class="card-heading"><div><p class="section-kicker">SPECIES REMOVAL EXPERIMENT</p><h2>종 제거 실험</h2></div><span>Reset으로 복구</span></div>
-                <p class="removal-restriction" id="removal-restriction" hidden>Apex Survival 중에는 종 제거 실험을 사용할 수 없습니다.</p>
-                <div class="removal-list" id="removal-list"></div>
-              </section>
 </section>
         <section class="analysis-grid" aria-label="관찰과 분석">
           <section class="graph-card" id="graph-card">
@@ -323,7 +334,19 @@ app.innerHTML = `
             <p class="leaderboard-privacy">학교명, 일부 가림 처리된 이름, 점수가 공개 기록판에 표시됩니다. 학번과 전체 이름은 참가자 구분 및 기록 관리를 위해 서버에 저장되지만 공개 기록판에는 표시되지 않습니다. 같은 학교의 같은 학번은 동일 참가자로 처리됩니다.</p>
           </form>
         </section></dialog>
-    <dialog id="removal-dialog" aria-labelledby="dialog-title"><form method="dialog"><span class="dialog-icon">↯</span><h2 id="dialog-title">종을 제거할까요?</h2><p id="dialog-copy"></p><div><button value="cancel">취소</button><button value="confirm" class="confirm-removal" id="confirm-removal">제거</button></div></form></dialog>
+    <dialog id="intervention-dialog" class="intervention-dialog" aria-labelledby="intervention-title" aria-describedby="intervention-copy intervention-step">
+      <form id="intervention-form">
+        <h2 id="intervention-title">생태계 개입</h2>
+        <p id="intervention-copy"></p>
+        <label class="intervention-field" for="intervention-species">대상 종<select id="intervention-species">${SPECIES_ORDER.map((species) => `<option value="${species}">${SPECIES_LABELS[species]}</option>`).join('')}</select></label>
+        <span class="intervention-field" id="introduction-field"><label for="introduction-amount">도입 개체 수</label>
+          <span class="amount-control"><button type="button" id="decrease-introduction" aria-label="도입 개체 수 줄이기">−</button><input id="introduction-amount" type="number" min="1" step="1" value="1" required aria-describedby="introduction-limit"><button type="button" id="increase-introduction" aria-label="도입 개체 수 늘리기">＋</button></span>
+        </span>
+        <p id="introduction-limit"></p><p id="intervention-warning" role="status"></p>
+        <p id="intervention-step"></p><p id="intervention-error" role="alert"></p>
+        <div><button type="button" id="cancel-intervention">취소</button><button type="submit" class="challenge-primary" id="confirm-intervention">도입</button></div>
+      </form>
+    </dialog>
   </div>`;
 
 function element<T extends HTMLElement>(selector: string): T {
@@ -348,7 +371,7 @@ const toroidalToggle = element<HTMLInputElement>('#toroidal-toggle');
 const depthSelect = element<HTMLSelectElement>('#food-depth');
 const transferControl = element<HTMLInputElement>('#transfer-efficiency');
 const inspector = element<HTMLDivElement>('#cell-inspector');
-const removalDialog = element<HTMLDialogElement>('#removal-dialog');
+const interventionDialog = element<HTMLDialogElement>('#intervention-dialog');
 const challengePanel = element<HTMLElement>('#challenge-panel');
 const parametersDialog = element<HTMLDialogElement>('#parameters-dialog');
 const leaderboardDialog = element<HTMLDialogElement>('#leaderboard-dialog');
@@ -368,7 +391,7 @@ function clearParameterDraft(): void {
 }
 dialogs.register(parametersDialog, { onClose: clearParameterDraft });
 dialogs.register(leaderboardDialog, { backdrop: true });
-dialogs.register(removalDialog);
+dialogs.register(interventionDialog, { onClose: () => interventionSession.cancel() });
 const leaderboardBoards: Readonly<Record<BoardGroup, HTMLDivElement>> = {
   protector: element<HTMLDivElement>('#leaderboard-board-protector'),
   manipulator: element<HTMLDivElement>('#leaderboard-board-manipulator'),
@@ -416,7 +439,11 @@ let lastAnimationTime = performance.now();
 let accumulatedTime = 0;
 
 let pyramidMode: PyramidMode = 'numbers';
-let pendingRemoval: Species | null = null;
+let interventionKind: Intervention['kind'] = 'introduce';
+const interventionSession = new InterventionSession({
+  simulation: () => simulation, isFree: () => appMode === 'free',
+  isRunning: () => running, setRunning,
+});
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const modeEffects = createModeEffects(element('.board-card'), appMode, reducedMotion);
 if (import.meta.hot) import.meta.hot.dispose(() => modeEffects.destroy());
@@ -429,7 +456,7 @@ const visibleSeries = new Set<ChartSeries>(['forest', 'rabbit', 'wolf', 'tertiar
 const speciesClass: Record<Species, string> = { rabbit: 'rabbit', wolf: 'wolf', tertiary: 'tertiary', quaternary: 'quaternary' };
 
 function allActiveAgents(snapshot: SimulationSnapshot): Agent[] {
-  return activeSpecies(parameters.foodChainDepth).flatMap((species) => [...snapshot.agents[species]]);
+  return simulation.getActiveSpecies().flatMap((species) => [...snapshot.agents[species]]);
 }
 
 function drawRabbit(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, simple = false): void {
@@ -515,7 +542,7 @@ function drawBoard(snapshot: SimulationSnapshot, now = performance.now()): void 
   }
   const displayedCellSize = board.clientWidth > 0 ? board.clientWidth / snapshot.width : cellSize;
   const simple = displayedCellSize < 16;
-  for (const species of activeSpecies(parameters.foodChainDepth)) {
+  for (const species of simulation.getActiveSpecies()) {
     for (const agent of snapshot.agents[species]) drawSpecies(ctx, species, (agent.x + 0.5) * cellSize, (agent.y + 0.54) * cellSize, cellSize, simple);
   }
   for (const feedback of removalFeedback.values()) {
@@ -698,7 +725,7 @@ function updateControlAvailability(): void {
   element('#parameter-error').textContent = parameterDraftError;
   element('#seed-label').textContent = appMode === 'apex' ? 'Challenge Seed' : 'Random seed';
   element('#seed-helper').textContent = appMode === 'apex' ? '공정한 비교를 위해 이 도전에서는 고정됩니다.' : '같은 seed와 설정은 같은 결과를 재현합니다.';
-  element('#removal-restriction').hidden = appMode !== 'apex';
+  element('#intervention-card').hidden = appMode !== 'free';
 
   if (appMode === 'free') {
     runButton.disabled = running;
@@ -716,7 +743,7 @@ function updateControlAvailability(): void {
 }
 
 function updateStructuralUi(): void {
-  const active = activeSpecies(parameters.foodChainDepth);
+  const active = simulation.getActiveSpecies();
   shell.classList.toggle('apex-mode', appMode === 'apex');
   modeEffects.sync(appMode);
   element('#experiment-heading').hidden = appMode === 'apex';
@@ -743,13 +770,13 @@ function renderPopulationStrip(snapshot: SimulationSnapshot): void {
   element('#population-comparison').textContent = `순변화 · 최근 ${snapshot.step - fromStep} step (t=${fromStep} → ${snapshot.step}) · 종 제거는 제거 직전 기준`;
   element('#forest-population').textContent = simulation.getHistory().at(-1)!.forestAbundance.toLocaleString();
   const strip = element('#population-strip');
-  if (strip.dataset.depth !== String(parameters.foodChainDepth)) {
-    strip.innerHTML = activeSpecies(parameters.foodChainDepth).map((species) => `<article data-population="${species}" class="mini-population ${speciesClass[species]}"><canvas data-mini-icon="${species}" width="38" height="38"></canvas><span><small>${SPECIES_LABELS[species]}</small><b></b><em></em></span></article>`).join('');
-    strip.dataset.depth = String(parameters.foodChainDepth);
+  if (strip.dataset.depth !== simulation.getActiveSpecies().join(',')) {
+    strip.innerHTML = simulation.getActiveSpecies().map((species) => `<article data-population="${species}" class="mini-population ${speciesClass[species]}"><canvas data-mini-icon="${species}" width="38" height="38"></canvas><span><small>${SPECIES_LABELS[species]}</small><b></b><em></em></span></article>`).join('');
+    strip.dataset.depth = simulation.getActiveSpecies().join(',');
     initializeIconCanvases();
   }
   const now = performance.now();
-  for (const species of activeSpecies(parameters.foodChainDepth)) {
+  for (const species of simulation.getActiveSpecies()) {
     const item = element<HTMLElement>(`[data-population="${species}"]`);
     const current = snapshot.agents[species].length;
     const change = populationChange(current, species, comparison);
@@ -798,7 +825,7 @@ function renderPyramid(snapshot: SimulationSnapshot): void {
   if (pyramidMode === 'numbers') {
     const levels = [
       { id: 'vegetation', label: '식생', value: metric?.forestAbundance ?? 0, unit: '성장 단계 합', color: '#2f7b4c' },
-      ...activeSpecies(parameters.foodChainDepth).map((species) => ({ id: species, label: SPECIES_LABELS[species], value: snapshot.agents[species].length, unit: '개체', color: SERIES_COLORS[species] })),
+      ...simulation.getActiveSpecies().map((species) => ({ id: species, label: SPECIES_LABELS[species], value: snapshot.agents[species].length, unit: '개체', color: SERIES_COLORS[species] })),
     ].reverse();
     const maximum = Math.max(...levels.map((level) => level.value), 1);
     pyramid.innerHTML = levels.map((level) => `<div class="pyramid-level" title="${level.label}: ${level.value.toLocaleString()} ${level.unit}"><div style="width:${pyramidWidth(level.value, maximum)}%;--level:${level.color}"><span>${level.label}</span><b>${level.value.toLocaleString()}</b><small>${level.unit}</small></div></div>`).join('');
@@ -814,51 +841,42 @@ function renderPyramid(snapshot: SimulationSnapshot): void {
     element('#pyramid-note').textContent = '최근 20 step 실제 전달량 / 경과 step · 모델 에너지/step · 폭 = 제곱근 척도';
   }
   const observedParameters = simulation.getParameters();
-  element('#chain-summary').textContent = `활성 영양 단계 ${observedParameters.foodChainDepth + 1} · 전달 효율 ${Math.round(observedParameters.transferEfficiency * 100)}%`;
-}
-
-let removalSignature = '';
-function renderRemoval(snapshot: SimulationSnapshot): void {
-  const signature = JSON.stringify([appMode, parameters.foodChainDepth, snapshot.removedSpecies]);
-  if (signature === removalSignature) return;
-  removalSignature = signature;
-  element('#removal-list').innerHTML = activeSpecies(parameters.foodChainDepth).map((species) => {
-    const removed = snapshot.removedSpecies.includes(species);
-    const removalDisabled = appMode === 'apex' || removed;
-    const detail = removed ? '제거됨 · Reset 필요' : appMode === 'apex' ? 'Apex Survival에서 사용 불가' : '전체 개체 제거 · Reset으로 복구';
-    return `<div class="removal-row ${removed ? 'is-removed' : ''}"><canvas data-mini-icon="${species}" width="34" height="34"></canvas><span><b>${SPECIES_LABELS[species]}</b><small>${detail}</small></span><button type="button" data-remove="${species}" ${removalDisabled ? 'disabled' : ''}>${removed ? '제거됨' : '종 제거'}</button></div>`;
-  }).join('');
-  document.querySelectorAll<HTMLButtonElement>('[data-remove]').forEach((button) => button.addEventListener('click', () => openRemovalDialog(button.dataset.remove as Species)));
-  initializeIconCanvases();
+  element('#chain-summary').textContent = `활성 영양 단계 ${simulation.getActiveSpecies().length + 1} · 전달 효율 ${Math.round(observedParameters.transferEfficiency * 100)}%`;
 }
 
 function renderStats(snapshot: SimulationSnapshot): void {
   const stats = snapshot.stats;
-  const totalBirths = activeSpecies(parameters.foodChainDepth).reduce((sum, species) => sum + stats.births[species], 0);
-  const totalDeaths = activeSpecies(parameters.foodChainDepth).reduce((sum, species) => sum + stats.deaths[species], 0);
-  const totalHunts = activeSpecies(parameters.foodChainDepth).slice(1).reduce((sum, species) => sum + stats.feedingEvents[species], 0);
+  const totalBirths = simulation.getActiveSpecies().reduce((sum, species) => sum + stats.births[species], 0);
+  const totalDeaths = simulation.getActiveSpecies().reduce((sum, species) => sum + stats.deaths[species], 0);
+  const totalHunts = simulation.getActiveSpecies().slice(1).reduce((sum, species) => sum + stats.feedingEvents[species], 0);
   element('#stat-grid').innerHTML = `
     <div><span>전체 출생</span><strong>${totalBirths}</strong></div>
     <div><span>전체 자연사·피식</span><strong>${totalDeaths}</strong></div>
     <div><span>동물 사냥 성공</span><strong>${totalHunts}</strong></div>
     <div><span>토끼가 먹은 식생</span><strong>${stats.forestEaten} 단계</strong></div>
-    <div><span>기록된 종 제거</span><strong>${snapshot.interventions.length}</strong></div>`;
+    <div><span>기록된 생태계 개입</span><strong>${snapshot.interventions.length}</strong></div>`;
 }
 
 function renderInterventions(snapshot: SimulationSnapshot): void {
-  const interventionMarkup = snapshot.interventions.map((item) => `<span style="--marker:${SERIES_COLORS[item.species]}" title="t = ${item.step}: ${SPECIES_LABELS[item.species]} 제거">t = ${item.step} · ${SPECIES_LABELS[item.species]} 제거</span>`).join('');
+  const firstStep = simulation.getHistory()[0]?.step ?? 0;
+  const groups = groupInterventions(snapshot.interventions, firstStep, snapshot.step);
+  const interventionMarkup = groups.map((group) => `<span style="--marker:${SERIES_COLORS[group.events[0].species]}">Step ${group.step.toLocaleString('ko-KR')} · ${group.events.map(interventionLabel).join(' · ')}</span>`).join('');
+  const latest = snapshot.interventions.at(-1);
+  element('#recent-intervention').textContent = latest
+    ? `최근 개입: Step ${latest.step.toLocaleString('ko-KR')} · ${interventionLabel(latest)}` : '최근 개입 없음';
   const state = apexSession.getState();
   const collapseMarkup = appMode === 'apex' && state.collapseStep !== null
     ? `<span class="collapse-log" title="t = ${state.collapseStep}: Apex 먹이사슬 붕괴">Apex chain collapsed · t = ${state.collapseStep}</span>`
     : '';
   const completeMarkup = interventionMarkup + collapseMarkup;
-  element('#intervention-log').innerHTML = completeMarkup || '<span>종 제거 기록 없음</span>';
+  element('#intervention-log').innerHTML = completeMarkup || '<span>생태계 개입 기록 없음</span>';
 }
 
 function drawChart(now = performance.now()): void {
   drawPopulationChart(chart, {
     history: simulation.getHistory(),
     depth: parameters.foodChainDepth,
+    runtimeSpecies: simulation.getActiveSpecies(),
     visibleSeries,
     interventions: simulation.getInterventions(),
     removalHighlights: [...removalFeedback.values()].map((feedback) => ({ ...feedback, emphasis: removalEmphasis(feedback, now, reducedMotion.matches, REMOVAL_MARKER_MS) })),
@@ -875,7 +893,6 @@ function render(): void {
   element('#step-value').textContent = String(snapshot.step).padStart(3, '0');
   renderPopulationStrip(snapshot);
   renderPyramid(snapshot);
-  renderRemoval(snapshot);
   renderStats(snapshot);
   renderInterventions(snapshot);
   renderChallengePanel();
@@ -1051,13 +1068,63 @@ function switchMode(nextMode: AppMode): void {
   render();
 }
 
-function openRemovalDialog(species: Species): void {
-  if (appMode === 'apex') return;
-  pendingRemoval = species;
-  element('#dialog-title').textContent = `${SPECIES_LABELS[species]}를 생태계에서 제거하시겠습니까?`;
-  element('#dialog-copy').textContent = '현재 모든 개체가 즉시 사라지고 이 실험을 Reset하기 전까지 번식하거나 다시 생성되지 않습니다. 이후 먹이사슬 전체의 변화를 관찰할 수 있습니다.';
-  element<HTMLButtonElement>('#confirm-removal').textContent = `${SPECIES_LABELS[species]} 제거`;
-  dialogs.open(removalDialog, element(`[data-remove="${species}"]`));
+function updateInterventionDialog(): void {
+  const species = element<HTMLSelectElement>('#intervention-species').value as Species;
+  const introducing = interventionKind === 'introduce';
+  const limit = simulation.getIntroductionLimit(species);
+  const input = element<HTMLInputElement>('#introduction-amount');
+  const amount = input.valueAsNumber;
+  input.max = String(limit);
+  input.disabled = !introducing || limit === 0;
+  element('#introduction-field').hidden = !introducing;
+  element('#introduction-limit').hidden = !introducing;
+  element('#introduction-limit').textContent = limit === 0 ? '도입할 빈 칸이 없습니다.' : `한 번에 1–${limit}마리 도입 가능 · 빈 칸에 배치`;
+  element<HTMLButtonElement>('#decrease-introduction').disabled = !Number.isInteger(amount) || amount <= 1;
+  element<HTMLButtonElement>('#increase-introduction').disabled = !Number.isInteger(amount) || amount >= limit;
+  const count = simulation.getSnapshot().agents[species].length;
+  element('#intervention-title').textContent = `${SPECIES_LABELS[species]} ${introducing ? '도입' : '제거'}`;
+  element('#intervention-copy').textContent = introducing ? '현재 생태계에 새 개체를 넣습니다. 확인 후에는 일시정지를 유지합니다.' : `현재 살아 있는 ${count}마리를 모두 제거합니다. 다른 종은 유지되며, 나중에 새 개체를 다시 도입할 수 있습니다.`;
+  const prey = speciesConfigs(simulation.getParameters())[species].preyType;
+  const noPrey = introducing && prey !== 'vegetation' && simulation.getSnapshot().agents[prey].length === 0;
+  element('#intervention-warning').textContent = noPrey ? `현재 주요 먹이인 ${SPECIES_LABELS[prey as Species]}가 없습니다. 도입 후 먹이 부족의 영향을 받을 수 있습니다.` : '';
+  const confirm = element<HTMLButtonElement>('#confirm-intervention');
+  confirm.textContent = introducing ? `${Number.isInteger(amount) && amount > 0 ? amount : ''}마리 도입` : `${SPECIES_LABELS[species]} 제거`;
+  confirm.classList.toggle('confirm-removal', !introducing);
+  confirm.disabled = introducing ? !Number.isInteger(amount) || amount < 1 || amount > limit : count === 0;
+}
+
+function openInterventionDialog(kind: Intervention['kind'], species: Species, opener: HTMLElement): void {
+  if (parametersDialog.open || leaderboardDialog.open || interventionDialog.open) return;
+  const step = interventionSession.begin();
+  if (step === null) return;
+  interventionKind = kind;
+  element<HTMLSelectElement>('#intervention-species').value = species;
+  element<HTMLInputElement>('#introduction-amount').value = '1';
+  element('#intervention-step').textContent = `현재 Step: ${step.toLocaleString('ko-KR')} · 일시정지`;
+  element('#intervention-error').textContent = '';
+  updateInterventionDialog();
+  if (!dialogs.open(interventionDialog, opener, element('#intervention-species'))) interventionSession.cancel();
+}
+
+function confirmIntervention(event: SubmitEvent): void {
+  event.preventDefault();
+  const species = element<HTMLSelectElement>('#intervention-species').value as Species;
+  const feedback = interventionKind === 'remove' ? captureRemovalFeedback(simulation.getSnapshot(), species, performance.now()) : null;
+  const result = interventionSession.confirm(interventionKind, species, element<HTMLInputElement>('#introduction-amount').valueAsNumber);
+  if (!result) {
+    element('#intervention-error').textContent = '현재 개체 수와 도입 가능 수를 확인하세요.';
+    updateInterventionDialog();
+    return;
+  }
+  if (feedback) {
+    removalFeedback.set(species, feedback);
+    removalNeedsRedraw = true;
+  } else removalFeedback.delete(species);
+  populationFeedbackUntil.delete(species);
+  inspector.hidden = true;
+  updateStructuralUi();
+  render();
+  interventionDialog.close('confirm');
 }
 
 function editDraft(edit: (value: SimulationParameters) => void): void {
@@ -1127,23 +1194,23 @@ document.querySelectorAll<HTMLButtonElement>('[data-pyramid-mode]').forEach((but
   renderPyramid(simulation.getSnapshot());
 }));
 
-removalDialog.addEventListener('close', () => {
-  if (appMode === 'free' && removalDialog.returnValue === 'confirm' && pendingRemoval) {
-    setRunning(false);
-    const feedback = captureRemovalFeedback(simulation.getSnapshot(), pendingRemoval, performance.now());
-    if (simulation.removeSpecies(pendingRemoval)) {
-      removalFeedback.set(pendingRemoval, feedback);
-      populationFeedbackUntil.delete(pendingRemoval);
-      const label = element<HTMLElement>(`[data-population="${pendingRemoval}"] em`);
-      label.classList.remove('is-changing');
-      void label.offsetWidth; // Start the removal effect afresh if a natural delta is still fading.
-      removalNeedsRedraw = true;
-      inspector.hidden = true;
-    }
-    render();
-  }
-  pendingRemoval = null;
+document.querySelectorAll<HTMLButtonElement>('[data-introduce]').forEach((button) => button.addEventListener('click', () => openInterventionDialog('introduce', button.dataset.introduce as Species, button)));
+element('#open-introduction').addEventListener('click', (event) => openInterventionDialog('introduce', 'rabbit', event.currentTarget as HTMLElement));
+element('#open-removal').addEventListener('click', (event) => {
+  const species = simulation.getActiveSpecies().find((item) => simulation.getSnapshot().agents[item].length > 0) ?? 'rabbit';
+  openInterventionDialog('remove', species, event.currentTarget as HTMLElement);
 });
+element('#intervention-species').addEventListener('change', () => { element<HTMLInputElement>('#introduction-amount').value = '1'; updateInterventionDialog(); });
+element('#introduction-amount').addEventListener('input', updateInterventionDialog);
+for (const [id, delta] of [['decrease-introduction', -1], ['increase-introduction', 1]] as const) {
+  element(`#${id}`).addEventListener('click', () => {
+    const input = element<HTMLInputElement>('#introduction-amount');
+    input.value = String(input.valueAsNumber + delta);
+    updateInterventionDialog();
+  });
+}
+element('#cancel-intervention').addEventListener('click', () => interventionDialog.close());
+element('#intervention-form').addEventListener('submit', confirmIntervention);
 
 document.querySelectorAll<HTMLButtonElement>('[data-app-mode]').forEach((button) => button.addEventListener('click', () => switchMode(button.dataset.appMode as AppMode)));
 
@@ -1228,7 +1295,7 @@ speedControl.addEventListener('input', () => { speedOutput.value = `${speedContr
 
 function toggleParameters(force?: boolean, intent: ParameterIntent = 'edit', opener: HTMLElement = parameterToggle): void {
   if (force === false) { if (parametersDialog.open) parametersDialog.close(); return; }
-  if (parametersDialog.open || leaderboardDialog.open || removalDialog.open) return;
+  if (parametersDialog.open || leaderboardDialog.open || interventionDialog.open) return;
   parameterIntent = intent;
   parameterDraft = new ParameterDraft(parameters);
   parameterDraftError = '';
