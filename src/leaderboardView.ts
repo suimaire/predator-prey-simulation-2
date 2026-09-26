@@ -1,15 +1,14 @@
 import {
-  participantKey,
   rankAccentClass,
   type BoardGroup,
-  type LeaderboardEntry,
+  type LeaderboardScope,
   type RankedLeaderboardEntry,
 } from './leaderboard.ts';
 
 /** 기록판 화면 문구와 마크업. DOM에 의존하지 않으므로 테스트에서 그대로 호출할 수 있습니다. */
 export const BOARD_LABELS: Readonly<Record<BoardGroup, string>> = Object.freeze({
-  protector: '생태 HAFS 보호단',
-  manipulator: 'HAFS AI RED TEAM',
+  protector: '생태계 수호단',
+  manipulator: 'AI RED TEAM',
 });
 
 export const BOARD_DESCRIPTIONS: Readonly<Record<BoardGroup, string>> = Object.freeze({
@@ -22,13 +21,15 @@ export const BOARD_DESCRIPTIONS: Readonly<Record<BoardGroup, string>> = Object.f
  * 글자 자체는 BOARD_LABELS와 같습니다(textContent 기준).
  */
 export const BOARD_TAB_MARKUP: Readonly<Record<BoardGroup, string>> = Object.freeze({
-  protector: '생태 HAFS 보호단',
-  manipulator: 'HAFS AI <span class="tab-nowrap">RED TEAM</span>',
+  protector: '생태계 수호단',
+  manipulator: 'AI <span class="tab-nowrap">RED TEAM</span>',
 });
+
+export const SCOPE_LABELS: Readonly<Record<LeaderboardScope, string>> = Object.freeze({ national: '전국', hafs: 'HAFS' });
 
 const BOARD_EMPTY_MESSAGES: Readonly<Record<BoardGroup, string>> = Object.freeze({
   protector: '아직 제출된 기록이 없습니다. 첫 기록을 남겨 보세요.',
-  manipulator: '현재 HAFS AI RED TEAM에 올라간 기록이 없습니다.',
+  manipulator: '현재 AI RED TEAM에 올라간 기록이 없습니다.',
 });
 
 const HTML_ESCAPES: Readonly<Record<string, string>> = Object.freeze({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' });
@@ -43,18 +44,8 @@ export function formatSubmittedAt(isoDate: string): string {
   return date.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 }
 
-function verificationMarkup(entry: LeaderboardEntry): string {
-  // 공개 view가 검증 상태를 내보내지 않는 동안에는 배지를 그리지 않습니다.
-  if (!entry.verification) return '';
-  if (entry.verification === 'verified') return '<i class="is-verified" title="서버 재실행으로 확인된 기록">✔ 검증됨</i>';
-  if (entry.verification === 'rejected') return '<i class="is-rejected" title="서버 재실행 결과가 제출 점수와 다릅니다">✖ 재현 불일치</i>';
-  return '<i class="is-unverified" title="아직 서버에서 재실행하지 않은 기록">· 미검증</i>';
-}
-
 export interface BoardMarkupOptions {
-  limit?: number;
   compact?: boolean;
-  highlightedParticipant?: string | null;
   /** 목록을 아직 받지 못했거나 오류가 난 동안에는 빈 상태 문구를 띄우지 않습니다. */
   showEmptyState?: boolean;
 }
@@ -66,7 +57,7 @@ export interface BoardMarkupOptions {
 export function boardMarkup(
   board: BoardGroup,
   ranked: readonly RankedLeaderboardEntry[],
-  { highlightedParticipant = null, showEmptyState = true, limit, compact = false }: BoardMarkupOptions = {},
+  { showEmptyState = true, compact = false }: BoardMarkupOptions = {},
 ): string {
   const description = !compact && BOARD_DESCRIPTIONS[board]
     ? `<p class="leaderboard-board-note">${escapeHtml(BOARD_DESCRIPTIONS[board])}</p>`
@@ -77,12 +68,13 @@ export function boardMarkup(
       : description;
   }
   // Presentation limits never re-sort or renumber ties from rankBoards().
-  const items = ranked.slice(0, limit).map((entry) => `
-      <li class="${[rankAccentClass(entry.rank), participantKey(entry) === highlightedParticipant ? 'is-mine' : ''].filter(Boolean).join(' ')}">
+  const items = (compact ? ranked.slice(0, 3) : ranked).map((entry) => `
+      <li class="${rankAccentClass(entry.rank)}">
         <b>${entry.rank}</b>
-        <span class="leaderboard-who"><strong title="${escapeHtml(entry.studentName)}">${escapeHtml(entry.studentName)}</strong></span>
-        <span class="leaderboard-score">${entry.score.toLocaleString()} step</span>
-        ${compact ? '' : `<span class="leaderboard-meta"><small>${escapeHtml(entry.studentNumber)}</small><time datetime="${escapeHtml(entry.submittedAt)}">${escapeHtml(formatSubmittedAt(entry.submittedAt))}</time>${verificationMarkup(entry)}</span>`}
+        <span class="leaderboard-school">${escapeHtml(entry.schoolName)}</span>
+        <span class="leaderboard-who"><strong>${escapeHtml(entry.displayName)}</strong></span>
+        <span class="leaderboard-score">${entry.score.toLocaleString('ko-KR')}</span>
+        ${compact ? '' : `<span class="leaderboard-meta"><time datetime="${escapeHtml(entry.submittedAt)}">${escapeHtml(formatSubmittedAt(entry.submittedAt))}</time></span>`}
       </li>`).join('');
   return `${description}<ol class="leaderboard-list${compact ? ' leaderboard-list--compact' : ''}" aria-label="${escapeHtml(BOARD_LABELS[board])} 상위 기록">${items}</ol>`;
 }

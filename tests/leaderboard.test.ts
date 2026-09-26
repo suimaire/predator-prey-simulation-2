@@ -1,489 +1,183 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { APEX_CHALLENGE_CONFIG, apexParameters } from '../src/challenge.ts';
+import { APEX_CHALLENGE_CONFIG as definition, apexParameters } from '../src/challenge.ts';
 import { DEFAULT_PARAMETERS, type SimulationParameters } from '../src/model.ts';
-import {
-  bestPerParticipant,
-  canonicalScorePayload,
-  computePayloadHash,
-  createLeaderboardTransport,
-  createSubmission,
-  createSupabaseLeaderboardTransport,
-  DEFAULT_LEADERBOARD_LIMIT,
-  normalizeParticipant,
-  participantKey,
-  PUBLIC_LEADERBOARD_COLUMNS,
-  rankAccentClass,
-  rankEntries,
-  submissionMatchesScore,
-  validateParticipant,
-  type LeaderboardEntry,
-  type LeaderboardSubmission,
-} from '../src/leaderboard.ts';
+import { canonicalScorePayload, computePayloadHash, createLeaderboardTransport, createSubmission,
+  createSupabaseLeaderboardTransport, DEFAULT_LEADERBOARD_LIMIT, loadParticipant, normalizeParticipant,
+  PARTICIPANT_LIMITS, PUBLIC_LEADERBOARD_COLUMNS, rankAccentClass, rankEntries, submissionMatchesScore,
+  validateParticipant, type LeaderboardScope, type BoardGroup } from '../src/leaderboard.ts';
+import { entry, publicRow, fixtureServer, json, uuid } from './fixtures/leaderboardFixtures.ts';
 
 const parameters = apexParameters({ ...DEFAULT_PARAMETERS });
-
-function record(score: number, overrides: Partial<{ parameterSnapshot: SimulationParameters; achievedAt: string }> = {}) {
-  return {
-    challengeId: APEX_CHALLENGE_CONFIG.id,
-    simulationVersion: APEX_CHALLENGE_CONFIG.simulationVersion,
-    score,
-    seed: APEX_CHALLENGE_CONFIG.seed,
-    parameterSnapshot: overrides.parameterSnapshot ?? parameters,
-    achievedAt: overrides.achievedAt ?? '2026-09-03T01:00:00.000Z',
-  };
+const participant = { schoolName: 'HAFS', studentNumber: '00314', studentName: '홍길동' };
+function record(score = 842, snapshot = parameters, achievedAt = '2026-09-03T01:00:00.000Z') {
+  return { challengeId: definition.id, simulationVersion: definition.simulationVersion, seed: definition.seed,
+    score, parameterSnapshot: snapshot, achievedAt };
 }
+const config = { url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' };
 
-function entry(overrides: Partial<LeaderboardEntry> & Pick<LeaderboardEntry, 'id' | 'score' | 'studentNumber' | 'studentName'>): LeaderboardEntry {
-  return {
-    id: overrides.id,
-    challengeId: APEX_CHALLENGE_CONFIG.id,
-    simulationVersion: APEX_CHALLENGE_CONFIG.simulationVersion,
-    seed: APEX_CHALLENGE_CONFIG.seed,
-    score: overrides.score,
-    studentNumber: overrides.studentNumber,
-    studentName: overrides.studentName,
-    submittedAt: overrides.submittedAt ?? '2026-09-03T01:00:00.000Z',
-    boardGroup: overrides.boardGroup ?? 'protector',
-  };
-}
-
-test('학번과 이름은 공백을 정리한 뒤 검증한다', () => {
-  const normalized = normalizeParticipant({ studentNumber: '  20314 ', studentName: ' 김 하늘 ' });
-  assert.equal(normalized.studentNumber, '20314');
-  assert.equal(normalized.studentName, '김 하늘');
-
-  assert.equal(validateParticipant({ studentNumber: '', studentName: '김하늘' }).ok, false);
-  assert.equal(validateParticipant({ studentNumber: '   ', studentName: '김하늘' }).ok, false);
-  assert.equal(validateParticipant({ studentNumber: '9'.repeat(25), studentName: '김하늘' }).ok, false);
-  assert.equal(validateParticipant({ studentNumber: '20314', studentName: '   ' }).ok, false);
-  assert.equal(validateParticipant({ studentNumber: '20314', studentName: '가'.repeat(17) }).ok, false);
-  assert.equal(validateParticipant({ studentNumber: '20314', studentName: '<script>' }).ok, false);
-
-  // 자릿수나 숫자 형식은 강제하지 않습니다. 학번 체계가 바뀌어도 그대로 쓸 수 있어야 합니다.
-  assert.equal(validateParticipant({ studentNumber: '20314', studentName: '김하늘' }).ok, true);
-  assert.equal(validateParticipant({ studentNumber: '26-3-014', studentName: '김하늘' }).ok, true);
-  assert.equal(validateParticipant({ studentNumber: 'J-2026-014', studentName: '김하늘' }).ok, true);
+test('school is required and limited to 80 code points; legacy number/name restrictions and leading zeros remain', () => {
+  assert.deepEqual(normalizeParticipant({ schoolName: '  새\t 학교 ', studentNumber: ' 00314 ', studentName: ' 홍  길동 ' }),
+    { schoolName: '새 학교', studentNumber: '00314', studentName: '홍 길동' });
+  assert.equal(PARTICIPANT_LIMITS.schoolName, 80);
+  for (const fields of [{ schoolName: '' }, { schoolName: ' ' }, { schoolName: '가'.repeat(81) }, { schoolName: '😀'.repeat(81) },
+    { studentNumber: '' }, { studentNumber: ' ' }, { studentNumber: '9'.repeat(25) }, { studentName: ' ' }, { studentName: '가'.repeat(17) },
+    { studentName: '<script>' }, { studentNumber: '<img>' }]) assert.equal(validateParticipant({ ...participant, ...fields }).ok, false);
+  for (const fields of [{ schoolName: '가'.repeat(80) }, { schoolName: '😀'.repeat(80) }, { studentNumber: '26-3-014' },
+    { studentNumber: 'J-2026-014' }]) assert.equal(validateParticipant({ ...participant, ...fields }).ok, true);
 });
 
-test('제출 해시는 키 순서와 무관하고 점수·파라미터가 바뀌면 달라진다', async () => {
+test('simulation hash stays byte-compatible with previous HEAD and independent of school, number, name, time and key order', async () => {
+  assert.equal(await computePayloadHash(record()), '6cbc2d568b519bf8ea6e8b470fae7e480df64ec378167bd3090a61f993f944fa');
   const shuffled = Object.fromEntries(Object.entries(parameters).reverse()) as SimulationParameters;
-  assert.equal(canonicalScorePayload(record(842)), canonicalScorePayload(record(842, { parameterSnapshot: shuffled })));
-  assert.equal(await computePayloadHash(record(842)), await computePayloadHash(record(842, { parameterSnapshot: shuffled })));
-
-  assert.notEqual(await computePayloadHash(record(842)), await computePayloadHash(record(843)));
-  const tweaked = { ...parameters, rabbitBreedProbability: parameters.rabbitBreedProbability + 0.01 };
-  assert.notEqual(await computePayloadHash(record(842)), await computePayloadHash(record(842, { parameterSnapshot: tweaked })));
-});
-
-test('해시는 학생 정보나 달성 시각에 영향을 받지 않는다', async () => {
-  const first = await createSubmission(record(842), { studentNumber: '20314', studentName: '김하늘' });
-  const second = await createSubmission(record(842, { achievedAt: '2026-09-04T09:30:00.000Z' }), { studentNumber: '10101', studentName: '이바다' });
+  assert.equal(canonicalScorePayload(record()), canonicalScorePayload(record(842, shuffled)));
+  assert.equal(await computePayloadHash(record()), await computePayloadHash(record(842, shuffled)));
+  const first = await createSubmission(record(), participant);
+  const second = await createSubmission(record(842, parameters, '2026-09-04T09:30:00.000Z'), { schoolName: '타교', studentNumber: '10101', studentName: '이바다' });
   assert.equal(first.payloadHash, second.payloadHash);
   assert.equal(await submissionMatchesScore(first), true);
-  assert.equal(await submissionMatchesScore({ ...first, score: first.score + 100 }), false);
-
-  // 서버의 중복 방지 인덱스는 (student_number, payload_hash) 로만 유일성을 봅니다.
-  // 그 구조가 성립하려면 해시가 학생 정보를 전혀 담지 않아야 합니다.
-  const payload = canonicalScorePayload(record(842));
-  assert.equal(payload.includes('studentName'), false);
-  assert.equal(payload.includes('studentNumber'), false);
-  assert.equal(payload.includes('김하늘'), false);
+  assert.equal(await submissionMatchesScore({ ...first, score: 843 }), false);
+  assert.notEqual(await computePayloadHash(record(843)), first.payloadHash);
+  assert.notEqual(await computePayloadHash(record(842, { ...parameters, rabbitBreedProbability: parameters.rabbitBreedProbability + .01 })), first.payloadHash);
+  for (const key of ['schoolName', 'schoolKey', 'studentNumber', 'studentName', 'achievedAt']) assert.ok(!canonicalScorePayload(first).includes(key));
 });
 
-test('같은 파라미터로 다시 도전하면 해시가 같고, 조금이라도 다르면 달라진다', async () => {
-  // 시뮬레이션이 seed 결정론적이므로 같은 파라미터는 항상 같은 점수를 냅니다. 그래서
-  // "같은 해시 = 같은 도전을 그대로 다시 낸 것" 이 되고, 서버가 그것만 중복으로 막습니다.
-  const again = await computePayloadHash(record(842));
-  assert.equal(await computePayloadHash(record(842)), again);
-
-  // 점수가 다른 진짜 새 도전은 해시가 달라 여러 행으로 보존됩니다.
-  assert.notEqual(await computePayloadHash(record(843)), again);
-  const tweakedParameters = { ...parameters, wolfBreedProbability: parameters.wolfBreedProbability + 0.01 };
-  assert.notEqual(await computePayloadHash(record(842, { parameterSnapshot: tweakedParameters })), again);
-});
-
-test('제출 payload는 challenge 정의와 정리된 학생 정보를 함께 담는다', async () => {
-  const submission = await createSubmission(record(842), { studentNumber: '  20314 ', studentName: ' 김하늘 ' });
-  assert.equal(submission.challengeId, APEX_CHALLENGE_CONFIG.id);
-  assert.equal(submission.simulationVersion, APEX_CHALLENGE_CONFIG.simulationVersion);
-  assert.equal(submission.seed, APEX_CHALLENGE_CONFIG.seed);
-  assert.equal(submission.studentNumber, '20314');
-  assert.equal(submission.studentName, '김하늘');
-  assert.match(submission.payloadHash, /^[0-9a-f]{64}$/u);
-  await assert.rejects(createSubmission(record(842), { studentNumber: '20314', studentName: '' }));
-});
-
-test('학생마다 최고 기록 하나만 남기고 동점은 같은 순위를 공유한다', () => {
-  const entries = [
-    entry({ id: 'a', score: 500, studentNumber: '20314', studentName: '김하늘' }),
-    entry({ id: 'b', score: 842, studentNumber: '20314', studentName: '김하늘' }),
-    entry({ id: 'c', score: 842, studentNumber: '20321', studentName: '이바다', submittedAt: '2026-09-03T02:00:00.000Z' }),
-    entry({ id: 'd', score: 300, studentNumber: '20414', studentName: '박별' }),
-  ];
-
-  assert.equal(bestPerParticipant(entries).length, 3);
-  const ranked = rankEntries(entries);
-  assert.deepEqual(ranked.map((item) => [item.id, item.rank]), [['b', 1], ['c', 1], ['d', 3]]);
-
-  const expanded = rankEntries(entries, { collapseToBest: false });
-  assert.deepEqual(expanded.map((item) => item.id), ['b', 'c', 'a', 'd']);
-  assert.equal(rankEntries(entries, { limit: 2 }).length, 2);
-});
-
-test('동일인 판정은 학번 하나로 하고 이름은 보지 않는다', () => {
-  // 앞뒤 공백과 중복 공백은 무시합니다.
-  assert.equal(
-    participantKey({ studentNumber: '20314', studentName: '김하늘' }),
-    participantKey({ studentNumber: '  20314 ', studentName: ' 김하늘 ' }),
-  );
-  // 같은 학번이면 이름 표기가 달라도 같은 학생입니다.
-  assert.equal(
-    participantKey({ studentNumber: '20314', studentName: '김민수' }),
-    participantKey({ studentNumber: '20314', studentName: '김민수A' }),
-  );
-  // 학번이 다르면 이름이 같아도 다른 학생입니다.
-  assert.notEqual(
-    participantKey({ studentNumber: '20314', studentName: '김민수' }),
-    participantKey({ studentNumber: '20414', studentName: '김민수' }),
-  );
-});
-
-test('조회는 공개 view를 향하고 비공개 열을 요청하지 않는다', async () => {
-  const calls: string[] = [];
-  const row = {
-    id: 7,
-    challenge_id: APEX_CHALLENGE_CONFIG.id,
-    simulation_version: APEX_CHALLENGE_CONFIG.simulationVersion,
-    seed: APEX_CHALLENGE_CONFIG.seed,
-    score: 842,
-    student_number: '20314',
-    student_name: '김하늘',
-    submitted_at: '2026-09-03T01:00:00.000Z',
-    board_group: 'protector',
-  };
-  const caches: (RequestCache | undefined)[] = [];
-  const transport = createSupabaseLeaderboardTransport(
-    { url: 'https://example.supabase.co/', anonKey: 'anon-key' },
-    async (url, init) => {
-      calls.push(url);
-      caches.push(init?.cache);
-      const rows = url.includes('board_group=eq.protector') ? [row] : [];
-      return new Response(JSON.stringify(rows), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    },
-  );
-
-  const entries = await transport.list();
-  // 기록판마다 따로 요청합니다.
-  assert.equal(calls.length, 2);
-  for (const call of calls) {
-    assert.equal(call.startsWith('https://example.supabase.co/rest/v1/apex_leaderboard_public?'), true);
-    assert.match(call, /simulation_version=eq\.apex-v1/u);
-    assert.match(call, /seed=eq\.260903/u);
-    // 동점 tie-break는 학생이 보낸 achieved_at이 아니라 서버가 채운 submitted_at을 씁니다.
-    assert.match(call, /order=score\.desc%2Csubmitted_at\.asc/u);
-    for (const forbidden of ['parameter_snapshot', 'payload_hash', 'achieved_at', 'verified_score', 'verified_at', 'verifier_version']) {
-      assert.equal(call.includes(forbidden), false, `조회 URL에 ${forbidden}가 들어 있습니다.`);
-    }
-  }
-  assert.deepEqual(calls.map((call) => new URL(call).searchParams.get('board_group')), ['eq.protector', 'eq.manipulator']);
-  // 교사가 분류를 바꾼 뒤 새로고침하면 브라우저 캐시가 아니라 서버 값을 받아야 합니다.
-  assert.deepEqual(caches, ['no-store', 'no-store']);
-  assert.equal(entries.length, 1);
-  assert.equal(entries[0]!.id, '7');
-  assert.equal(entries[0]!.studentNumber, '20314');
-  assert.equal(entries[0]!.boardGroup, 'protector');
-});
-
-test('공개 열 목록에는 비공개 필드가 들어 있지 않다', () => {
-  assert.deepEqual([...PUBLIC_LEADERBOARD_COLUMNS], [
-    'id', 'challenge_id', 'simulation_version', 'seed', 'score', 'student_number', 'student_name', 'submitted_at', 'board_group',
-  ]);
-  // achieved_at은 학생이 보낸 값이라 공개 view에서 뺐습니다. 조회 목록에도 있으면 안 됩니다.
-  for (const forbidden of ['achieved_at', 'parameter_snapshot', 'payload_hash', 'verification', 'verified_score', 'verified_at', 'verifier_version']) {
-    assert.equal(PUBLIC_LEADERBOARD_COLUMNS.includes(forbidden), false);
-  }
-});
-
-test('서버가 여분의 열을 보내더라도 entry로 새어 들어오지 않는다', async () => {
-  const leaky = {
-    id: 9,
-    challenge_id: APEX_CHALLENGE_CONFIG.id,
-    simulation_version: APEX_CHALLENGE_CONFIG.simulationVersion,
-    seed: APEX_CHALLENGE_CONFIG.seed,
-    score: 100,
-    student_number: '20314',
-    student_name: '김하늘',
-    submitted_at: '2026-09-03T01:00:00.000Z',
-    board_group: 'protector',
-    achieved_at: '2026-09-03T00:59:00.000Z',
-    parameter_snapshot: parameters,
-    payload_hash: 'b'.repeat(64),
-    verified_score: 12,
-  };
-  const transport = createSupabaseLeaderboardTransport(
-    { url: 'https://example.supabase.co', anonKey: 'anon-key' },
-    async () => new Response(JSON.stringify([leaky]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
-  );
-  const [entry] = await transport.list();
-  assert.deepEqual(
-    Object.keys(entry!).sort(),
-    ['boardGroup', 'challengeId', 'id', 'score', 'seed', 'simulationVersion', 'studentName', 'studentNumber', 'submittedAt'],
-  );
-});
-
-test('공개 view가 검증 상태를 내보내면 그때만 entry에 담긴다', async () => {
-  const base = {
-    id: 1,
-    challenge_id: APEX_CHALLENGE_CONFIG.id,
-    simulation_version: APEX_CHALLENGE_CONFIG.simulationVersion,
-    seed: APEX_CHALLENGE_CONFIG.seed,
-    score: 10,
-    student_number: '20314',
-    student_name: '김하늘',
-    submitted_at: '2026-09-03T01:00:00.000Z',
-    board_group: 'protector',
-  };
-  const make = (row: object) => createSupabaseLeaderboardTransport(
-    { url: 'https://example.supabase.co', anonKey: 'anon-key' },
-    async () => new Response(JSON.stringify([row]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
-  );
-  assert.equal((await make(base).list())[0]!.verification, undefined);
-  assert.equal((await make({ ...base, verification: 'verified' }).list())[0]!.verification, 'verified');
-  assert.equal((await make({ ...base, verification: '이상한값' }).list())[0]!.verification, undefined);
-});
-
-test('제출은 원본 테이블로 가고 삽입한 행을 되돌려받지 않는다', async () => {
-  let body: Record<string, unknown> = {};
-  let target = '';
-  let prefer: string | undefined;
-  const transport = createSupabaseLeaderboardTransport(
-    { url: 'https://example.supabase.co', anonKey: 'anon-key' },
-    async (url, init) => {
-      target = url;
-      prefer = (init?.headers as Record<string, string>).Prefer;
-      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      return new Response('', { status: 201 });
-    },
-  );
-
-  const submission: LeaderboardSubmission = await createSubmission(record(842), { studentNumber: '20314', studentName: '김하늘' });
+test('submission is normalized, private fields only POST, no school_key/server fields and return=minimal', async () => {
+  const server = fixtureServer([]);
+  const transport = createSupabaseLeaderboardTransport(config, server.fetch);
+  const submission = await createSubmission(record(), { schoolName: ' 새 학교 ', studentNumber: ' 00314 ', studentName: ' 홍길동 ' });
+  assert.equal(submission.schoolName, '새 학교'); assert.equal(submission.studentNumber, '00314');
+  assert.notEqual(submission.parameterSnapshot, parameters);
   await transport.submit(submission);
-  assert.equal(target, 'https://example.supabase.co/rest/v1/apex_leaderboard');
-  assert.equal(prefer, 'return=minimal');
-  assert.equal(body.student_number, '20314');
+  const call = server.calls[0]!;
+  assert.equal(call.url.pathname, '/rest/v1/apex_leaderboard');
+  assert.equal((call.init?.headers as Record<string,string>).Prefer, 'return=minimal');
+  const body = JSON.parse(call.init!.body as string);
+  assert.deepEqual(Object.keys(body).sort(), ['challenge_id', 'simulation_version', 'seed', 'score', 'parameter_snapshot', 'school_name', 'student_number', 'student_name', 'achieved_at', 'payload_hash'].sort());
+  assert.equal(body.school_name, '새 학교');
+  assert.equal(body.student_number, '00314');
   assert.equal(body.payload_hash, submission.payloadHash);
-  assert.equal('verification' in body, false);
-  assert.equal('verified_score' in body, false);
-  // 기록판 분류는 교사만 정합니다. 학생 제출 payload에 실리면 안 됩니다.
-  assert.equal('board_group' in body, false);
-  // 제출 시각은 서버 default now()가 정합니다. 클라이언트가 실어 보내는 일이 없어야 합니다.
-  assert.equal('submitted_at' in body, false);
-  assert.equal('created_at' in body, false);
 });
 
-test('익명 요청은 publishable key를 apikey 헤더로만 보낸다', async () => {
-  const seen: Record<string, string>[] = [];
-  const capture = async (_url: string, init?: RequestInit) => {
-    seen.push(init?.headers as Record<string, string>);
-    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
-  };
-
-  const anonymous = createSupabaseLeaderboardTransport(
-    { url: 'https://example.supabase.co', anonKey: 'sb_publishable_test' },
-    capture,
-  );
-  // list()는 기록판마다 한 번씩 요청하므로 매번 받은 헤더를 모두 확인합니다.
-  const headersOf = async (transport: { list(): Promise<unknown> }) => {
-    seen.length = 0;
-    await transport.list();
-    assert.equal(seen.length, 2);
-    return [...seen];
-  };
-
-  for (const headers of await headersOf(anonymous)) {
-    assert.equal(headers.apikey, 'sb_publishable_test');
-    // sb_publishable_ key는 JWT가 아니므로 Authorization: Bearer 자리에 넣지 않습니다.
-    assert.equal('Authorization' in headers, false);
+test('public SELECT allowlist, scope filters, fixed board/range and no client identity fields', async () => {
+  assert.deepEqual([...PUBLIC_LEADERBOARD_COLUMNS], ['id', 'challenge_id', 'simulation_version', 'seed', 'score', 'school_name', 'display_name', 'submitted_at', 'board_group', 'is_hafs']);
+  const server = fixtureServer([publicRow(1), publicRow(2, { school_name: '타교', is_hafs: false }), publicRow(3, { board_group: 'manipulator' })]);
+  const transport = createSupabaseLeaderboardTransport(config, server.fetch);
+  assert.equal((await transport.list()).length, 2); // national includes HAFS
+  assert.equal((await transport.list({ scope: 'hafs' })).length, 1);
+  assert.equal((await transport.list({ scope: 'hafs', boardGroup: 'manipulator' })).length, 1);
+  for (const call of server.calls) {
+    assert.equal(call.url.pathname, '/rest/v1/apex_leaderboard_public_v2');
+    assert.equal(call.url.searchParams.get('select'), PUBLIC_LEADERBOARD_COLUMNS.join(','));
+    assert.equal(call.url.searchParams.get('order'), 'score.desc,submitted_at.asc,id.asc');
+    assert.equal(call.url.searchParams.get('challenge_id'), 'eq.apex-survival');
+    assert.equal(call.url.searchParams.get('simulation_version'), 'eq.apex-v1');
+    assert.equal(call.url.searchParams.get('seed'), 'eq.260903');
+    assert.equal(call.init?.cache, 'no-store');
+    for (const name of ['student_number','student_name','school_key','payload_hash','parameter_snapshot','achieved_at','verification','verified_at','verified_score','verifier_version']) assert.ok(!call.url.toString().includes(name));
   }
+  assert.equal(server.calls[0]!.url.searchParams.has('is_hafs'), false);
+  assert.ok(server.calls.some(c => c.url.searchParams.get('is_hafs') === 'eq.true'));
+});
 
-  // 나중에 Supabase Auth 로그인을 붙이면 그때 발급되는 access token만 Authorization으로 갑니다.
-  const signedIn = createSupabaseLeaderboardTransport(
-    { url: 'https://example.supabase.co', anonKey: 'sb_publishable_test', accessToken: 'user-jwt' },
-    capture,
-  );
-  for (const headers of await headersOf(signedIn)) {
-    assert.equal(headers.apikey, 'sb_publishable_test');
-    assert.equal(headers.Authorization, 'Bearer user-jwt');
+test('runtime unknown response validation rejects malformed rows rather than presenting an empty ranking', async () => {
+  const invalid = [null, {}, 'wrong', [null], [4], ...[
+    { id: 2 }, { id: '' }, { school_name: '' }, { school_name: '가'.repeat(81) }, { display_name: null },
+    { is_hafs: 'true' }, { is_hafs: 1 }, { score: '20' }, { score: -1 }, { score: 2.5 }, { score: 1000001 },
+    { seed: '260903' }, { seed: 1 }, { seed: 2147483648 }, { challenge_id: 'other' }, { simulation_version: 'other' },
+    { board_group: 'hidden' }, { board_group: 'manipulator' }, { submitted_at: '' }, { submitted_at: '2026-02-30T00:00:00Z' },
+  ].map(change => [publicRow(1, change)])];
+  for (const raw of invalid) {
+    const transport = createSupabaseLeaderboardTransport(config, async () => json(raw));
+    await assert.rejects(transport.list(), /응답 형식/);
   }
-
-  // 공백뿐인 token은 없는 것으로 봅니다.
-  const blank = createSupabaseLeaderboardTransport(
-    { url: 'https://example.supabase.co', anonKey: 'sb_publishable_test', accessToken: '   ' },
-    capture,
-  );
-  for (const headers of await headersOf(blank)) assert.equal('Authorization' in headers, false);
+  await assert.rejects(createSupabaseLeaderboardTransport(config, async () => json([publicRow(1, { is_hafs: false })])).list({ scope: 'hafs' }), /응답 형식/);
+  const transport = createSupabaseLeaderboardTransport(config, async () => json([]));
+  for (const query of [{ scope: 'local' as LeaderboardScope }, { boardGroup: 'hidden' as BoardGroup }, { limit: 0 }, { limit: 2.5 }]) await assert.rejects(transport.list(query), /조회 설정/);
+  assert.deepEqual(await transport.list(), []);
 });
 
-test('동점 정렬은 서버가 채운 제출 시각을 따른다', () => {
-  const entries = [
-    entry({ id: 'late', score: 700, studentNumber: '20314', studentName: '김하늘', submittedAt: '2026-09-03T05:00:00.000Z' }),
-    entry({ id: 'early', score: 700, studentNumber: '20414', studentName: '이바다', submittedAt: '2026-09-03T03:00:00.000Z' }),
-  ];
-  assert.deepEqual(rankEntries(entries).map((item) => item.id), ['early', 'late']);
+test('extra private fields are never copied into an entry; masked names never deduplicate participants', async () => {
+  const server = fixtureServer([publicRow(1, { student_number: 'private-number', student_name: 'private-name', school_key: 'private-key',
+    payload_hash: 'private-hash', parameter_snapshot: {}, verification: 'verified' }), publicRow(2)]);
+  const rows = await createSupabaseLeaderboardTransport(config, server.fetch).list();
+  assert.equal(rows.length, 2);
+  assert.deepEqual(Object.keys(rows[0]!).sort(), ['id', 'challengeId', 'simulationVersion', 'seed', 'score', 'schoolName', 'displayName', 'submittedAt', 'boardGroup', 'isHafs'].sort());
+  assert.ok(!JSON.stringify(rows).includes('private-'));
 });
 
-test('테이블 이름을 바꾸면 공개 view 이름도 함께 따라간다', async () => {
-  const seen: string[] = [];
-  const transport = createSupabaseLeaderboardTransport(
-    { url: 'https://example.supabase.co', anonKey: 'anon-key', table: 'lab_scores' },
-    async (url) => {
-      seen.push(url);
-      return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
-    },
-  );
-  await transport.list();
-  assert.equal(seen[0]!.startsWith('https://example.supabase.co/rest/v1/lab_scores_public?'), true);
+test('Top 10 includes >50 boundary ties, handles smaller server pages and stops before lower scores', async () => {
+  const rows = Array.from({ length: 120 }, (_, i) => publicRow(i + 1, { score: i < 9 ? 1000 - i : i < 83 ? 842 : 1 }));
+  for (const cap of [3, 50]) {
+    const server = fixtureServer(rows, cap);
+    const got = await createSupabaseLeaderboardTransport(config, server.fetch).list();
+    assert.equal(got.length, 83);
+    assert.equal(rankEntries(got).at(-1)!.rank, 10);
+    assert.ok(server.calls.length < 32);
+    assert.ok(server.calls.some(c => c.url.searchParams.get('score') === 'gte.842'));
+  }
+  const separate = fixtureServer([...Array.from({ length: 60 }, (_, i) => publicRow(i + 1, { is_hafs: false })), publicRow(100, { score: 10 })], 3);
+  const transport = createSupabaseLeaderboardTransport(config, separate.fetch);
+  assert.ok(!(await transport.list()).some(r => r.isHafs));
+  assert.equal((await transport.list({ scope: 'hafs' }))[0]!.id, uuid(100));
 });
 
-test('Supabase 오류 응답은 사용자에게 보여 줄 메시지로 바뀐다', async () => {
-  const transport = createSupabaseLeaderboardTransport(
-    { url: 'https://example.supabase.co', anonKey: 'anon-key' },
-    async () => new Response(JSON.stringify({ message: '기록 제출이 너무 잦습니다.' }), { status: 400, headers: { 'Content-Type': 'application/json' } }),
-  );
-  await assert.rejects(transport.list(), /기록 제출이 너무 잦습니다\./u);
-
-  const withoutBody = createSupabaseLeaderboardTransport(
-    { url: 'https://example.supabase.co', anonKey: 'anon-key' },
-    async () => new Response('nope', { status: 503 }),
-  );
-  await assert.rejects(withoutBody.list(), /HTTP 503/u);
+test('pagination allows duplicate row IDs from overlap but rejects stalled, inconsistent and unsorted responses', async () => {
+  let page = 0;
+  const transport = createSupabaseLeaderboardTransport(config, async () => json([[publicRow(1)], [publicRow(1), publicRow(2)], []][page++]));
+  assert.equal((await transport.list()).length, 2);
+  await assert.rejects(createSupabaseLeaderboardTransport(config, async () => json([publicRow(1)])).list(), /응답 형식/);
+  await assert.rejects(createSupabaseLeaderboardTransport(config, async () => json([publicRow(2), publicRow(1)])).list(), /응답 형식/);
 });
 
-test('기본 표시 인원은 상위 10명이다', () => {
+test('competition ranks 1,1,3 use server timestamp including microseconds/timezones and id; detail retains ties', () => {
   assert.equal(DEFAULT_LEADERBOARD_LIMIT, 10);
-
-  // 12명이 서로 다른 점수를 냈으면 정확히 10명만 보여 줍니다.
-  const twelve = Array.from({ length: 12 }, (_, index) => entry({
-    id: `s${index}`,
-    score: 1200 - index * 10,
-    studentNumber: `203${String(index).padStart(2, '0')}`,
-    studentName: `학생${index}`,
-  }));
-  const ranked = rankEntries(twelve);
-  assert.equal(ranked.length, 10);
-  assert.deepEqual(ranked.map((item) => item.rank), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-  assert.equal(ranked[0]!.score, 1200);
-  assert.equal(ranked[9]!.score, 1110);
-  // 11, 12번째 학생은 잘려 나갑니다.
-  assert.equal(ranked.some((item) => item.id === 's10'), false);
-  assert.equal(ranked.some((item) => item.id === 's11'), false);
+  const ranked = rankEntries([entry(2, { score: 900 }), entry(1, { score: 900 }), entry(3, { score: 800 }), entry(4, { score: 700 })]);
+  assert.deepEqual(ranked.map(r => r.rank), [1,1,3,4]);
+  assert.deepEqual(ranked.map(r => rankAccentClass(r.rank)), ['rank-gold','rank-gold','rank-bronze','']);
+  assert.equal(rankAccentClass(2), 'rank-silver');
+  assert.deepEqual(rankEntries([
+    entry(1, { score: 900, submittedAt: '2026-09-01T00:00:00.000002Z' }),
+    entry(2, { score: 900, submittedAt: '2026-09-01T09:00:00.000001+09:00' }),
+  ]).map(r => r.id), [uuid(2), uuid(1)]);
+  assert.equal(rankEntries(Array.from({ length: 12 }, (_, i) => entry(i + 1))).length, 10);
 });
 
-test('10위와 동점인 학생이 더 있으면 그 학생들까지 함께 보여 준다', () => {
-  // 1~9위는 서로 다른 점수, 10~12위는 모두 842점입니다.
-  const entries = [
-    ...Array.from({ length: 9 }, (_, index) => entry({
-      id: `top${index}`,
-      score: 1000 - index * 10,
-      studentNumber: `201${String(index).padStart(2, '0')}`,
-      studentName: `상위${index}`,
-    })),
-    entry({ id: 'tie-a', score: 842, studentNumber: '20401', studentName: '동점갑', submittedAt: '2026-09-03T01:00:00.000Z' }),
-    entry({ id: 'tie-b', score: 842, studentNumber: '20402', studentName: '동점을', submittedAt: '2026-09-03T02:00:00.000Z' }),
-    entry({ id: 'tie-c', score: 842, studentNumber: '20403', studentName: '동점병', submittedAt: '2026-09-03T03:00:00.000Z' }),
-    entry({ id: 'below', score: 500, studentNumber: '20404', studentName: '하위', submittedAt: '2026-09-03T04:00:00.000Z' }),
-  ];
-
-  const ranked = rankEntries(entries);
-  assert.equal(ranked.length, 12);
-  assert.deepEqual(ranked.slice(9).map((item) => item.id), ['tie-a', 'tie-b', 'tie-c']);
-  // 동점자는 같은 순위를 공유합니다.
-  assert.deepEqual(ranked.slice(9).map((item) => item.rank), [10, 10, 10]);
-  // 동점 그룹 안에서는 먼저 제출한 쪽이 앞섭니다.
-  assert.deepEqual(ranked.slice(9).map((item) => item.submittedAt), [
-    '2026-09-03T01:00:00.000Z', '2026-09-03T02:00:00.000Z', '2026-09-03T03:00:00.000Z',
-  ]);
-  // 동점이 아닌 아래 학생까지 딸려 오지는 않습니다.
-  assert.equal(ranked.some((item) => item.id === 'below'), false);
+test('safe errors distinguish duplicates/school/rate; no raw DB details or legacy fallback', async () => {
+  for (const [code, message] of [['23505', '이미 제출'], ['22023', '학교명'], ['23502', '학교명'], ['P0001', '너무 잦']]) {
+    const transport = createSupabaseLeaderboardTransport(config, async () => json({ code, message: 'PRIVATE', details: 'PRIVATE' }, 400));
+    await assert.rejects(transport.submit(await createSubmission(record(), participant)), new RegExp(message));
+  }
+  let count = 0;
+  const failing = createSupabaseLeaderboardTransport(config, async () => { count++; return json({ message: 'PRIVATE' }, 503); });
+  await assert.rejects(failing.list(), error => error instanceof Error && !error.message.includes('PRIVATE'));
+  assert.equal(count, 1);
+  const old = createSupabaseLeaderboardTransport({ ...config, publicView: 'apex_leaderboard_public' }, async () => { throw Error('should not fetch'); });
+  await assert.rejects(old.list(), /v2 설정/);
 });
 
-test('같은 학번의 여러 제출은 최고 기록 하나로 접힌다', () => {
-  // 공개 view가 서버에서 이미 접어 주지만, 클라이언트도 같은 규칙으로 한 번 더 접습니다.
-  const entries = [
-    entry({ id: 'a1', score: 500, studentNumber: '20314', studentName: '김민수', submittedAt: '2026-09-03T01:00:00.000Z' }),
-    entry({ id: 'a2', score: 880, studentNumber: '20314', studentName: '김민수', submittedAt: '2026-09-03T02:00:00.000Z' }),
-    entry({ id: 'a3', score: 640, studentNumber: '20314', studentName: '김민수', submittedAt: '2026-09-03T03:00:00.000Z' }),
-  ];
-  const ranked = rankEntries(entries);
-  assert.equal(ranked.length, 1);
-  assert.deepEqual(
-    [ranked[0]!.studentNumber, ranked[0]!.studentName, ranked[0]!.score],
-    ['20314', '김민수', 880],
-  );
-});
-
-test('같은 학번이면 이름 표기가 달라도 한 학생으로 접힌다', () => {
-  const entries = [
-    entry({ id: 'b1', score: 880, studentNumber: '20314', studentName: '김민수', submittedAt: '2026-09-03T01:00:00.000Z' }),
-    entry({ id: 'b2', score: 900, studentNumber: '20314', studentName: '김민수A', submittedAt: '2026-09-03T02:00:00.000Z' }),
-  ];
-  const ranked = rankEntries(entries);
-  assert.equal(ranked.length, 1);
-  assert.equal(ranked[0]!.score, 900);
-  // 대표 기록의 이름이 그대로 표시됩니다.
-  assert.equal(ranked[0]!.studentName, '김민수A');
-});
-
-test('학번이 다르면 이름이 같아도 서로 다른 학생이다', () => {
-  const entries = [
-    entry({ id: 'c1', score: 880, studentNumber: '20314', studentName: '김민수' }),
-    entry({ id: 'c2', score: 810, studentNumber: '20414', studentName: '김민수', submittedAt: '2026-09-03T02:00:00.000Z' }),
-  ];
-  const ranked = rankEntries(entries);
-  assert.equal(ranked.length, 2);
-  assert.deepEqual(
-    ranked.map((item) => [item.studentNumber, item.score, item.rank]),
-    [['20314', 880, 1], ['20414', 810, 2]],
-  );
-});
-
-test('같은 학생이 같은 최고점을 여러 번 냈으면 먼저 제출한 기록이 대표가 된다', () => {
-  const entries = [
-    entry({ id: 'late', score: 900, studentNumber: '20314', studentName: '김하늘', submittedAt: '2026-09-03T05:00:00.000Z' }),
-    entry({ id: 'early', score: 900, studentNumber: '20314', studentName: '김하늘', submittedAt: '2026-09-03T01:00:00.000Z' }),
-  ];
-  const ranked = rankEntries(entries);
-  assert.equal(ranked.length, 1);
-  assert.equal(ranked[0]!.id, 'early');
-});
-
-test('환경 변수가 없으면 transport 없이 앱이 동작한다', () => {
+test('apikey and actual JWT headers retain their roles; custom table derives v2 view; missing config disables only leaderboard', async () => {
+  for (const accessToken of [undefined, 'user-jwt', '   ']) {
+    const server = fixtureServer([]);
+    const transport = createSupabaseLeaderboardTransport({ ...config, accessToken, table: 'lab_scores' }, server.fetch);
+    await transport.list(); await transport.submit(await createSubmission(record(), participant));
+    for (const call of server.calls) {
+      const headers = call.init!.headers as Record<string,string>;
+      assert.equal(headers.apikey, 'sb_publishable_test');
+      assert.equal(headers.Authorization, accessToken?.trim() ? 'Bearer user-jwt' : undefined);
+    }
+    assert.equal(server.calls[0]!.url.pathname, '/rest/v1/lab_scores_public_v2');
+  }
   assert.equal(createLeaderboardTransport({}), null);
   assert.equal(createLeaderboardTransport({ supabaseUrl: ' ', supabaseAnonKey: 'key' }), null);
-  assert.equal(createLeaderboardTransport({ supabaseUrl: 'https://example.supabase.co', supabaseAnonKey: '' }), null);
-  assert.notEqual(createLeaderboardTransport({ supabaseUrl: 'https://example.supabase.co', supabaseAnonKey: 'key' }), null);
+  assert.equal(createLeaderboardTransport({ supabaseUrl: config.url, supabaseAnonKey: '' }), null);
+  assert.ok(createLeaderboardTransport({ supabaseUrl: config.url, supabaseAnonKey: 'key' }));
 });
 
-test('상위 3위 테두리는 표시 순서가 아니라 rank 값으로 정해진다', () => {
-  const entries = [
-    entry({ id: 'd1', score: 900, studentNumber: '10101', studentName: '가은' }),
-    entry({ id: 'd2', score: 900, studentNumber: '10102', studentName: '나연', submittedAt: '2026-09-03T02:00:00.000Z' }),
-    entry({ id: 'd3', score: 800, studentNumber: '10103', studentName: '다올', submittedAt: '2026-09-03T03:00:00.000Z' }),
-    entry({ id: 'd4', score: 700, studentNumber: '10104', studentName: '라온', submittedAt: '2026-09-03T04:00:00.000Z' }),
-  ];
-  const ranked = rankEntries(entries);
-  assert.deepEqual(ranked.map((item) => item.rank), [1, 1, 3, 4]);
-  assert.deepEqual(
-    ranked.map((item) => rankAccentClass(item.rank)),
-    ['rank-gold', 'rank-gold', 'rank-bronze', ''],
-  );
-});
-
-test('rank 값이 그대로 금 · 은 · 동 클래스로 이어진다', () => {
-  assert.equal(rankAccentClass(1), 'rank-gold');
-  assert.equal(rankAccentClass(2), 'rank-silver');
-  assert.equal(rankAccentClass(3), 'rank-bronze');
-  assert.equal(rankAccentClass(4), '');
-  assert.equal(rankAccentClass(12), '');
+test('saved participants upgrade only school to empty; broken JSON/types/storage fail safely without writes to PB', () => {
+  const storage = (value: string | null) => ({ getItem: () => value });
+  assert.deepEqual(loadParticipant(storage(JSON.stringify({ studentNumber: '00314', studentName: '홍길동' }))), { ...participant, schoolName: '' });
+  assert.deepEqual(loadParticipant(storage(JSON.stringify(participant))), participant);
+  for (const value of [null, '{', '[]', '3', 'null', '{"studentNumber":3,"studentName":"홍길동"}', '{"studentNumber":"00314","studentName":"홍길동","schoolName":null}']) assert.equal(loadParticipant(storage(value)), null);
+  assert.equal(loadParticipant({ getItem() { throw Error('blocked'); } }), null);
 });

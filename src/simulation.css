@@ -209,21 +209,18 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 .leaderboard-list { display: grid; gap: 4px; max-height: min(240px, 32vh); max-height: min(240px, 32dvh); margin: 0; padding: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; scrollbar-color: #c7d3ca transparent; scrollbar-gutter: stable; list-style: none; }
 .leaderboard-list:focus-visible { outline: 3px solid #f1b840; outline-offset: 2px; }
 .leaderboard-list:empty { display: none; }
-.leaderboard-list li { display: grid; grid-template-columns: 18px minmax(0,1fr) auto; gap: 3px 5px; align-items: baseline; padding: 6px 4px; border: 1px solid transparent; border-radius: 8px; background: #f6f9f5; }
+.leaderboard-list li { display: grid; min-width: 0; grid-template-columns: 24px minmax(0,1fr) minmax(0,.7fr) max-content; gap: 3px 6px; align-items: baseline; padding: 6px 4px; border: 1px solid transparent; border-radius: 8px; background: #f6f9f5; }
 /* 상위 3위는 표시 순서가 아니라 rank 값으로 판정합니다. 동점이면 같은 rank를 나눠 가지므로
    1, 1, 3 형태에서 앞의 두 명이 모두 금색을 받습니다. 색은 장식이고 순위는 숫자로도 읽힙니다. */
 .leaderboard-list li.rank-gold { border-color: #c2a13c; background: #f7f6ec; }
 .leaderboard-list li.rank-silver { border-color: #a6afa8; background: #f4f7f4; }
 .leaderboard-list li.rank-bronze { border-color: #b57c4e; background: #f8f4ef; }
-.leaderboard-list li.is-mine { border-color: #e8ce8a; background: #fff4cf; }
-.leaderboard-list li.is-mine.rank-gold { border-color: #c2a13c; }
-.leaderboard-list li.is-mine.rank-silver { border-color: #a6afa8; }
-.leaderboard-list li.is-mine.rank-bronze { border-color: #b57c4e; }
 .leaderboard-list b { color: #2d704b; font-size: 12px; font-weight: 800; text-align: center; }
 .leaderboard-list li.rank-gold b { color: #8a6f1d; }
 .leaderboard-list li.rank-silver b { color: #59635c; }
 .leaderboard-list li.rank-bronze b { color: #8a5a34; }
 .leaderboard-who { display: grid; min-width: 0; }
+.leaderboard-school { min-width: 0; color: #46614e; font-size: 12px; overflow-wrap: anywhere; }
 .leaderboard-who strong { color: #22402d; font-size: 12px; overflow-wrap: anywhere; }
 .leaderboard-score { color: #1d5d3a; font-size: 12px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .leaderboard-meta { grid-column: 2/-1; display: flex; flex-wrap: wrap; gap: 2px 8px; min-width: 0; color: #627168; font-size: 10px; line-height: 1.5; }
@@ -590,13 +587,15 @@ html { scrollbar-gutter: stable; }
 .leaderboard-summary { display: grid; gap: 5px; padding: 10px 12px; }
 .leaderboard-summary h2 { font-size: 15px; }
 .leaderboard-summary h2 small { font-size: 11px; color: #708176; }
-.ranking-mini-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.ranking-mini-grid { display: grid; grid-template-columns: minmax(0,1fr); gap: 8px; }
+.ranking-mini-grid h3 { margin: 4px 0; color: #365a43; font-size: 11px; }
 .ranking-mini-grid > section { min-width: 0; }
 .ranking-board-button { width: 100%; min-height: 26px; padding: 3px 0; border: 0; color: #265238; background: none; font-size: 12px; font-weight: 750; text-align: left; }
 .ranking-board-button .tab-nowrap { white-space: nowrap; }
 .leaderboard-list { max-height: none; overflow: visible; scrollbar-gutter: auto; }
 .leaderboard-list--compact { gap: 3px; }
-.leaderboard-list--compact li { padding: 4px; grid-template-columns: 14px minmax(0,1fr) auto; gap: 4px; min-height: 28px; }
+.leaderboard-list--compact li { padding: 4px; grid-template-columns: 20px minmax(0,1fr) minmax(0,.7fr) max-content; gap: 4px; min-height: 28px; }
+.leaderboard-list--compact .leaderboard-school { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .leaderboard-list--compact .leaderboard-who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .leaderboard-list--compact .leaderboard-score { font-size: 11px; }
 #open-leaderboard { min-height: 32px; border: 1px solid #c8d6ca; border-radius: 8px; color: #365a43; background: #f5f8f3; font-size: 12px; font-weight: 700; }
@@ -701,8 +700,15 @@ dialog::backdrop { background: rgba(10,29,18,.5); backdrop-filter: none; }
 .leaderboard-dialog .leaderboard-heading, .leaderboard-dialog .leaderboard-status { flex: 0 0 auto; }
 .leaderboard-dialog .ranking-body { padding: 0; flex: 1 1 auto; min-height: 100px; }
 .leaderboard-dialog .leaderboard-tabs button { font-size: 13px; min-height: 40px; }
+.leaderboard-dialog { width: min(1000px, calc(100% - 32px)); max-width: 1000px; }
+.ranking-scope-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; min-width: 0; }
+.ranking-scope-grid > section { min-width: 0; }
+.ranking-scope-grid h3 { margin: 0 0 8px; color: #365a43; font-size: 15px; }
+.leaderboard-ranking-note { margin: 0; color: #627168; font-size: 11px; line-height: 1.5; }
+.leaderboard-form label small { color: #68786d; font-size: 10px; }
 .leaderboard-dialog .leaderboard-list li { padding: 5px 8px; }
-.dashboard-dialog .leaderboard-form { display: grid; flex: 0 0 auto; grid-template-columns: 1fr 1fr; text-align: left; padding: 8px 0 0; justify-items: stretch; }
+.dashboard-dialog .leaderboard-form { display: grid; flex: 0 0 auto; grid-template-columns: 2fr 1fr 1fr; text-align: left; padding: 8px 0 0; justify-items: stretch; }
+.dashboard-dialog .leaderboard-form[hidden] { display: none; }
 .dashboard-dialog .leaderboard-form > button { grid-column: 1/-1; }
 .dashboard-dialog .leaderboard-form label span, .dashboard-dialog .leaderboard-form input, #leaderboard-submit { font-size: 12px; }
 .dashboard-dialog .leaderboard-privacy { font-size: 11px; }
@@ -713,6 +719,7 @@ dialog::backdrop { background: rgba(10,29,18,.5); backdrop-filter: none; }
   .support-grid { grid-template-columns: minmax(0,1fr); }
 }
 @media (max-width: 760px) {
+  .ranking-scope-grid { grid-template-columns: minmax(0,1fr); }
   .workspace { padding: 10px; }
   .board-card { padding: 10px; }
   .challenge-panel { padding: 10px; }

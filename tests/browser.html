@@ -6,26 +6,52 @@
   Object.defineProperty(window, 'localStorage', { value: {
     getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value),
   } });
-  let gets = 0, posts = 0;
+  const params = new URL(location.href).searchParams;
+  const participantKey = 'rabbits-wolves:apex-survival:participant';
+  if (params.get('storage') === 'legacy') storage.set(participantKey, JSON.stringify({ studentNumber: '00314', studentName: '합성학생' }));
+  if (params.get('storage') === 'broken') storage.set(participantKey, '{');
+  const fixture = window.__fixture = { gets: 0, posts: 0, calls: [], submitted: null, failHafs: false, storage };
   const fetchOriginal = window.fetch;
-  const mode = new URL(location.href).searchParams.get('records') ?? '13';
+  const mode = params.get('records') ?? '13';
   window.fetch = async (input, init) => {
     const url = String(input);
     if (!url.includes('/fixture/rest/v1/')) return fetchOriginal(input, init);
-    if (init?.method === 'POST') { posts++; throw new Error('Fixture submissions are blocked'); }
-    gets++;
-    if (mode === 'error') return new Response(JSON.stringify({ message: 'Fixture read failure' }), { status: 503 });
+    if (init?.method === 'POST') {
+      fixture.posts++;
+      if (params.get('submit') !== 'success') throw new Error('Fixture submissions are blocked');
+      fixture.submitted = JSON.parse(init.body);
+      await new Promise(resolve => setTimeout(resolve, 150));
+      return new Response(null, { status: 201 }); // Memory-only success, never a real service.
+    }
+    fixture.gets++; fixture.calls.push(url);
+    const q = new URL(url).searchParams;
+    const hafs = q.get('is_hafs') === 'eq.true';
+    if (mode === 'error' || (hafs && (mode === 'partial' || fixture.failHafs))) return new Response(JSON.stringify({ message: 'Fixture read failure' }), { status: 503 });
     if (mode === 'loading') return new Promise(() => {});
-    const board = url.includes('eq.manipulator') ? 'manipulator' : 'protector';
-    return new Response(JSON.stringify(Array.from({ length: Number(mode) }, (_, i) => ({
-      id: `${board}-${i}`, challenge_id: 'apex-survival', simulation_version: 'apex-v1', seed: 260903,
-      student_number: `${board}-${i}`, student_name: i === 1 ? '아주긴표시이름의검증참가자' : `검증용 ${i + 1}`,
-      score: 5000 - Math.floor(i / 2) * 100, submitted_at: `2026-09-01T00:00:${String(i).padStart(2,'0')}.000Z`, board_group: board,
-    }))), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const board = q.get('board_group') === 'eq.manipulator' ? 'manipulator' : 'protector';
+    const count = mode === 'ties' ? 120 : Number.isFinite(Number(mode)) ? Number(mode) : 24;
+    let rows = Array.from({ length: count }, (_, i) => ({
+      id: `00000000-0000-0000-0000-${String((board === 'protector' ? 0 : 1000) + i + 1).padStart(12,'0')}`,
+      challenge_id: 'apex-survival', simulation_version: 'apex-v1', seed: 260903,
+      school_name: i % 2 === 0 ? 'HAFS' : i === 1 ? '긴학교명'.repeat(20) : '합성고등학교', display_name: '합○생', is_hafs: i % 2 === 0,
+      score: mode === 'ties' ? (i < 9 ? 1000000 - i : i < 83 ? 900000 : 1) : 1000000 - Math.floor(i / 2) * 100,
+      submitted_at: new Date(Date.UTC(2026,8,1,0,0,i)).toISOString(), board_group: board,
+    }));
+    if (hafs) rows = rows.filter(r => r.is_hafs);
+    const cursor = q.get('or');
+    if (cursor) {
+      const score = Number(cursor.match(/score.lt.(-?\d+)/)[1]);
+      const time = cursor.match(/submitted_at.gt.([^,)]+)/)[1];
+      const id = cursor.match(/id.gt.([^,)]+)/)[1];
+      rows = rows.filter(r => r.score < score || (r.score === score && (r.submitted_at > time || (r.submitted_at === time && r.id > id))));
+    }
+    if (q.has('score')) rows = rows.filter(r => r.score >= Number(q.get('score').slice(4)));
+    rows = rows.slice(0, Math.min(3, Number(q.get('limit'))));
+    return new Response(JSON.stringify(rows), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
   await import('../src/main.ts');
   const report = document.createElement('output'); report.id = 'fixture-report';
   report.style.cssText = 'display:block;padding:12px;background:#fff3c9;font:14px system-ui';
   document.body.append(report);
-  setInterval(() => { report.textContent = `격리된 검증 데이터 · GET ${gets} · POST ${posts} · PB ${storage.size}`; }, 200);
+  setInterval(() => { report.textContent = `격리된 합성 데이터 · GET ${fixture.gets} · POST ${fixture.posts} · 저장 항목 ${storage.size}`; }, 200);
 </script></html>

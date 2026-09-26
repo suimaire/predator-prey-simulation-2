@@ -16,6 +16,9 @@ concurrency:
 
 jobs:
   build-and-deploy:
+    # Branch pushes remain review checkpoints. Set this variable only after the approved DB expand
+    # and live v2 endpoint checks in supabase/LEADERBOARD_V2_RUNBOOK.md have passed.
+    if: github.ref == 'refs/heads/main' && vars.LEADERBOARD_V2_DB_READY == 'true'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -27,13 +30,14 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run db:check
       - run: npm test
       - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_LEADERBOARD_TABLE: ${{ vars.VITE_LEADERBOARD_TABLE }}
-          VITE_LEADERBOARD_PUBLIC_VIEW: ${{ vars.VITE_LEADERBOARD_PUBLIC_VIEW }}
+          VITE_LEADERBOARD_PUBLIC_VIEW: ${{ vars.VITE_LEADERBOARD_PUBLIC_VIEW || 'apex_leaderboard_public_v2' }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
