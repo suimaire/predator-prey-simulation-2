@@ -35,9 +35,9 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
     </g>
   </svg><svg class="apex-panel-outline apex-active-outline" focusable="false">
     <g clip-path="url(#${id}-outside)">
+      <g class="apex-edge-flames"></g>
         <path class="apex-perimeter apex-heat-hot" pathLength="1000"/>
         <path class="apex-perimeter apex-heat-hot apex-heat-hot-secondary" pathLength="1000"/>
-      <g class="apex-edge-flames"></g>
     </g>
   </svg></div>`;
   panel.append(layer);
@@ -123,7 +123,7 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
     }).join(' ');
     layer.querySelector('.apex-heat-grain')!.setAttribute('d', `${grain} Z`);
     // Exclude the white interior; retain at most .55px of the border's inner half.
-    layer.querySelector('.apex-heat-clip')!.setAttribute('d', `M -12 -12 H ${w + 12} V ${h + 12} H -12 Z ${rounded(.55)}`);
+    layer.querySelector('.apex-heat-clip')!.setAttribute('d', `M -26 -26 H ${w + 26} V ${h + 26} H -26 Z ${rounded(.55)}`);
     borderFlames.geometry(w, h, r);
   }
 

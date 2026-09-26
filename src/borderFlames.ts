@@ -1,6 +1,6 @@
-// Small, temporary deformations of the hot boundary, never travelling sprites.
-const LICK_POOL_SIZE = 6;
-const EMBER_POOL_SIZE = 2;
+// Three continuous, deforming heat bands. No individual flame objects or sprites.
+const EMBER_POOL_SIZE = 6;
+const FRAME_MS = 1000 / 30;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 // Analytic sampling avoids repeated SVG geometry queries during a resize.
@@ -33,14 +33,19 @@ export function createBorderFlames(layer: SVGGElement) {
       return { element, animation: null as Animation | null };
     });
   }
-  const licks = pool('path', 'apex-edge-lick', LICK_POOL_SIZE);
+  const bands = ['outer', 'middle', 'core'].map(name => {
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('class', `apex-flame-band apex-flame-${name}`);
+    layer.append(path);
+    return path;
+  });
   const embers = pool('circle', 'apex-border-ember', EMBER_POOL_SIZE);
-  const particles = [...licks, ...embers];
   let active = false, emitting = false, paused = false, reduced = false, disposed = false;
   let timer: number | undefined;
-  let width = 0, height = 0, radius = 0, length = 0;
+  let length = 0, time = 0, lastFrame = 0, nextSpark = 0;
   let perimeter: ReturnType<typeof createBorderSampler> | undefined;
-  let interval = 470, maxHeight = 7, cornerScale = .6;
+  let flameScale = 1, cornerGain = .12;
+  let samples: { distance: number; corner: number; height: number }[] = [];
   // Private decoration PRNG: no imports, shared seed, or simulation RNG consumption.
   let seed = 0x6d2b79f5;
   const random = () => {
@@ -48,85 +53,149 @@ export function createBorderFlames(layer: SVGGElement) {
     return (seed >>> 0) / 4294967296;
   };
 
-  function stop() { window.clearTimeout(timer); timer = undefined; }
+  const smooth = (x: number) => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
+  const hash = (cell: number, salt: number) => {
+    let n = Math.imul(cell + 1, 374761393) ^ Math.imul(salt, 668265263);
+    n = Math.imul(n ^ (n >>> 13), 1274126177);
+    return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+  };
+
+  // Periodic spatial noise: the last cell joins the first around the rounded
+  // perimeter. Every cell has its own clock, so regions grow, split and recede
+  // without a shared pulse or a fixed inventory of flame silhouettes.
+  function field(spacing: number, minLife: number, maxLife: number, salt: number) {
+    const count = Math.max(4, Math.round(length / spacing));
+    const clocks = Array.from({ length: count }, (_, i) => ({
+      phase: hash(i, salt) * 100,
+      duration: minLife + hash(i, salt + 1) * (maxLife - minLife),
+    }));
+    const values = new Float64Array(count);
+    return {
+      update(t: number) {
+        clocks.forEach(({ phase, duration }, i) => {
+          const clock = t / duration + phase, frame = Math.floor(clock), blend = smooth(clock - frame);
+          const a = hash(i, salt + frame * 31), b = hash(i, salt + (frame + 1) * 31);
+          values[i] = a + (b - a) * blend;
+        });
+      },
+      at(distance: number) {
+        const position = ((distance % length + length) % length) / length * count;
+        const i = Math.floor(position), blend = smooth(position - i);
+        return values[i] + (values[(i + 1) % count] - values[i]) * blend;
+      },
+    };
+  }
+  let fields: ReturnType<typeof field>[] = [];
+
+  function stop() { window.clearTimeout(timer); timer = undefined; lastFrame = 0; }
   function clearParticles() {
-    for (const particle of particles) { particle.animation?.cancel(); particle.animation = null; }
+    for (const particle of embers) { particle.animation?.cancel(); particle.animation = null; }
   }
 
-  function emit() {
-    if (!active || !emitting || paused || reduced || disposed || !length) return;
-    const slot = licks.find(item => !item.animation || item.animation.playState === 'finished');
-    if (!slot) return;
-    slot.animation?.cancel();
-    const distance = random() * length;
-    const point = perimeter!.point(distance);
-    const { tx, ty } = point;
-    const nx = ty, ny = -tx;
-    const cornerDistance = Math.max(Math.min(point.x, width - point.x), Math.min(point.y, height - point.y));
-    const corner = Math.max(0, Math.min(1, (radius + 24 - cornerDistance) / 24));
-    const rise = (3 + random() * (maxHeight - 3)) * (1 - corner * (1 - cornerScale));
-    const span = 6 + random() * 10, lean = (random() - .5) * span * .7;
-    const p = (along: number, out: number) => `${(point.x + tx * along + nx * out).toFixed(2)} ${(point.y + ty * along + ny * out).toFixed(2)}`;
-    // An asymmetrical sliver joined to the line at both ends. Its normal always
-    // points outside, including on the sides, bottom and rounded corners.
-    slot.element.setAttribute('d', `M ${p(-span / 2, 0)} Q ${p(-span * .16, .6)} ${p(lean - 1, rise * .48)} Q ${p(lean + 1.3, rise * .73)} ${p(lean, rise)} Q ${p(lean + 2, rise * .38)} ${p(span * .26, .8)} Q ${p(span * .4, .2)} ${p(span / 2, 0)} Z`);
-    slot.animation = slot.element.animate([
-      { opacity: 0 }, { opacity: .8 - corner * .22, offset: .28 },
-      { opacity: .48, offset: .63 }, { opacity: 0 },
-    ], { duration: 1600 + random() * 1100, easing: 'ease-in-out' });
+  function draw() {
+    fields.forEach(f => f.update(time));
+    const [regions, tongues, forks, sway, heat] = fields;
+    const contours: { x: number; y: number }[][] = [[], [], []];
+    for (const sample of samples) {
+      const s = sample.distance;
+      const activity = smooth((regions.at(s) - .43) / .32);
+      // Fine folds over a slower envelope produce narrow tips, changing widths
+      // and secondary peaks that merge again. Height is never a scaleY tween.
+      const fold = tongues.at(s) * .82 + forks.at(s) * .18;
+      const ridge = Math.pow(Math.max(0, 1 - Math.abs(fold - .52) * 2.7), 3);
+      const rise = Math.min(22, .65 + activity * (1 + (15 + heat.at(s) * 9) * ridge) * (1 + sample.corner * cornerGain));
+      sample.height = rise * flameScale;
+      const lean = (sway.at(s) - .5) * 20 * activity;
+      const coreHeat = heat.at(s);
+      const heights = [sample.height, sample.height * (.58 + coreHeat * .16), Math.min(4.5, sample.height * (.15 + coreHeat * .14))];
+      heights.forEach((out, band) => {
+        const p = perimeter!.point(s + lean * Math.pow(out / 22, 1.5));
+        contours[band].push({ x: p.x + p.ty * out, y: p.y - p.tx * out });
+      });
+    }
+    contours.forEach((points, band) => {
+      const first = points[0], last = points[points.length - 1];
+      const commands = [`M ${((last.x + first.x) / 2).toFixed(2)} ${((last.y + first.y) / 2).toFixed(2)}`];
+      points.forEach((p, i) => {
+        const next = points[(i + 1) % points.length];
+        commands.push(`Q ${p.x.toFixed(2)} ${p.y.toFixed(2)} ${((p.x + next.x) / 2).toFixed(2)} ${((p.y + next.y) / 2).toFixed(2)}`);
+      });
+      // The shared outside clip cuts out the white panel, leaving a single
+      // continuous ribbon rooted in the original hot line, on all four sides.
+      bands[band].setAttribute('d', `${commands.join(' ')} Z`);
+    });
+  }
 
-    if (random() > .3 || corner > .5) return;
+  function emitSpark() {
     const ember = embers.find(item => !item.animation || item.animation.playState === 'finished');
     if (!ember) return;
+    let sample = samples[Math.floor(random() * samples.length)];
+    for (let attempt = 0; sample.height < 7 * flameScale && attempt < 12; attempt++) sample = samples[Math.floor(random() * samples.length)];
+    if (sample.height < 7 * flameScale) return;
+    const { x, y, tx, ty } = perimeter!.point(sample.distance), nx = ty, ny = -tx;
     ember.animation?.cancel();
-    ember.element.setAttribute('cx', String(point.x + nx * 2));
-    ember.element.setAttribute('cy', String(point.y + ny * 2));
-    ember.element.setAttribute('r', String(.55 + random() * .65));
-    const drift = 4 + random() * 5, sideways = (random() - .5) * 4;
+    const origin = sample.height * .5;
+    ember.element.setAttribute('cx', String(x + nx * origin));
+    ember.element.setAttribute('cy', String(y + ny * origin));
+    ember.element.setAttribute('r', String((random() < .08 ? 2 : .5 + random()) * flameScale));
+    const drift = (5 + random() * 9) * flameScale, sideways = (random() - .5) * 7;
     ember.animation = ember.element.animate([
       { opacity: 0, transform: 'translate(0, 0)' },
-      { opacity: .7, offset: .2 },
+      { opacity: .88, offset: .18, transform: `translate(${nx * drift * .2 + tx * sideways}px, ${ny * drift * .2 + ty * sideways}px)` },
+      { opacity: .55, offset: .56, transform: `translate(${nx * drift * .6 - tx * sideways * .3}px, ${ny * drift * .6 - ty * sideways * .3}px)` },
       { opacity: 0, transform: `translate(${nx * drift + tx * sideways}px, ${ny * drift + ty * sideways}px)` },
-    ], { duration: 650 + random() * 450, easing: 'ease-out' });
+    ], { duration: 500 + random() * 700, easing: 'ease-out' });
   }
 
   function schedule() {
     if (timer !== undefined || !active || !emitting || paused || reduced || disposed || !length) return;
     timer = window.setTimeout(() => {
       timer = undefined;
-      emit();
+      const now = performance.now();
+      time += lastFrame ? Math.min(80, now - lastFrame) / 1000 : FRAME_MS / 1000;
+      lastFrame = now;
+      draw();
+      if (time >= nextSpark) { emitSpark(); nextSpark = time + .16 + random() * .14; }
       schedule();
-    }, interval * (.75 + random() * .65));
+    }, FRAME_MS);
   }
 
   function reconcile() {
     if (disposed) return;
     if (!active || !emitting || paused || reduced) stop();
-    if (!active || reduced) clearParticles();
-    else for (const particle of particles) {
+    if (!active || reduced) {
+      clearParticles();
+      bands.forEach(path => path.removeAttribute('d'));
+    } else for (const particle of embers) {
       if (paused && particle.animation?.playState === 'running') particle.animation.pause();
       else if (!paused && particle.animation?.playState === 'paused') particle.animation.play();
     }
-    schedule();
+    if (active && emitting && !paused && !reduced && length && timer === undefined) { draw(); schedule(); }
   }
 
   return {
     geometry(w: number, h: number, r: number) {
-      width = w; height = h; radius = r;
       clearParticles();
       perimeter = createBorderSampler(w, h, r);
       length = perimeter.length;
+      const count = Math.ceil(length / 2);
+      samples = Array.from({ length: count }, (_, i) => {
+        const distance = i * length / count, p = perimeter!.point(distance);
+        const cornerDistance = Math.max(Math.min(p.x, w - p.x), Math.min(p.y, h - p.y));
+        return { distance, corner: smooth((r + 18 - cornerDistance) / 18), height: 0 };
+      });
+      fields = [field(52, .8, 2, 11), field(13, .5, 1.4, 23), field(6, .55, 1.1, 47), field(27, .6, 1.3, 71), field(38, .7, 1.4, 101)];
       const styles = getComputedStyle(layer);
       const value = (name: string) => Number.parseFloat(styles.getPropertyValue(`--apex-${name}`));
-      interval = Math.max(250, value('lick-interval'));
-      maxHeight = Math.max(3, Math.min(8, value('lick-height')));
-      cornerScale = value('corner-scale');
+      flameScale = value('flame-scale') || 1;
+      cornerGain = value('corner-gain') || .12;
+      if (active && !reduced) draw();
       reconcile();
     },
     sync(nextActive: boolean, nextPaused: boolean, nextReduced: boolean, nextEmitting: boolean) {
       active = nextActive; paused = nextPaused; reduced = nextReduced; emitting = nextEmitting;
       reconcile();
     },
-    destroy() { disposed = true; stop(); clearParticles(); },
+    destroy() { disposed = true; stop(); clearParticles(); bands.forEach(path => path.remove()); },
   };
 }

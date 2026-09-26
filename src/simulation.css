@@ -93,12 +93,11 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
   --apex-glow-blur: 2px;
   --apex-line-width: 2.3px;
   --apex-line-opacity: .96;
-  --apex-hot-seconds: 54s;
-  --apex-lick-interval: 470;
-  --apex-lick-height: 7;
+  --apex-hot-seconds: 8.2s;
+  --apex-flame-scale: 1;
   --apex-flame-sway: 1px;
-  /* No corner assets or bursts; only incidental licks become 40% shorter. */
-  --apex-corner-scale: .6;
+  /* The same moving field crosses corners, with a small local height lift. */
+  --apex-corner-gain: .12;
   position: relative;
   container-type: inline-size;
 }
@@ -123,7 +122,7 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
   42% { transform: translateX(calc(var(--apex-flame-sway) * -.35)) scale(.94,.9); opacity: .78; }
   73% { transform: scale(.96,1.04); opacity: 1; }
 }
-.apex-panel-heat { position: absolute; z-index: 1; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; clip-path: inset(-12px); }
+.apex-panel-heat { position: absolute; z-index: 1; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; clip-path: inset(-26px); }
 .apex-panel-outline { display: block; position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; fill: none; }
 /* Cache the static gradient/glow separately so moving strokes never repaint its blur. */
 .apex-static-outline, .apex-active-outline { transform: translateZ(0); }
@@ -136,14 +135,16 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 .apex-heat-halo { stroke: #ef5626; stroke-width: 6; stroke-opacity: var(--apex-panel-glow); filter: blur(var(--apex-glow-blur)); }
 .apex-heat-steady, .apex-edge-flames { opacity: 0; }
 .apex-heat-hot { stroke: #ffe99a; stroke-width: 1.2; stroke-opacity: .85; stroke-dasharray: .2 6.8 .65 12.35 .35 18.65 1 9 .4 20.6 .6 29.4; animation: apex-ember-drift var(--apex-hot-seconds) linear infinite, apex-ember-warmth 5.7s ease-in-out infinite; }
-.apex-heat-hot-secondary { stroke: #ffac32; stroke-width: 2; stroke-dasharray: .5 26 .3 13 1 38 .7 57.5; animation: apex-ember-drift-secondary 71s linear infinite, apex-ember-warmth 7.3s ease-in-out -2.7s infinite; }
+.apex-heat-hot-secondary { stroke: #ffac32; stroke-width: 2; stroke-dasharray: .5 26 .3 13 1 38 .7 57.5; animation: apex-ember-drift-secondary 9.7s linear infinite, apex-ember-warmth 7.3s ease-in-out -2.7s infinite; }
 @keyframes apex-ember-drift { to { stroke-dashoffset: -100; } }
 @keyframes apex-ember-drift-secondary { from { stroke-dashoffset: 27; } to { stroke-dashoffset: 164; } }
 @keyframes apex-ember-warmth { 0%, 100% { opacity: .62; } 47% { opacity: 1; } 76% { opacity: .78; } }
-.apex-edge-lick { fill: #ff861d; stroke: #ffd56a; stroke-width: .65; stroke-linejoin: round; filter: drop-shadow(0 0 .7px rgb(238 72 15 / .55)); opacity: 0; }
-.apex-border-ember { fill: #ffbc48; opacity: 0; }
+.apex-flame-outer { fill: #e75220; fill-opacity: .88; }
+.apex-flame-middle { fill: #ff922a; fill-opacity: .96; }
+.apex-flame-core { fill: #ffd16a; fill-opacity: .9; }
+.apex-border-ember { fill: #ff9c27; opacity: 0; }
 @container (max-width: 600px) {
-  .apex-edge-flames { --apex-lick-interval: 700; --apex-lick-height: 5; }
+  .apex-edge-flames { --apex-flame-scale: .65; }
 }
 .board-card[data-mode-phase=idle] .apex-panel-heat * { animation: none; }
 .board-card[data-effects-paused=true] .apex-panel-heat *, .board-card[data-effects-paused=true] .apex-tab-flame { animation-play-state: paused; }

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const origin = process.env.TEST_ORIGIN ?? 'http://127.0.0.1:5173';
 const base = `${origin}/predator-prey-simulation-2/`;
-const output = fileURLToPath(new URL('../verification.local/ember-border/', import.meta.url));
+const output = fileURLToPath(new URL('../verification.local/flame-tongues/', import.meta.url));
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ channel: process.env.TEST_BROWSER ?? 'msedge', headless: true });
 const context = await browser.newContext({ viewport: { width: 1877, height: 1000 } });
@@ -27,7 +27,7 @@ const inspect = () => page.evaluate(() => {
     phase: panel.dataset.modePhase, width: p.width - 2, height: p.height - 2,
     viewBox: svg.getAttribute('viewBox'), paths: [...layer.querySelectorAll('.apex-perimeter')].map(p => p.getAttribute('d')),
     sprites: layer.querySelectorAll('.apex-flame-orbit, .apex-flame-body, .apex-flame-frame').length,
-    licks: [...layer.querySelectorAll('.apex-edge-lick')].map(p => ({ d: p.getAttribute('d'), opacity: +getComputedStyle(p).opacity })),
+    bands: [...layer.querySelectorAll('.apex-flame-band')].map(p => ({ d: p.getAttribute('d'), opacity: +getComputedStyle(p).fillOpacity })),
     embers: layer.querySelectorAll('.apex-border-ember').length,
     activeEmbers: [...layer.querySelectorAll('.apex-border-ember')].filter(p => +getComputedStyle(p).opacity > .05).length,
     hotOffset: parseFloat(getComputedStyle(layer.querySelector('.apex-heat-hot')).strokeDashoffset),
@@ -44,16 +44,34 @@ function continuous(state) {
   const [x, y, w, h] = state.viewBox.split(' ').map(Number);
   assert.equal(x, 0); assert.equal(y, 0);
   assert.ok(Math.abs(w - state.width) < .02 && Math.abs(h - state.height) < .02);
-  assert.equal(state.licks.length, 6); assert.equal(state.embers, 2);
+  assert.equal(state.bands.length, 3); assert.equal(state.embers, 6);
+  assert.ok(state.bands.every(band => band.d?.endsWith(' Z')), 'each heat color is one closed, continuous contour');
   assert.equal(state.overflow, false);
 }
+const measureFlames = () => page.evaluate(() => {
+  const panel = document.querySelector('.board-card'), svg = panel.querySelector('svg.apex-panel-outline');
+  const [, , w, h] = svg.getAttribute('viewBox').split(' ').map(Number);
+  const r = parseFloat(getComputedStyle(panel).borderTopLeftRadius) - 1;
+  const d = panel.querySelector('.apex-flame-outer').getAttribute('d');
+  // Signed distance from the actual rounded border, including all four arcs.
+  const heights = [...d.matchAll(/Q ([\d.-]+) ([\d.-]+)/g)].map(m => {
+    const qx = Math.abs(+m[1] - w / 2) - (w / 2 - r), qy = Math.abs(+m[2] - h / 2) - (h / 2 - r);
+    return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
+  });
+  const scale = parseFloat(getComputedStyle(panel.querySelector('.apex-edge-flames')).getPropertyValue('--apex-flame-scale'));
+  return { min: Math.min(...heights), max: Math.max(...heights),
+    activeCoverage: heights.filter(h => h >= 5 * scale).length / heights.length,
+    smallCoverage: heights.filter(h => h >= 5 * scale && h < 9 * scale).length / heights.length,
+    mediumCoverage: heights.filter(h => h >= 9 * scale && h < 15 * scale).length / heights.length,
+    tallCoverage: heights.filter(h => h >= 15 * scale).length / heights.length };
+});
 try {
   await page.goto(`${base}tests/browser.html`);
   await choose('apex');
   await page.evaluate(() => {
     window.originalHeat = document.querySelector('.apex-panel-heat');
     window.originalHot = document.querySelector('.apex-heat-hot').getAnimations()[0];
-    window.originalParticles = [...document.querySelectorAll('.apex-edge-lick, .apex-border-ember')];
+    window.originalParticles = [...document.querySelectorAll('.apex-flame-band, .apex-border-ember')];
   });
   const first = await inspect(); continuous(first);
   const geometry = await page.evaluate(async () => {
@@ -70,29 +88,39 @@ try {
     }
     return { maxError, maxNormalError };
   });
-  assert.ok(geometry.maxError < .2 && geometry.maxNormalError < .001, 'slivers follow the actual SVG boundary and its normals');
+  assert.ok(geometry.maxError < .2 && geometry.maxNormalError < .001, 'contours follow the actual SVG boundary and its outward normals');
   await capture('desktop-t0');
-  const temporal = await page.evaluate(async () => {
+  const started = Date.now(), measurements = [{ second: 0, ...await measureFlames() }];
+  const temporalPromise = page.evaluate(async () => {
     const samples = [], shapes = new Set();
     for (let i = 0; i < 24; i++) {
       await new Promise(resolve => setTimeout(resolve, 220));
-      const licks = [...document.querySelectorAll('.apex-edge-lick')];
-      licks.forEach(p => { if (+getComputedStyle(p).opacity > .05) shapes.add(p.getAttribute('d')); });
+      const bands = [...document.querySelectorAll('.apex-flame-band')];
+      bands.forEach(p => shapes.add(p.getAttribute('d')));
       samples.push({
-        licks: licks.filter(p => +getComputedStyle(p).opacity > .05).length,
+        bands: bands.length,
         embers: [...document.querySelectorAll('.apex-border-ember')].filter(p => +getComputedStyle(p).opacity > .05).length,
       });
     }
     return { samples, uniqueShapes: shapes.size };
   });
+  for (const second of [1, 3, 5]) {
+    await page.waitForTimeout(Math.max(0, second * 1000 - (Date.now() - started)));
+    await capture(`desktop-t${second}`);
+    measurements.push({ second, ...await measureFlames() });
+  }
+  const temporal = await temporalPromise;
   const later = await inspect(); continuous(later);
   assert.notEqual(first.hotOffset, later.hotOffset, 'bright patches evolve without moving standalone icons');
-  assert.ok(temporal.uniqueShapes >= 7, 'temporary slivers appear at changing, irregular positions');
-  assert.ok(temporal.samples.every(s => s.licks <= 6 && s.embers <= 2));
-  assert.ok(temporal.samples.some(s => s.licks >= 3));
+  assert.ok(temporal.uniqueShapes >= 60, 'all three heat contours deform continuously');
+  assert.ok(temporal.samples.every(s => s.bands === 3 && s.embers <= 6));
   assert.ok(temporal.samples.some(s => s.embers > 0));
-  await capture('desktop-t5');
-  results.push({ continuousBoundary: { first, later, temporal, geometry } });
+  const coverage = measurements.reduce((sum, m) => sum + m.activeCoverage, 0) / measurements.length;
+  assert.ok(coverage >= .2 && coverage <= .35, `active perimeter coverage ${coverage}`);
+  assert.ok(measurements.every(m => m.min >= 0 && m.max <= 22.02 && m.max >= 15), 'visible tongues project outward, capped at 22px');
+  assert.ok(measurements.every(m => m.smallCoverage + m.mediumCoverage > m.tallCoverage * 2), 'small/medium flames dominate');
+  assert.ok(first.bands.every((band, i) => band.d !== later.bands[i].d));
+  results.push({ continuousBoundary: { first, later, temporal, geometry, measurements } });
 
   const clockBefore = await page.evaluate(() => window.originalHot.currentTime);
   await choose('apex'); await page.locator('#reset-button').click();
@@ -109,7 +137,7 @@ try {
     await page.waitForTimeout(40);
   }
   await choose('apex');
-  assert.ok(await page.evaluate(() => window.originalParticles.every((n, i) => n === document.querySelectorAll('.apex-edge-lick, .apex-border-ember')[i])));
+  assert.ok(await page.evaluate(() => window.originalParticles.every((n, i) => n === document.querySelectorAll('.apex-flame-band, .apex-border-ember')[i])));
   const exit = await page.evaluate(async () => {
     const layer = document.querySelector('.apex-panel-heat');
     const start = performance.now(); document.querySelector('[data-app-mode=free]').click();
@@ -129,6 +157,8 @@ try {
   for (const [width, height] of [[1920, 1080], [1440, 900], [1024, 768], [600, 850], [390, 844], [320, 740]]) {
     await page.setViewportSize({ width, height }); await choose('apex'); await page.waitForTimeout(160);
     const state = await inspect(); continuous(state);
+    const sizeMetrics = await measureFlames();
+    assert.ok(sizeMetrics.min >= 0 && sizeMetrics.max <= (width <= 600 ? 14.32 : 22.02), 'resize keeps the full contour outside the content');
     assert.ok(await page.evaluate(() => {
       const selectors = ['.board-card', '.board-heading', '.mode-switch', '.population-hud', '.canvas-frame', '.board-footnote'];
       const boxes = () => selectors.map(s => JSON.stringify(document.querySelector(s).getBoundingClientRect()));
@@ -176,14 +206,16 @@ try {
     const hot = document.querySelector('.apex-heat-hot');
     Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange'));
     const clock = () => hot.getAnimations()[0].currentTime;
-    const before = clock(); document.dispatchEvent(new Event('visibilitychange'));
+    const before = clock(), shapeBefore = document.querySelector('.apex-flame-outer').getAttribute('d'); document.dispatchEvent(new Event('visibilitychange'));
     await new Promise(resolve => setTimeout(resolve, 600));
     const after = clock(), running = document.querySelector('.board-card').getAnimations({ subtree: true }).filter(a => a.playState === 'running').length;
+    const frozen = shapeBefore === document.querySelector('.apex-flame-outer').getAttribute('d');
     delete document.hidden; document.dispatchEvent(new Event('visibilitychange'));
     await new Promise(resolve => setTimeout(resolve, 160));
-    return { before, after, running, resumed: clock() };
+    return { before, after, running, frozen, resumed: clock(), deforming: shapeBefore !== document.querySelector('.apex-flame-outer').getAttribute('d') };
   });
   assert.ok(Math.abs(visibility.after - visibility.before) < 25); assert.equal(visibility.running, 0);
+  assert.ok(visibility.frozen && visibility.deforming, 'hidden tabs freeze the procedural contour and resume without a jump');
   assert.ok(visibility.resumed > visibility.after + 50); results.push({ reduced, simulatedVisibility: visibility });
 
   // Actual application, same challenge seed, maximum speed, with/without animation.
