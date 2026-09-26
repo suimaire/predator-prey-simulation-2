@@ -1,0 +1,271 @@
+{
+  "phase": "2.1b — Observable Fox Dynamics Calibration",
+  "baseCommit": "bc7787d5eafc4c0508424fbc4f081589f9f6670b",
+  "baselineCommit": "e476ff83d08168a9f9e2d8d44fb49c73a3ec6c3d",
+  "frozenBeforeEvaluation": true,
+  "seeds": [
+    "FOX-OBS-001",
+    "FOX-OBS-002",
+    "FOX-OBS-003",
+    "FOX-OBS-004",
+    "FOX-OBS-005",
+    "FOX-OBS-006",
+    "FOX-OBS-007",
+    "FOX-OBS-008",
+    "FOX-OBS-009",
+    "FOX-OBS-010",
+    "FOX-OBS-011",
+    "FOX-OBS-012",
+    "FOX-OBS-013",
+    "FOX-OBS-014",
+    "FOX-OBS-015",
+    "FOX-OBS-016",
+    "FOX-OBS-017",
+    "FOX-OBS-018",
+    "FOX-OBS-019",
+    "FOX-OBS-020",
+    "FOX-OBS-021",
+    "FOX-OBS-022",
+    "FOX-OBS-023",
+    "FOX-OBS-024",
+    "FOX-OBS-025",
+    "FOX-OBS-026",
+    "FOX-OBS-027",
+    "FOX-OBS-028",
+    "FOX-OBS-029",
+    "FOX-OBS-030",
+    "FOX-OBS-031",
+    "FOX-OBS-032",
+    "FOX-OBS-033",
+    "FOX-OBS-034",
+    "FOX-OBS-035",
+    "FOX-OBS-036",
+    "FOX-OBS-037",
+    "FOX-OBS-038",
+    "FOX-OBS-039",
+    "FOX-OBS-040",
+    "FOX-OBS-041",
+    "FOX-OBS-042",
+    "FOX-OBS-043",
+    "FOX-OBS-044",
+    "FOX-OBS-045",
+    "FOX-OBS-046",
+    "FOX-OBS-047",
+    "FOX-OBS-048",
+    "FOX-OBS-049",
+    "FOX-OBS-050",
+    "FOX-OBS-051",
+    "FOX-OBS-052",
+    "FOX-OBS-053",
+    "FOX-OBS-054",
+    "FOX-OBS-055",
+    "FOX-OBS-056",
+    "FOX-OBS-057",
+    "FOX-OBS-058",
+    "FOX-OBS-059",
+    "FOX-OBS-060",
+    "FOX-OBS-061",
+    "FOX-OBS-062",
+    "FOX-OBS-063",
+    "FOX-OBS-064",
+    "FOX-OBS-065",
+    "FOX-OBS-066",
+    "FOX-OBS-067",
+    "FOX-OBS-068",
+    "FOX-OBS-069",
+    "FOX-OBS-070",
+    "FOX-OBS-071",
+    "FOX-OBS-072",
+    "FOX-OBS-073",
+    "FOX-OBS-074",
+    "FOX-OBS-075",
+    "FOX-OBS-076",
+    "FOX-OBS-077",
+    "FOX-OBS-078",
+    "FOX-OBS-079",
+    "FOX-OBS-080",
+    "FOX-OBS-081",
+    "FOX-OBS-082",
+    "FOX-OBS-083",
+    "FOX-OBS-084",
+    "FOX-OBS-085",
+    "FOX-OBS-086",
+    "FOX-OBS-087",
+    "FOX-OBS-088",
+    "FOX-OBS-089",
+    "FOX-OBS-090",
+    "FOX-OBS-091",
+    "FOX-OBS-092",
+    "FOX-OBS-093",
+    "FOX-OBS-094",
+    "FOX-OBS-095",
+    "FOX-OBS-096",
+    "FOX-OBS-097",
+    "FOX-OBS-098",
+    "FOX-OBS-099",
+    "FOX-OBS-100"
+  ],
+  "purpose": "Fixed third seed domain for this observable-dynamics comparison only. No removal, replacement, or post-result seed selection.",
+  "introductionStep": 0,
+  "horizonAfterIntroduction": 600,
+  "scenarios": {
+    "full-web": {
+      "initialRabbits": 50,
+      "initialWolves": 8,
+      "initialForestDensity": 78,
+      "forestRegrowth": 0.1,
+      "transferEfficiency": 0.1
+    },
+    "rabbit-fox": {
+      "initialRabbits": 50,
+      "initialWolves": 0,
+      "initialForestDensity": 78,
+      "forestRegrowth": 0.1,
+      "transferEfficiency": 0.1
+    },
+    "plant-only": {
+      "initialRabbits": 0,
+      "initialWolves": 0,
+      "initialForestDensity": 100,
+      "forestRegrowth": 0.1,
+      "transferEfficiency": 0.1
+    },
+    "plant-max-efficiency": {
+      "initialRabbits": 0,
+      "initialWolves": 0,
+      "initialForestDensity": 100,
+      "forestRegrowth": 0.1,
+      "transferEfficiency": 0.3
+    }
+  },
+  "fixedFox": {
+    "basalEnergyCost": 1.7,
+    "rabbitGain": 8,
+    "plantGain": 0.5,
+    "huntSuccess": 0.7,
+    "reproductionThreshold": 24,
+    "reproductionProbability": 0.018,
+    "offspringTransfer": 0.42,
+    "maxAge": 110,
+    "searchRange": 1,
+    "moveProbability": 0.94,
+    "populationCap": 80
+  },
+  "candidates": [
+    {
+      "id": "p0.67-n4",
+      "preference": 0.67,
+      "introductionAmount": 4
+    },
+    {
+      "id": "p0.67-n6",
+      "preference": 0.67,
+      "introductionAmount": 6
+    },
+    {
+      "id": "p0.67-n8",
+      "preference": 0.67,
+      "introductionAmount": 8
+    },
+    {
+      "id": "p0.75-n4",
+      "preference": 0.75,
+      "introductionAmount": 4
+    },
+    {
+      "id": "p0.75-n6",
+      "preference": 0.75,
+      "introductionAmount": 6
+    },
+    {
+      "id": "p0.75-n8",
+      "preference": 0.75,
+      "introductionAmount": 8
+    },
+    {
+      "id": "p0.80-n4",
+      "preference": 0.8,
+      "introductionAmount": 4
+    },
+    {
+      "id": "p0.80-n6",
+      "preference": 0.8,
+      "introductionAmount": 6
+    },
+    {
+      "id": "p0.80-n8",
+      "preference": 0.8,
+      "introductionAmount": 8
+    }
+  ],
+  "survival": {
+    "duration": "First zero fox population after introduction minus introduction step; includes descendants. Null extinction is right-censored at horizon, not extinction at 600.",
+    "thresholds": [
+      50,
+      100,
+      150,
+      200,
+      300,
+      500
+    ],
+    "boundary": "P(T >= k) includes extinction exactly at k; alive at k uses T > k. Alive at 600 is separately counted.",
+    "quantiles": "Linear interpolation (type 7) on min(T,600), including every run. Quantiles at the censoring boundary carry a lower-bound/censored label; actual event-only quantiles are not substituted.",
+    "realTimeStepsPerSecond": [
+      8,
+      20,
+      40
+    ]
+  },
+  "interaction": {
+    "windows": [
+      50,
+      100,
+      200
+    ],
+    "definition": "At least one successful rabbit kill OR plant feeding event during post-introduction steps 1..window (inclusive). Reproduction is separate.",
+    "fields": [
+      "rabbitHuntAttempts",
+      "rabbitKills",
+      "plantFeedingEvents",
+      "rabbitEnergy",
+      "plantEnergy",
+      "foxBirths"
+    ]
+  },
+  "extinctionGuardrails": {
+    "windows": [
+      50,
+      100,
+      200,
+      300,
+      600
+    ],
+    "boundary": "First zero population at elapsed step <= window. Species absent at introduction is not applicable, not extinction."
+  },
+  "vegetation": {
+    "units": "forestPercent (percentage of maximum vegetation stages)",
+    "earlyWindow": 200,
+    "collapseThresholdPercent": 5,
+    "collapseConsecutiveSteps": 10,
+    "collapseDefinition": "At least 10 consecutive post-introduction samples below 5% during the first 200 steps; descriptive UX flag, not an ecological threshold.",
+    "reportAlso": "Any sample below 1% within 200; all 600-step mean/median/minimum and run-level distributions."
+  },
+  "trajectory": {
+    "beforeWindow": 50,
+    "afterWindows": [
+      100,
+      200
+    ],
+    "reference": "Step 0 introduction has no pre-introduction 50-step window. Use actual pre-action initial metric and label pre-window unavailable. Record endpoint and window-mean deltas, and positive/zero/negative counts; do not claim causal attribution.",
+    "representatives": "For selected Full Web candidate choose nearest to Q25, nearest to median, and greatest restricted duration; ties ascending seed. Keep all runs; export these trajectories only as illustrations."
+  },
+  "review": {
+    "primary": "Observable transient dynamics; 600-step survival/coexistence is auxiliary, never a release gate.",
+    "softTargets": "P(T>=100) around >=70%; median around >=150-200; inspect Q25, interaction, 200-step persistence and side effects.",
+    "preferenceOrder": "Keep .67/4 if sufficient; then .67/6; then minimal preference/amount change. Intro 8 requires a clear benefit.",
+    "sideEffects": "Compare rabbit/wolf <=100 and <=200 extinction, vegetation collapse, peaks and cap activity jointly; no scalar score or automatic release decision.",
+    "pathologies": "More than half extinct before 50, repeated cap activity, severe extra early rabbit collapse, or plant-only runaway are rejection signals.",
+    "additionalScenarios": "After all 9 Full Web results, choose 2–3 reasonable candidates and record selection before running Rabbit+Fox and Plant-only (100 same seeds each). Selected default also receives max-efficiency Plant-only (100 seeds).",
+    "prohibited": "No life-history changes, rabbit/wolf changes, new UI, simulationVersion, Apex, leaderboard, Supabase, main merge or Pages deployment."
+  }
+}
