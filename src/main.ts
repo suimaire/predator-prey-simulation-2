@@ -213,6 +213,11 @@ app.innerHTML = `
             <aside class="simulation-console" aria-label="Experiment Console" id="simulation-console">
               <div class="console-heading" id="experiment-heading"><p class="section-kicker">EXPERIMENT CONSOLE</p><h2>자유 탐구</h2></div>
               <section class="challenge-panel" id="challenge-panel" aria-live="polite" hidden></section>
+              <button type="button" class="parameter-entry" id="toggle-parameters" aria-label="생태계 설계 · Parameters" aria-describedby="parameter-entry-hint" aria-haspopup="dialog" aria-controls="parameters-dialog" aria-expanded="false">
+                <span class="parameter-entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h7m5 0h4M4 17h3m5 0h8"/><circle cx="13.5" cy="7" r="2.5"/><circle cx="9.5" cy="17" r="2.5"/></svg></span>
+                <span class="parameter-entry-copy"><span class="parameter-entry-title"><b>생태계 설계</b><small>Parameters</small></span><span class="parameter-entry-hint" id="parameter-entry-hint">개체수와 환경 조건을 직접 조정하세요.</span></span>
+                <span class="parameter-entry-arrow" aria-hidden="true">→</span>
+              </button>
       <section class="pyramid-card ecological-pyramid--dashboard" aria-label="실시간 생태 피라미드">
         <div class="pyramid-toolbar"><h2>실시간 생태 피라미드</h2><div class="segmented-control" role="group" aria-label="피라미드 표현 방식"><button type="button" data-pyramid-mode="numbers" aria-pressed="true">개체수</button><button type="button" data-pyramid-mode="energy" aria-pressed="false">에너지 흐름</button></div></div>
         <div class="pyramid" id="pyramid" aria-describedby="pyramid-note"></div>
@@ -223,7 +228,7 @@ app.innerHTML = `
               <nav class="sim-toolbar" aria-label="시뮬레이션 조작">
                 <div class="run-controls"><button class="run-button" id="run-button" type="button" aria-label="시뮬레이션 실행"><span>▶</span><b>Run</b></button><button id="pause-button" type="button" aria-label="시뮬레이션 일시정지" disabled><span>Ⅱ</span><b>Pause</b></button><button id="step-button" type="button" aria-label="한 step 실행"><span>↦</span><b>Step</b></button><button id="reset-button" type="button" aria-label="시뮬레이션 Reset"><span>↺</span><b>Reset</b></button></div>
                 <div class="toolbar-middle"><label for="speed-control"><span>속도</span><input id="speed-control" type="range" min="1" max="40" value="8" /><output id="speed-output">8 step/s</output></label></div>
-                <div class="view-controls"><button type="button" id="toggle-parameters" aria-label="실험 조건 열기" aria-haspopup="dialog" aria-controls="parameters-dialog" aria-expanded="false"><span>☷</span><b>Parameters</b></button><button type="button" id="toggle-graph" aria-label="개체군 그래프 표시 또는 숨기기" aria-pressed="true"><span>⌁</span><b>Graph</b></button></div>
+                <div class="view-controls"><button type="button" id="toggle-graph" aria-label="개체군 그래프 표시 또는 숨기기" aria-pressed="true"><span>⌁</span><b>Graph</b></button></div>
               </nav>
 
             </aside>
@@ -721,6 +726,8 @@ function updateControlAvailability(): void {
   element<HTMLButtonElement>('#random-seed').disabled = appMode === 'apex' || locked;
   element<HTMLButtonElement>('#restore-defaults').disabled = locked;
   element('#parameter-lock-note').hidden = !locked;
+  parameterToggle.setAttribute('data-locked', String(locked));
+  element('#parameter-entry-hint').textContent = locked ? '도전 중에는 설정을 확인할 수 있어요.' : appMode === 'apex' ? '다음 도전의 개체수와 환경 조건을 설계하세요.' : '개체수와 환경 조건을 직접 조정하세요.';
   const prepared = parameterDraft?.prepare(parameters, appMode, state.phase);
   const startsChallenge = parameterIntent === 'edit-and-start-challenge' && appMode === 'apex' && state.phase === 'over';
   applyParametersButton.textContent = startsChallenge ? '설정 적용 및 도전 시작' : '설정 적용';

@@ -87,14 +87,26 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
   --apex-panel-delay: 410;
   --apex-spread-ms: 480;
   --apex-settle-ms: 1200;
-  --apex-cool-ms: 460;
+  --apex-cool-ms: 320;
   --apex-tab-glow: .3;
   --apex-tab-peak: .7;
   --apex-panel-glow: .24;
   --apex-line-opacity: .58;
-  --apex-edge-flame-size: 6px;
+  --apex-orbit-count: 12;
+  --apex-orbit-seconds: 24;
+  --apex-flame-width: 11px;
+  --apex-flame-height: 18px;
+  --apex-flame-opacity: .94;
+  --apex-flame-glow: .22;
+  --apex-ember-interval: 500;
   --apex-flame-sway: 1px;
-  --apex-flame-rise: 1.12;
+  /* Only the corner band softens; straight-edge flames and the ember line stay intact. */
+  --apex-corner-falloff: 30;
+  --apex-corner-scale: .64;
+  --apex-corner-opacity: .72;
+  --apex-corner-glow-blur: .55;
+  --apex-corner-brightness: .92;
+  --apex-corner-saturation: .86;
   position: relative;
   container-type: inline-size;
 }
@@ -133,16 +145,32 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 .apex-heat-section-3 { animation-duration: 5.7s; animation-delay: -1.4s; }
 .apex-heat-section-2 .apex-heat-line, .apex-heat-section-3 .apex-heat-line { stroke-opacity: calc(var(--apex-line-opacity) * .8); }
 @keyframes apex-edge-warmth { 0%, 100% { opacity: .8; } 46% { opacity: 1; } 75% { opacity: .72; } }
-.apex-edge-flames { position: absolute; inset: 0; border-radius: inherit; }
-.apex-edge-flames i { position: absolute; left: 16%; bottom: calc(100% - 1px); width: calc(var(--apex-edge-flame-size) * .62); height: var(--apex-edge-flame-size); border-radius: 70% 15% 60% 45%; background: linear-gradient(0deg, #d76541, #e99559 68%, #edc68d00); transform-origin: center bottom; opacity: .5; animation: apex-small-heat 3.6s ease-in-out infinite; }
-.apex-edge-flames i:nth-child(2) { left: 35%; height: calc(var(--apex-edge-flame-size) * .8); animation-duration: 4.3s; animation-delay: -1.8s; }
-.apex-edge-flames i:nth-child(3) { left: 74%; animation-duration: 3.9s; animation-delay: -2.7s; }
-.apex-edge-flames i:nth-child(4) { left: 2%; bottom: calc(100% - 5px); height: calc(var(--apex-edge-flame-size) * .75); animation-duration: 4.8s; animation-delay: -.8s; }
-.apex-edge-flames i:nth-child(5) { left: auto; right: 2%; bottom: calc(100% - 5px); height: calc(var(--apex-edge-flame-size) * .85); animation-duration: 4.1s; animation-delay: -3.1s; }
-@keyframes apex-small-heat {
-  0%, 100% { transform: rotate(-18deg) scaleY(.78); opacity: .38; }
-  40% { transform: translateX(var(--apex-flame-sway)) rotate(-9deg) scaleY(var(--apex-flame-rise)); opacity: .56; }
-  72% { transform: rotate(-23deg) scaleY(.88); opacity: .44; }
+.apex-edge-flames { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; clip-path: inset(-14px -8px); }
+.apex-flame-orbit { position: absolute; left: 0; top: 0; width: 0; height: 0; offset-path: var(--apex-orbit-path); offset-rotate: 0deg; offset-anchor: 0 0; animation: apex-flame-travel calc(var(--apex-orbit-seconds) * 1s) linear var(--flame-delay) infinite; }
+.apex-edge-flames[data-travel=keyframes] .apex-flame-orbit { offset-path: none; animation: none; }
+/* Path movement belongs to the outer node; the upright SVG breathes independently. */
+.apex-flame-body { position: absolute; width: calc(var(--apex-flame-width) * var(--flame-size)); height: calc(var(--apex-flame-height) * var(--flame-size)); translate: -50% -50%; transform-origin: center; opacity: var(--apex-flame-opacity); filter: drop-shadow(0 0 1.5px rgb(235 91 26 / var(--apex-flame-glow))); animation: apex-flame-breathe var(--flame-beat) ease-in-out var(--flame-beat-delay) infinite; }
+.apex-flame-body svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.apex-flame-color-0 { fill: #b52c19; }
+.apex-flame-color-1 { fill: #ff821d; }
+.apex-flame-color-2 { fill: #ffe16a; }
+/* Three equally bright silhouettes vary the tip and core without a flashing phase. */
+.apex-flame-frame { animation: apex-flame-shape var(--flame-beat) steps(1, end) var(--flame-beat-delay) infinite; }
+.apex-flame-frame-1 { animation-name: apex-flame-shape-middle; }
+.apex-flame-frame-2 { animation-name: apex-flame-shape-last; }
+.apex-border-ember { position: absolute; left: 0; top: 0; width: 3px; height: 3px; background: #ef9434; opacity: 0; pointer-events: none; }
+@keyframes apex-flame-travel { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+@keyframes apex-flame-breathe {
+  0%, 100% { transform: scale(.92, .87) rotate(-3deg); }
+  29% { transform: translateX(.4px) scale(1.08, 1.24) rotate(3deg); }
+  61% { transform: scale(.82, .76) rotate(-2deg); }
+  82% { transform: translateX(-.4px) scale(1.02, 1.1); }
+}
+@keyframes apex-flame-shape { 0%, 100% { opacity: 1; } 34% { opacity: 0; } }
+@keyframes apex-flame-shape-middle { 0%, 67%, 100% { opacity: 0; } 34% { opacity: 1; } }
+@keyframes apex-flame-shape-last { 0%, 100% { opacity: 0; } 67% { opacity: 1; } }
+@container (max-width: 600px) {
+  .apex-edge-flames { --apex-orbit-count: 6; --apex-flame-width: 9px; --apex-flame-height: 14px; }
 }
 .board-card[data-mode-phase=idle] .apex-panel-heat * { animation: none; }
 .board-card[data-effects-paused=true] .apex-panel-heat *, .board-card[data-effects-paused=true] .apex-tab-flame { animation-play-state: paused; }
@@ -402,7 +430,7 @@ dialog .confirm-removal { color: #fff; border-color: #a65431; background: #a6543
 .mini-population.is-removal-feedback em { font-size: 15px; font-weight: 800; animation-duration: .95s; }
 .simulation-console { min-width: 0; padding: 18px; border: 1px solid #d2ddd3; border-radius: 17px; background: #fbfcf9; }
 .console-heading h2 { margin: 0; color: #1d402c; font-size: 18px; }
-.view-controls { grid-template-columns: 1fr 1fr; }
+.view-controls { grid-template-columns: 1fr; }
 .simulation-console .removal-card { padding: 16px 0 0; border: 0; border-top: 1px solid #d7dfd8; border-radius: 0; background: transparent; box-shadow: none; }
 .apex-mode .simulation-console .removal-card { margin-top: 16px; }
 .apex-mode .removal-list { display: none; }
@@ -513,6 +541,31 @@ html { scrollbar-gutter: stable; }
 .simulation-console { display: grid; gap: 10px; padding: 0; border: 0; background: none; }
 .simulation-console { line-height: 1.35; }
 .console-heading, .challenge-panel, .leaderboard-summary { padding: 12px; border: 1px solid #d2ddd3; border-radius: 14px; background: #fff; }
+/* The existing dialog opener, promoted above observation and transport controls. */
+.parameter-entry {
+  --parameter-entry-bg: #eaf2e6;
+  --parameter-entry-border: #79997b;
+  --parameter-entry-hover: #e1ecdd;
+  --parameter-entry-icon-bg: #d7e7d2;
+  display: flex; align-items: center; gap: 11px; width: 100%; min-width: 0; min-height: 66px;
+  padding: 11px 12px; border: 1px solid var(--parameter-entry-border); border-radius: 14px;
+  color: #214e32; background: var(--parameter-entry-bg); text-align: left; touch-action: manipulation;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.parameter-entry-icon { display: grid; place-items: center; flex: 0 0 34px; height: 34px; border-radius: 9px; background: var(--parameter-entry-icon-bg); }
+.parameter-entry-icon svg { width: 23px; height: 23px; }
+.parameter-entry-copy { display: grid; gap: 3px; min-width: 0; }
+.parameter-entry-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; }
+.parameter-entry-title b { font-size: 15px; font-weight: 800; }
+.parameter-entry-title small { color: #4e6e54; font-size: 11px; font-weight: 650; }
+.parameter-entry-hint { color: #506650; font-size: 11px; line-height: 1.5; word-break: keep-all; overflow-wrap: anywhere; }
+.parameter-entry-arrow { margin-left: auto; font-size: 19px; }
+.parameter-entry:hover { background: var(--parameter-entry-hover); border-color: #3c7148; }
+.parameter-entry:active, .parameter-entry[aria-expanded=true] { background: #d8e8d2; border-color: #2e643f; }
+.parameter-entry:focus-visible { outline: 3px solid #245e3c; outline-offset: 3px; }
+.apex-mode .parameter-entry { --parameter-entry-bg: #f5f8ef; --parameter-entry-border: #a2b59a; --parameter-entry-hover: #eaf1e3; --parameter-entry-icon-bg: #e7eedd; }
+.parameter-entry[data-locked=true] .parameter-entry-icon { background: #e9eee5; }
+@media (prefers-reduced-motion: reduce) { .parameter-entry { transition: none; } }
 .challenge-panel { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 5px 12px; align-items: center; }
 .challenge-title { grid-column: 1/-1; margin: 0; }
 .challenge-score { grid-column: 1; grid-row: 2/6; padding: 3px; gap: 2px; border: 0; }

@@ -1,3 +1,5 @@
+import { createBorderFlames } from './borderFlames.ts';
+
 type Mode = 'free' | 'apex';
 type VisualElement = HTMLElement | SVGElement;
 
@@ -17,12 +19,13 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
       <path class="apex-heat-halo" pathLength="1"/><path class="apex-heat-line" pathLength="1"/>
       <path class="apex-heat-halo" pathLength="1"/><path class="apex-heat-line" pathLength="1"/>
     </g>
-  </svg><div class="apex-edge-flames">${Array.from({ length: 5 }, () => '<i></i>').join('')}</div>`;
+  </svg><div class="apex-edge-flames"></div>`;
   panel.append(layer);
   const svg = layer.querySelector<SVGSVGElement>('svg')!;
   const steady = layer.querySelector<SVGGElement>('.apex-heat-steady')!;
   const sweep = layer.querySelector<SVGGElement>('.apex-heat-sweep')!;
   const flames = layer.querySelector<HTMLElement>('.apex-edge-flames')!;
+  const borderFlames = createBorderFlames(flames);
   let mode = initialMode;
   let disposed = false;
   let revision = 0;
@@ -56,6 +59,10 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
 
   const opacity = (target: VisualElement) => Number(getComputedStyle(target).opacity);
 
+  function syncBorderFlames() {
+    borderFlames.sync(panel.dataset.modePhase !== 'idle', panel.dataset.effectsPaused === 'true', motion.matches, mode === 'apex');
+  }
+
   function settle() {
     freeze();
     const apex = mode === 'apex';
@@ -69,6 +76,7 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
     flame.style.opacity = apex ? '1' : '0';
     flame.style.transform = apex ? 'scale(1)' : 'scale(.35)';
     glow.style.opacity = apex ? String(timing.tabGlow) : '0';
+    syncBorderFlames();
   }
 
   function geometry() {
@@ -92,6 +100,7 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
     const left = `${upperLeft} V ${h - r} Q 0 ${h} ${r} ${h} H ${mid}`;
     const right = `${upperRight} V ${h - r} Q ${w} ${h} ${w - r} ${h} H ${mid}`;
     paths.forEach((path, i) => path.setAttribute('d', i < 2 ? left : right));
+    borderFlames.geometry(w, h, r);
   }
 
   function sync(next: Mode) {
@@ -104,6 +113,7 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
     if (motion.matches || document.hidden) { settle(); return; }
     const currentRevision = revision;
     panel.dataset.modePhase = mode === 'apex' ? 'entering' : 'leaving';
+    syncBorderFlames();
     if (mode === 'free') {
       animate(flame, [
         { opacity: opacity(flame), transform: getComputedStyle(flame).transform },
@@ -145,6 +155,7 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
     if (!event.persisted) { destroy(); return; }
     environmentChanged();
     panel.dataset.effectsPaused = 'true';
+    syncBorderFlames();
   }
 
   const resize = new ResizeObserver(geometry);
@@ -162,6 +173,7 @@ export function createModeEffects(panel: HTMLElement, initialMode: Mode, motion:
     if (disposed) return;
     freeze();
     disposed = true;
+    borderFlames.destroy();
     resize.disconnect();
     removal.disconnect();
     motion.removeEventListener('change', environmentChanged);
