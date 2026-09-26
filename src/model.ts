@@ -100,6 +100,11 @@ export interface Intervention {
   resultingCount: number;
 }
 
+// One run-scoped event stream. The graph keeps its existing intervention view.
+export type SimulationEvent =
+  | (Intervention & { reintroduction?: true })
+  | { kind: 'extinction'; step: number; species: Species };
+
 export interface EnergyFlowMetric {
   source: FoodSource;
   target: Species;
@@ -391,7 +396,8 @@ export class ForestSimulation {
   private history: PopulationMetric[] = [];
   private removed = new Set<Species>();
   private runtimeSpecies = new Set<Species>();
-  private interventions: Intervention[] = [];
+  private events: SimulationEvent[] = [];
+  private previouslyPresent = new Set<Species>();
   private feedingLog: FeedingEvent[] = [];
   // Per-step aggregates keep complete fox diet energy even if the legacy event
   // log reaches its cap. At most 480 records; no unbounded event history.
@@ -418,17 +424,21 @@ export class ForestSimulation {
     this.history = [];
     this.removed = new Set();
     this.runtimeSpecies = new Set(activeSpecies(this.parameters.foodChainDepth));
-    this.interventions = [];
+    this.events = [];
     this.feedingLog = [];
     this.foxFoodWindow.clear();
     this.initializeForest();
     this.initializeAgents();
+    this.previouslyPresent = new Set(RUNTIME_SPECIES.filter(species => (this.agents[species]?.length ?? 0) > 0));
     this.recordMetric();
   }
 
   getParameters(): SimulationParameters { return { ...this.parameters }; }
   getHistory(): readonly PopulationMetric[] { return this.history; }
-  getInterventions(): readonly Intervention[] { return this.interventions; }
+  getEvents(): readonly SimulationEvent[] { return this.events; }
+  getInterventions(): readonly Intervention[] {
+    return this.events.filter(event => event.kind !== 'extinction').map(({ reintroduction: _reintroduction, ...intervention }) => intervention);
+  }
   getActiveSpecies(): Species[] { return RUNTIME_SPECIES.filter((species) => this.runtimeSpecies.has(species)); }
 
   getSnapshot(): SimulationSnapshot {
@@ -445,11 +455,12 @@ export class ForestSimulation {
       step: this.stepNumber,
       stats: this.stats,
       removedSpecies: [...this.removed],
-      interventions: this.interventions,
+      interventions: this.getInterventions(),
     };
   }
 
   step(): PopulationMetric {
+    const previouslyAlive = RUNTIME_SPECIES.filter(species => (this.agents[species]?.length ?? 0) > 0);
     this.growForest();
     if (!this.removed.has('rabbit')) this.processRabbits();
     // Absolutely no additional RNG draw without a living fox. Core predators
@@ -466,6 +477,11 @@ export class ForestSimulation {
       }
     }
     this.stepNumber += 1;
+    // Observe completed ecological steps only. Intentional removals happen
+    // outside this boundary, so they never produce a duplicate extinction row.
+    for (const species of previouslyAlive) {
+      if (this.agents[species]?.length === 0) this.events.push({ kind: 'extinction', step: this.stepNumber, species });
+    }
     for (const step of this.foxFoodWindow.keys()) {
       if (step <= this.stepNumber - HISTORY_LIMIT) this.foxFoodWindow.delete(step);
       else break;
@@ -493,7 +509,7 @@ export class ForestSimulation {
       // Keep survivor objects and their order intact; they continue acting normally.
       this.agents[species] = agents.filter((_, index) => !selected.has(index));
     }
-    this.interventions.push({ kind: 'remove', step: this.stepNumber, species, amount, resultingCount: this.agents[species]!.length });
+    this.events.push({ kind: 'remove', step: this.stepNumber, species, amount, resultingCount: this.agents[species]!.length });
     this.recordMetric(true);
     return true;
   }
@@ -507,6 +523,7 @@ export class ForestSimulation {
   introduceSpecies(species: Species, amount: number): boolean {
     // Reject the entire action before consuming RNG or changing any state.
     if (!Number.isInteger(amount) || amount < 1 || amount > this.getIntroductionLimit(species)) return false;
+    const reintroduction = this.previouslyPresent.has(species) && (this.agents[species]?.length ?? 0) === 0;
     const occupied = this.occupiedMap();
     const positions = this.availablePositions(occupied);
     this.random.shuffle(positions);
@@ -517,7 +534,9 @@ export class ForestSimulation {
     this.populateSpecies(species, amount, positions);
     this.runtimeSpecies.add(species);
     this.removed.delete(species);
-    this.interventions.push({ kind: 'introduce', step: this.stepNumber, species, amount, resultingCount: this.agents[species]!.length });
+    this.previouslyPresent.add(species);
+    this.events.push({ kind: 'introduce', step: this.stepNumber, species, amount, resultingCount: this.agents[species]!.length,
+      ...(reintroduction ? { reintroduction: true as const } : {}) });
     this.recordMetric(true);
     return true;
   }

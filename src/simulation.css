@@ -536,7 +536,7 @@ dialog .confirm-removal { color: #fff; border-color: #a65431; background: #a6543
 .site-brand-footer__name { color: #17251c; font-size: 13px; font-weight: 700; }
 .site-brand-footer__credit { color: #6f7c74; font-size: 12px; }
 
-/* The dashboard scrolls with the document; only modal bodies have an inner scroller. */
+/* The dashboard scrolls with the document; bounded log and modal bodies scroll inside. */
 html { scrollbar-gutter: stable; }
 .workspace { padding: 10px 20px 32px; }
 .simulation-stage { grid-template-columns: minmax(0,1.85fr) minmax(420px,1fr); gap: 14px; }
@@ -644,6 +644,21 @@ html { scrollbar-gutter: stable; }
   .view-controls { grid-column: 2; grid-row: 2; gap: 3px; }
   .view-controls > button { padding-inline: 5px; }
 }
+.experiment-card { min-width: 0; padding: 12px; border: 1px solid #d2ddd3; border-radius: 14px; background: #fff; }
+.experiment-card h2 { margin: 0 0 10px; color: #234631; font-size: 15px; }
+.experiment-controls .sim-toolbar { grid-template-columns: minmax(0,1fr); padding: 0; border: 0; border-radius: 0; gap: 10px; }
+.experiment-controls .toolbar-middle, .experiment-controls .view-controls { grid-column: 1; grid-row: auto; }
+.experiment-controls .toolbar-middle output { white-space: nowrap; }
+.experiment-controls .view-controls { grid-template-columns: minmax(0,1fr); }
+.experiment-controls .run-button { box-shadow: none; }
+.experiment-log-body { max-height: 240px; overflow-y: auto; overflow-wrap: anywhere; scrollbar-gutter: stable; }
+.experiment-log-body ol { list-style: none; margin: 0; padding: 0; }
+.experiment-log-body li { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 9px 0; color: #365340; font-size: 12px; line-height: 1.5; }
+.experiment-log-body li + li { border-top: 1px solid #e5ece4; }
+.experiment-event-step { flex: 0 0 76px; color: #738176; font-size: 11px; font-variant-numeric: tabular-nums; }
+.experiment-log-body li > span:last-child { flex: 1 1 160px; min-width: 0; }
+.experiment-log-empty { margin: 0; color: #68796e; font-size: 12px; line-height: 1.6; }
+.experiment-log-empty small { display: block; margin-top: 4px; font-size: 11px; }
 .board-card { padding: 12px; }
 .population-hud { margin-top: 6px; padding-block: 4px; }
 .population-hud .step-readout { gap: 3px; }

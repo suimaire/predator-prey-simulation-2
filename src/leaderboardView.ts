@@ -1,4 +1,5 @@
 import {
+  BOARD_GROUPS,
   rankAccentClass,
   type BoardGroup,
   type LeaderboardScope,
@@ -77,4 +78,41 @@ export function boardMarkup(
         ${compact ? '' : `<span class="leaderboard-meta"><time datetime="${escapeHtml(entry.submittedAt)}">${escapeHtml(formatSubmittedAt(entry.submittedAt))}</time></span>`}
       </li>`).join('');
   return `${description}<ol class="leaderboard-list${compact ? ' leaderboard-list--compact' : ''}" aria-label="${escapeHtml(BOARD_LABELS[board])} 상위 기록">${items}</ol>`;
+}
+
+/** Mounted only in Apex Survival. Uses the existing v2 board rendering. */
+export function leaderboardSummaryMarkup(): string {
+  return `<section class="leaderboard-summary" aria-labelledby="ranking-summary-title">
+                <div class="card-heading"><h2 id="ranking-summary-title">공개 랭킹 <small>Top 3</small></h2></div>
+                <div class="leaderboard-tabs" role="tablist" aria-label="요약 기록판 선택">
+                  ${BOARD_GROUPS.map(board => `<button type="button" role="tab" id="summary-tab-${board}" aria-controls="summary-board-${board}" aria-selected="${board === 'protector'}" tabindex="${board === 'protector' ? 0 : -1}">${BOARD_TAB_MARKUP[board]}</button>`).join('')}
+                </div>
+                ${BOARD_GROUPS.map(board => `<div id="summary-board-${board}" role="tabpanel" aria-labelledby="summary-tab-${board}" ${board === 'protector' ? '' : 'hidden'}><div class="ranking-mini-grid">${['national', 'hafs'].map(scope => `<section aria-labelledby="summary-heading-${board}-${scope}"><h3 id="summary-heading-${board}-${scope}">${scope === 'national' ? '전국' : 'HAFS'} TOP 3</h3><p class="leaderboard-status" id="summary-status-${board}-${scope}" aria-live="polite"></p><div id="summary-list-${board}-${scope}"></div></section>`).join('')}</div></div>`).join('')}
+                <button type="button" id="open-leaderboard" aria-haspopup="dialog" aria-controls="leaderboard-dialog">전체 순위 보기</button>
+              </section>`;
+}
+
+/** Build once off-document; mount only in Apex, preserving form state and listeners. */
+export function createLeaderboardDialog(): HTMLDialogElement {
+  const template = document.createElement('template');
+  template.innerHTML = `<dialog id="leaderboard-dialog" class="dashboard-dialog leaderboard-dialog" aria-labelledby="leaderboard-title"><div class="dialog-heading"><h2 id="leaderboard-title">전국 · HAFS 랭킹</h2><button type="button" id="close-leaderboard" aria-label="랭킹 닫기">×</button></div><section class="leaderboard-panel" id="leaderboard-panel" aria-label="Apex Survival 기록판">
+          <div class="leaderboard-heading">
+            <div class="leaderboard-tabs" role="tablist" aria-label="기록판 선택">
+              <button type="button" role="tab" id="leaderboard-tab-protector" data-board="protector" aria-controls="leaderboard-board-protector" aria-selected="true">${BOARD_TAB_MARKUP.protector}</button>
+              <button type="button" role="tab" id="leaderboard-tab-manipulator" data-board="manipulator" aria-controls="leaderboard-board-manipulator" aria-selected="false" tabindex="-1">${BOARD_TAB_MARKUP.manipulator}</button>
+            </div>
+            <button type="button" id="leaderboard-refresh" aria-label="기록판 새로고침" title="새로고침">↻</button>
+          </div>
+          <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
+          <p class="leaderboard-ranking-note">참가자별 대표 최고 기록 · Top 10과 경계 동점자 전체 · 점수 단위: step</p>
+          <div class="dialog-body ranking-body" tabindex="0" aria-label="상세 랭킹 목록">${BOARD_GROUPS.map(board => `<div class="leaderboard-board" role="tabpanel" id="leaderboard-board-${board}" aria-labelledby="leaderboard-tab-${board}" ${board === 'protector' ? '' : 'hidden'}><div class="ranking-scope-grid">${['national', 'hafs'].map(scope => `<section aria-labelledby="ranking-heading-${board}-${scope}"><h3 id="ranking-heading-${board}-${scope}">${scope === 'national' ? '전국 순위' : 'HAFS 랭킹'}</h3><p class="leaderboard-status" id="ranking-status-${board}-${scope}" aria-live="polite"></p><div id="ranking-list-${board}-${scope}"></div></section>`).join('')}</div></div>`).join('')}
+          </div><form class="leaderboard-form" id="leaderboard-form" hidden>
+            <label for="leaderboard-school"><span>학교</span><input id="leaderboard-school" data-max-codepoints="80" required placeholder="학교명을 입력해 주세요" autocomplete="off" aria-describedby="leaderboard-school-hint" /><small id="leaderboard-school-hint">최대 80자</small></label>
+            <label for="leaderboard-student-number"><span>학번</span><input id="leaderboard-student-number" maxlength="24" placeholder="예: 10935" autocomplete="off" /></label>
+            <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 박창현" autocomplete="off" /></label>
+            <button type="submit" class="challenge-primary" id="leaderboard-submit">이 기록 제출하기</button>
+            <p class="leaderboard-privacy">학교명, 일부 가림 처리된 이름, 점수가 공개 기록판에 표시됩니다. 학번과 전체 이름은 참가자 구분 및 기록 관리를 위해 서버에 저장되지만 공개 기록판에는 표시되지 않습니다. 같은 학교의 같은 학번은 동일 참가자로 처리됩니다.</p>
+          </form>
+        </section></dialog>`;
+  return template.content.firstElementChild as HTMLDialogElement;
 }

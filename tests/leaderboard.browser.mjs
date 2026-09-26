@@ -18,6 +18,7 @@ const page = await context.newPage();
 const errors = [], results = [];
 page.on('pageerror', error => errors.push(error.message));
 const ready = async () => {
+  await page.locator('[data-app-mode=apex]').click();
   await page.waitForSelector('#summary-list-protector-national li');
   await page.waitForFunction(() => !document.querySelector('#summary-status-protector-national').textContent);
 };
@@ -97,6 +98,7 @@ try {
 
   for (const mode of ['0', 'partial', 'error', 'loading']) {
     await page.goto(`${base}?records=${mode}`);
+    await page.locator('[data-app-mode=apex]').click();
     await page.waitForSelector('#open-leaderboard'); await page.locator('#open-leaderboard').click();
     if (mode === '0') {
       await page.waitForSelector('#ranking-list-protector-national .leaderboard-empty');

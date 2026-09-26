@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { RUNTIME_SPECIES, SPECIES_LABELS as INTERVENTION_LABELS, DEFAULT_PARAMETERS, ForestSimulation } from '../src/model.ts';
 import { ParameterDraft } from '../src/parameterDraft.ts';
 import { BOARD_TAB_MARKUP } from '../src/leaderboardView.ts';
+import { simulationControlsMarkup } from '../src/simulationControls.ts';
 import { APEX_CHALLENGE_CONFIG, apexParameters, challengeSettingsLocked } from '../src/challenge.ts';
 
 // Exercise the actual markup, input listeners and navigation/apply functions with the
@@ -47,7 +48,7 @@ function setup(mode: 'free' | 'apex' = 'free', phase = 'setup') {
   let resets = 0;
   const context = vm.createContext({
     RUNTIME_SPECIES, SPECIES_LABELS: INTERVENTION_LABELS, DEFAULT_PARAMETERS, APEX_CHALLENGE_CONFIG, ParameterDraft, apexParameters, challengeSettingsLocked, element,
-    app: { innerHTML: '' }, BOARD_GROUPS: [], BOARD_TAB_MARKUP, initialFreeParameters: { ...DEFAULT_PARAMETERS },
+    app: { innerHTML: '' }, BOARD_GROUPS: [], BOARD_TAB_MARKUP, simulationControlsMarkup, initialFreeParameters: { ...DEFAULT_PARAMETERS },
     parameters, simulation, appMode: mode, phase, running: false, parameterIntent: 'edit', parameterDraftError: '', challengeMessage: '',
     parameterDraft: new ParameterDraft(parameters), apexSession: { getState: () => ({ phase: context.phase }), returnToSetup() {} },
     freeParameters: parameters, apexDesignParameters: parameters,

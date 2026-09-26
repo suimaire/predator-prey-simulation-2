@@ -1,5 +1,7 @@
 import './simulation.css';
 import { foodWebMarkup } from './foodWebView.ts';
+import { simulationControlsMarkup, placeSimulationControls } from './simulationControls.ts';
+import { ExperimentLog } from './experimentLog.ts';
 import { createModeEffects } from './modeEffects.ts';
 import { DialogController } from './dialog.ts';
 import { InterventionSession, groupInterventions, interventionLabel, removalPresetAmount } from './interventions.ts';
@@ -27,7 +29,7 @@ import {
   type LeaderboardTransport,
   type Participant,
 } from './leaderboard.ts';
-import { BOARD_TAB_MARKUP, boardMarkup } from './leaderboardView.ts';
+import { boardMarkup, leaderboardSummaryMarkup, createLeaderboardDialog } from './leaderboardView.ts';
 import { LeaderboardStore, leaderboardStateText } from './leaderboardState.ts';
 import {
   DEFAULT_PARAMETERS,
@@ -239,19 +241,7 @@ app.innerHTML = `
         <div class="pyramid-toolbar"><h2>실시간 생태 피라미드</h2><div class="segmented-control" role="group" aria-label="피라미드 표현 방식"><button type="button" data-pyramid-mode="numbers" aria-pressed="true">개체수</button><button type="button" data-pyramid-mode="energy" aria-pressed="false">에너지 흐름</button></div></div>
         <div class="pyramid" id="pyramid"></div>
       </section>
-              <section class="leaderboard-summary" aria-labelledby="ranking-summary-title">
-                <div class="card-heading"><h2 id="ranking-summary-title">공개 랭킹 <small>Top 3</small></h2></div>
-                <div class="leaderboard-tabs" role="tablist" aria-label="요약 기록판 선택">
-                  ${BOARD_GROUPS.map(board => `<button type="button" role="tab" id="summary-tab-${board}" aria-controls="summary-board-${board}" aria-selected="${board === 'protector'}" tabindex="${board === 'protector' ? 0 : -1}">${BOARD_TAB_MARKUP[board]}</button>`).join('')}
-                </div>
-                ${BOARD_GROUPS.map(board => `<div id="summary-board-${board}" role="tabpanel" aria-labelledby="summary-tab-${board}" ${board === 'protector' ? '' : 'hidden'}><div class="ranking-mini-grid">${['national', 'hafs'].map(scope => `<section aria-labelledby="summary-heading-${board}-${scope}"><h3 id="summary-heading-${board}-${scope}">${scope === 'national' ? '전국' : 'HAFS'} TOP 3</h3><p class="leaderboard-status" id="summary-status-${board}-${scope}" aria-live="polite"></p><div id="summary-list-${board}-${scope}"></div></section>`).join('')}</div></div>`).join('')}
-                <button type="button" id="open-leaderboard" aria-haspopup="dialog" aria-controls="leaderboard-dialog">전체 순위 보기</button>
-              </section>
-              <nav class="sim-toolbar" aria-label="시뮬레이션 조작">
-                <div class="run-controls"><button class="run-button" id="run-button" type="button" aria-label="시뮬레이션 실행"><span>▶</span><b>Run</b></button><button id="pause-button" type="button" aria-label="시뮬레이션 일시정지" disabled><span>Ⅱ</span><b>Pause</b></button><button id="step-button" type="button" aria-label="한 step 실행"><span>↦</span><b>Step</b></button><button id="reset-button" type="button" aria-label="시뮬레이션 Reset"><span>↺</span><b>Reset</b></button></div>
-                <div class="toolbar-middle"><label for="speed-control"><span>속도</span><input id="speed-control" type="range" min="1" max="40" value="8" /><output id="speed-output">8 step/s</output></label></div>
-                <div class="view-controls"><button type="button" id="toggle-graph" aria-label="개체군 그래프 표시 또는 숨기기" aria-pressed="true"><span>⌁</span><b>Graph</b></button></div>
-              </nav>
+              ${simulationControlsMarkup()}
 
             </aside>
           </div>
@@ -315,25 +305,6 @@ app.innerHTML = `
                   </div>
                 </div>
               <div class="dialog-footer"><p id="parameter-error" role="alert"></p><div><button type="button" class="restore-button" id="restore-defaults">기본 설정으로 복원</button><button type="button" id="cancel-parameters">취소</button><button type="button" id="apply-parameters" class="challenge-primary" disabled>설정 적용</button></div></div></dialog>
-        <dialog id="leaderboard-dialog" class="dashboard-dialog leaderboard-dialog" aria-labelledby="leaderboard-title"><div class="dialog-heading"><h2 id="leaderboard-title">전국 · HAFS 랭킹</h2><button type="button" id="close-leaderboard" aria-label="랭킹 닫기">×</button></div><section class="leaderboard-panel" id="leaderboard-panel" aria-label="Apex Survival 기록판">
-          <div class="leaderboard-heading">
-            <div class="leaderboard-tabs" role="tablist" aria-label="기록판 선택">
-              <button type="button" role="tab" id="leaderboard-tab-protector" data-board="protector" aria-controls="leaderboard-board-protector" aria-selected="true">${BOARD_TAB_MARKUP.protector}</button>
-              <button type="button" role="tab" id="leaderboard-tab-manipulator" data-board="manipulator" aria-controls="leaderboard-board-manipulator" aria-selected="false" tabindex="-1">${BOARD_TAB_MARKUP.manipulator}</button>
-            </div>
-            <button type="button" id="leaderboard-refresh" aria-label="기록판 새로고침" title="새로고침">↻</button>
-          </div>
-          <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
-          <p class="leaderboard-ranking-note">참가자별 대표 최고 기록 · Top 10과 경계 동점자 전체 · 점수 단위: step</p>
-          <div class="dialog-body ranking-body" tabindex="0" aria-label="상세 랭킹 목록">${BOARD_GROUPS.map(board => `<div class="leaderboard-board" role="tabpanel" id="leaderboard-board-${board}" aria-labelledby="leaderboard-tab-${board}" ${board === 'protector' ? '' : 'hidden'}><div class="ranking-scope-grid">${['national', 'hafs'].map(scope => `<section aria-labelledby="ranking-heading-${board}-${scope}"><h3 id="ranking-heading-${board}-${scope}">${scope === 'national' ? '전국 순위' : 'HAFS 랭킹'}</h3><p class="leaderboard-status" id="ranking-status-${board}-${scope}" aria-live="polite"></p><div id="ranking-list-${board}-${scope}"></div></section>`).join('')}</div></div>`).join('')}
-          </div><form class="leaderboard-form" id="leaderboard-form" hidden>
-            <label for="leaderboard-school"><span>학교</span><input id="leaderboard-school" data-max-codepoints="80" required placeholder="학교명을 입력해 주세요" autocomplete="off" aria-describedby="leaderboard-school-hint" /><small id="leaderboard-school-hint">최대 80자</small></label>
-            <label for="leaderboard-student-number"><span>학번</span><input id="leaderboard-student-number" maxlength="24" placeholder="예: 10935" autocomplete="off" /></label>
-            <label for="leaderboard-name"><span>이름</span><input id="leaderboard-name" maxlength="16" placeholder="예: 박창현" autocomplete="off" /></label>
-            <button type="submit" class="challenge-primary" id="leaderboard-submit">이 기록 제출하기</button>
-            <p class="leaderboard-privacy">학교명, 일부 가림 처리된 이름, 점수가 공개 기록판에 표시됩니다. 학번과 전체 이름은 참가자 구분 및 기록 관리를 위해 서버에 저장되지만 공개 기록판에는 표시되지 않습니다. 같은 학교의 같은 학번은 동일 참가자로 처리됩니다.</p>
-          </form>
-        </section></dialog>
     <dialog id="intervention-dialog" class="intervention-dialog" aria-labelledby="intervention-title" aria-describedby="intervention-copy intervention-step">
       <form id="intervention-form">
         <h2 id="intervention-title">생태계 개입</h2>
@@ -359,8 +330,8 @@ app.innerHTML = `
     </dialog>
   </div>`;
 
-function element<T extends HTMLElement>(selector: string): T {
-  const match = document.querySelector<T>(selector);
+function element<T extends HTMLElement>(selector: string, root: ParentNode = document): T {
+  const match = root.querySelector<T>(selector);
   if (!match) throw new Error(`${selector} 요소를 찾을 수 없습니다.`);
   return match;
 }
@@ -376,6 +347,8 @@ const parameterToggle = element<HTMLButtonElement>('#toggle-parameters');
 const graphToggle = element<HTMLButtonElement>('#toggle-graph');
 const speedControl = element<HTMLInputElement>('#speed-control');
 const speedOutput = element<HTMLOutputElement>('#speed-output');
+const simulationToolbar = element<HTMLElement>('.sim-toolbar');
+const experimentLog = new ExperimentLog();
 const seedInput = element<HTMLInputElement>('#seed-input');
 const toroidalToggle = element<HTMLInputElement>('#toroidal-toggle');
 const depthSelect = element<HTMLSelectElement>('#food-depth');
@@ -384,7 +357,7 @@ const inspector = element<HTMLDivElement>('#cell-inspector');
 const interventionDialog = element<HTMLDialogElement>('#intervention-dialog');
 const challengePanel = element<HTMLElement>('#challenge-panel');
 const parametersDialog = element<HTMLDialogElement>('#parameters-dialog');
-const leaderboardDialog = element<HTMLDialogElement>('#leaderboard-dialog');
+const leaderboardDialog = createLeaderboardDialog();
 const applyParametersButton = element<HTMLButtonElement>('#apply-parameters');
 const dialogs = new DialogController();
 let parameterDraft: ParameterDraft | null = null;
@@ -403,20 +376,20 @@ dialogs.register(parametersDialog, { onClose: clearParameterDraft });
 dialogs.register(leaderboardDialog, { backdrop: true });
 dialogs.register(interventionDialog, { onClose: () => interventionSession.cancel() });
 const leaderboardBoards: Readonly<Record<BoardGroup, HTMLDivElement>> = {
-  protector: element<HTMLDivElement>('#leaderboard-board-protector'),
-  manipulator: element<HTMLDivElement>('#leaderboard-board-manipulator'),
+  protector: element<HTMLDivElement>('#leaderboard-board-protector', leaderboardDialog),
+  manipulator: element<HTMLDivElement>('#leaderboard-board-manipulator', leaderboardDialog),
 };
 const leaderboardTabs: Readonly<Record<BoardGroup, HTMLButtonElement>> = {
-  protector: element<HTMLButtonElement>('#leaderboard-tab-protector'),
-  manipulator: element<HTMLButtonElement>('#leaderboard-tab-manipulator'),
+  protector: element<HTMLButtonElement>('#leaderboard-tab-protector', leaderboardDialog),
+  manipulator: element<HTMLButtonElement>('#leaderboard-tab-manipulator', leaderboardDialog),
 };
-const leaderboardStatus = element<HTMLParagraphElement>('#leaderboard-status');
-const leaderboardForm = element<HTMLFormElement>('#leaderboard-form');
-const leaderboardSchoolInput = element<HTMLInputElement>('#leaderboard-school');
-const leaderboardNumberInput = element<HTMLInputElement>('#leaderboard-student-number');
-const leaderboardNameInput = element<HTMLInputElement>('#leaderboard-name');
-const leaderboardSubmitButton = element<HTMLButtonElement>('#leaderboard-submit');
-const leaderboardRefreshButton = element<HTMLButtonElement>('#leaderboard-refresh');
+const leaderboardStatus = element<HTMLParagraphElement>('#leaderboard-status', leaderboardDialog);
+const leaderboardForm = element<HTMLFormElement>('#leaderboard-form', leaderboardDialog);
+const leaderboardSchoolInput = element<HTMLInputElement>('#leaderboard-school', leaderboardDialog);
+const leaderboardNumberInput = element<HTMLInputElement>('#leaderboard-student-number', leaderboardDialog);
+const leaderboardNameInput = element<HTMLInputElement>('#leaderboard-name', leaderboardDialog);
+const leaderboardSubmitButton = element<HTMLButtonElement>('#leaderboard-submit', leaderboardDialog);
+const leaderboardRefreshButton = element<HTMLButtonElement>('#leaderboard-refresh', leaderboardDialog);
 
 let parameters: SimulationParameters = { ...initialFreeParameters };
 let freeParameters: SimulationParameters = { ...parameters };
@@ -647,20 +620,24 @@ function rememberParticipant(participant: Participant): void {
 }
 
 function renderLeaderboardPanel(): void {
-  const signature = JSON.stringify([leaderboardStore.states, leaderboardMessage, activeLeaderboardBoard]);
+  if (appMode !== 'apex') return;
+  const signature = JSON.stringify([appMode, leaderboardStore.states, leaderboardMessage, activeLeaderboardBoard]);
   if (signature !== leaderboardSignature) {
     leaderboardSignature = signature;
     for (const board of BOARD_GROUPS) {
       const isActive = board === activeLeaderboardBoard;
-      for (const tab of [leaderboardTabs[board], element(`#summary-tab-${board}`)]) {
+      const tabs = [leaderboardTabs[board]];
+      if (appMode === 'apex') tabs.push(element<HTMLButtonElement>(`#summary-tab-${board}`));
+      for (const tab of tabs) {
         tab.setAttribute('aria-selected', String(isActive));
         tab.tabIndex = isActive ? 0 : -1;
       }
       leaderboardBoards[board].hidden = !isActive;
-      element(`#summary-board-${board}`).hidden = !isActive;
+      if (appMode === 'apex') element(`#summary-board-${board}`).hidden = !isActive;
       for (const scope of ['national', 'hafs'] as const) {
         const state = leaderboardStore.states[scope][board];
         for (const surface of ['ranking', 'summary'] as const) {
+          if (surface === 'summary' && appMode !== 'apex') continue;
           const status = element(`#${surface}-status-${board}-${scope}`);
           const message = leaderboardStateText(state);
           if (status.textContent !== message) status.textContent = message;
@@ -763,7 +740,29 @@ function updateControlAvailability(): void {
   }
 }
 
+function updateModeLayout(): void {
+  const free = appMode === 'free';
+  placeSimulationControls(simulationToolbar, free);
+  if (free) {
+    document.querySelector('.leaderboard-summary')?.remove();
+    if (leaderboardDialog.open) leaderboardDialog.close();
+    leaderboardDialog.remove();
+    element('#simulation-console').append(experimentLog.element);
+  } else {
+    experimentLog.element.remove();
+    if (!leaderboardDialog.isConnected) shell.append(leaderboardDialog);
+    if (!document.querySelector('.leaderboard-summary')) {
+      simulationToolbar.insertAdjacentHTML('beforebegin', leaderboardSummaryMarkup());
+      element('#open-leaderboard').addEventListener('click', event => openLeaderboard(event.currentTarget as HTMLElement));
+      for (const board of BOARD_GROUPS) bindLeaderboardTab(element<HTMLButtonElement>(`#summary-tab-${board}`), board, 'summary');
+      leaderboardSignature = '';
+    }
+  }
+  renderLeaderboardPanel();
+}
+
 function updateStructuralUi(): void {
+  updateModeLayout();
   const speciesSelect = element<HTMLSelectElement>('#intervention-species');
   if (speciesSelect.dataset.mode !== appMode) {
     speciesSelect.innerHTML = RUNTIME_SPECIES.filter(species => appMode === 'free' || species !== 'fox').map(species => `<option value="${species}">${SPECIES_LABELS[species]}</option>`).join('');
@@ -946,6 +945,7 @@ function render(): void {
   renderPyramid(snapshot);
   renderStats(snapshot);
   renderInterventions(snapshot);
+  if (appMode === 'free') experimentLog.render(simulation.getEvents());
   renderChallengePanel();
   updateControlAvailability();
 }
@@ -1338,11 +1338,11 @@ function handleChallengeAction(event: MouseEvent): void {
 challengePanel.addEventListener('click', handleChallengeAction);
 
 function openLeaderboard(opener: HTMLElement, board: BoardGroup = activeLeaderboardBoard): void {
+  if (appMode !== 'apex') return;
   selectLeaderboardBoard(board);
-  dialogs.open(leaderboardDialog, opener, element('#close-leaderboard'));
+  dialogs.open(leaderboardDialog, opener, element('#close-leaderboard', leaderboardDialog));
 }
-element('#open-leaderboard').addEventListener('click', (event) => openLeaderboard(event.currentTarget as HTMLElement));
-element('#close-leaderboard').addEventListener('click', () => leaderboardDialog.close());
+element('#close-leaderboard', leaderboardDialog).addEventListener('click', () => leaderboardDialog.close());
 challengePanel.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLElement>('[data-open-ranking]');
   if (button) openLeaderboard(button);
@@ -1352,22 +1352,20 @@ function selectLeaderboardBoard(board: BoardGroup): void {
   activeLeaderboardBoard = board;
   renderLeaderboardPanel();
 }
-for (const board of BOARD_GROUPS) {
-  for (const surface of ['detail', 'summary'] as const) {
-    const tab = surface === 'detail' ? leaderboardTabs[board] : element<HTMLButtonElement>(`#summary-tab-${board}`);
-    tab.addEventListener('click', () => selectLeaderboardBoard(board));
-    tab.addEventListener('keydown', (event) => {
-      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return;
-      event.preventDefault();
-      const index = BOARD_GROUPS.indexOf(board);
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? BOARD_GROUPS.length - 1
-        : (index + (event.key === 'ArrowRight' ? 1 : -1) + BOARD_GROUPS.length) % BOARD_GROUPS.length;
-      const selected = BOARD_GROUPS[next]!;
-      selectLeaderboardBoard(selected);
-      (surface === 'detail' ? leaderboardTabs[selected] : element(`#summary-tab-${selected}`)).focus();
-    });
-  }
+function bindLeaderboardTab(tab: HTMLButtonElement, board: BoardGroup, surface: 'detail' | 'summary'): void {
+  tab.addEventListener('click', () => selectLeaderboardBoard(board));
+  tab.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return;
+    event.preventDefault();
+    const index = BOARD_GROUPS.indexOf(board);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? BOARD_GROUPS.length - 1
+      : (index + (event.key === 'ArrowRight' ? 1 : -1) + BOARD_GROUPS.length) % BOARD_GROUPS.length;
+    const selected = BOARD_GROUPS[next]!;
+    selectLeaderboardBoard(selected);
+    (surface === 'detail' ? leaderboardTabs[selected] : element(`#summary-tab-${selected}`)).focus();
+  });
 }
+for (const board of BOARD_GROUPS) bindLeaderboardTab(leaderboardTabs[board], board, 'detail');
 // Native maxlength counts UTF-16 units. Validate code points to match PostgreSQL's 80-character limit.
 leaderboardSchoolInput.addEventListener('input', () => {
   const school = leaderboardSchoolInput.value.replace(/\s+/gu, ' ').trim();

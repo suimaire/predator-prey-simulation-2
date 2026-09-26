@@ -14,6 +14,7 @@
   window.__runtime = {
     read: () => structuredClone({ snapshot: getSnapshot.call(current), history: current.getHistory(), parameters: current.getParameters(), storage: [...storage] }),
     food: () => structuredClone({ diet: current.getFoxDiet(), flows: current.getEnergyFlow(), active: current.getActiveSpecies(), rng: current.random }),
+    events: () => structuredClone(current.getEvents()),
   };
   await import('../src/main.ts');
 </script></html>

@@ -4,6 +4,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { BOARD_TAB_MARKUP } from '../src/leaderboardView.ts';
+import { simulationControlsMarkup } from '../src/simulationControls.ts';
 import { SERIES_COLORS } from '../src/charts.ts';
 import { APEX_CHALLENGE_CONFIG, ApexChallengeSession, apexParameters } from '../src/challenge.ts';
 import { RUNTIME_SPECIES, DEFAULT_PARAMETERS, ForestSimulation, SPECIES_LABELS, activeSpecies, validateParameters } from '../src/model.ts';
@@ -43,7 +44,7 @@ function setup() {
   };
   const parameters = { ...DEFAULT_PARAMETERS, seed: 'navigation-test', initialRabbits: 72 };
   const context = vm.createContext({
-    RUNTIME_SPECIES, DEFAULT_PARAMETERS, APEX_CHALLENGE_CONFIG, BOARD_TAB_MARKUP, BOARD_GROUPS: [],
+    RUNTIME_SPECIES, DEFAULT_PARAMETERS, APEX_CHALLENGE_CONFIG, BOARD_TAB_MARKUP, BOARD_GROUPS: [], simulationControlsMarkup,
     ForestSimulation, SPECIES_LABELS, SERIES_COLORS, activeSpecies, apexParameters, validateParameters,
     app: { innerHTML: '' }, initialFreeParameters: parameters, parameters, appMode: 'free',
     freeParameters: parameters, apexDesignParameters: apexParameters(parameters), hasApexDesign: false,
@@ -52,7 +53,7 @@ function setup() {
     shell: { classList: { toggle() {} } }, element,
     document: { querySelectorAll: (selector: string) => selector === '[data-app-mode]' ? buttons : [] },
     window: { confirm: () => context.confirmed }, confirmed: false,
-    modeEffects: { sync() {} },
+    modeEffects: { sync() {} }, updateModeLayout() {},
     initializeIconCanvases() {}, updateControlAvailability() {}, clearFinishedRecord() {},
     clearPopulationFeedback() {}, setRunning() {}, render() {},
   });
