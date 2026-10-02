@@ -15,7 +15,7 @@ await context.route('**/*', route => {
   externalRequests++; return route.abort();
 });
 const page = await context.newPage();
-const errors = [], results = [];
+const errors = [], results = [], columnResults = [];
 page.on('pageerror', error => errors.push(error.message));
 const ready = async () => {
   await page.locator('[data-app-mode=apex]').click();
@@ -39,6 +39,79 @@ const geometry = () => page.evaluate(() => {
   return { sections, overlap, overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
     dialogOverflow: document.querySelector('#leaderboard-panel').scrollWidth > document.querySelector('#leaderboard-panel').clientWidth };
 });
+// Measure rendered cells and glyphs: matching CSS strings alone misses content-sized tracks.
+const columnGeometry = board => page.evaluate(board => {
+  const rect = element => {
+    const { left, right, width } = element.getBoundingClientRect();
+    return { left, right, width };
+  };
+  const textRect = element => {
+    const range = document.createRange(); range.selectNodeContents(element);
+    return rect(range);
+  };
+  return ['national', 'hafs'].map(scope => {
+    const list = document.querySelector(`#ranking-list-${board}-${scope} .leaderboard-list`);
+    const rows = [...list.children].map(row => {
+      const rank = row.querySelector('b'), school = row.querySelector('.leaderboard-school');
+      const name = row.querySelector('.leaderboard-who strong'), score = row.querySelector('.leaderboard-score');
+      const time = row.querySelector('time'), nameText = textRect(name);
+      const style = getComputedStyle(row);
+      return { rank: rect(rank), school: rect(school), name: rect(name), score: rect(score), time: rect(time),
+        scoreText: textRect(score), nameCenter: (nameText.left + nameText.right) / 2,
+        nameClipped: name.scrollWidth > name.clientWidth,
+        nameOverflow: getComputedStyle(name).textOverflow, nameWhiteSpace: getComputedStyle(name).whiteSpace,
+        scoreValue: score.textContent, rankValue: rank.textContent,
+        border: style.borderTopColor, background: style.backgroundColor,
+        overflow: row.scrollWidth > row.clientWidth,
+      };
+    });
+    return { scope, rows, overflow: list.scrollWidth > list.clientWidth };
+  });
+}, board);
+const assertColumns = (boards, label) => {
+  const close = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < .5,
+    `${label}: ${message}: ${actual} vs ${expected}`);
+  for (const { scope, rows, overflow } of boards) {
+    assert.equal(overflow, false, `${label}/${scope}: list overflow`);
+    const first = rows[0];
+    for (const score of ['43', '982', '1,131', '9,446', '72,892', '292,385', '1,000,000']) {
+      assert.ok(rows.some(row => row.scoreValue === score), `${label}/${scope}: missing ${score}`);
+    }
+    for (const row of rows) {
+      const prefix = `${scope}/${row.scoreValue}`;
+      assert.equal(row.overflow, false, `${label}/${prefix}: row overflow`);
+      for (const column of ['rank', 'school', 'name', 'score', 'time']) {
+        close(row[column].left, first[column].left, `${prefix}: ${column} left`);
+        if (column !== 'time') close(row[column].width, first[column].width, `${prefix}: ${column} width`);
+      }
+      close(row.time.left, row.school.left, `${prefix}: date under school`);
+      close(row.scoreText.right, first.scoreText.right, `${prefix}: score right edge`);
+      assert.ok(row.scoreText.left >= row.score.left - .5, `${label}/${prefix}: score fits its column`);
+      assert.ok(row.school.right <= row.name.left && row.name.right <= row.score.left,
+        `${label}/${prefix}: independent columns`);
+      if (Number(row.rankValue) <= 7) {
+        assert.equal(row.nameClipped, false, `${label}/${prefix}: ordinary masked name fits`);
+        close(row.nameCenter, first.nameCenter, `${prefix}: visible name center`);
+      } else {
+        assert.equal(row.nameOverflow, 'ellipsis', `${label}/${prefix}: long name ellipsis`);
+        assert.equal(row.nameWhiteSpace, 'nowrap', `${label}/${prefix}: single-line name`);
+      }
+    }
+    for (const [index, border, background] of [
+      [0, 'rgb(194, 161, 60)', 'rgb(247, 246, 236)'],
+      [1, 'rgb(166, 175, 168)', 'rgb(244, 247, 244)'],
+      [2, 'rgb(181, 124, 78)', 'rgb(248, 244, 239)'],
+    ]) {
+      assert.equal(rows[index].border, border, `${label}/${scope}: rank ${index + 1} border`);
+      assert.equal(rows[index].background, background, `${label}/${scope}: rank ${index + 1} background`);
+    }
+  }
+  for (const column of ['rank', 'school', 'name', 'score']) {
+    close(boards[0].rows[0][column].width, boards[1].rows[0][column].width, `${column}: scope widths`);
+    close(boards[0].rows[0][column].left - boards[0].rows[0].rank.left,
+      boards[1].rows[0][column].left - boards[1].rows[0].rank.left, `${column}: scope offsets`);
+  }
+};
 try {
   for (const [width, height] of [[1440,900], [1024,768], [390,844]]) {
     await page.setViewportSize({ width, height });
@@ -81,6 +154,28 @@ try {
     assert.equal(await page.locator('#summary-list-manipulator-hafs').isVisible(), true);
     assert.equal(await page.evaluate(() => window.__fixture.gets), callsBefore);
     results.push({ viewport: [width,height], ...bounds });
+  }
+  for (const [width, height] of [[1440,900], [1024,768], [761,900], [760,900], [390,844], [320,740]]) {
+    await page.setViewportSize({ width, height });
+    await page.goto(`${base}?records=columns`); await ready();
+    await page.locator('#open-leaderboard').click();
+    let protectorColumns;
+    for (const board of ['protector', 'manipulator']) {
+      await page.locator(`#leaderboard-tab-${board}`).click();
+      await page.waitForSelector(`#ranking-list-${board}-hafs li`);
+      const columns = await columnGeometry(board);
+      assertColumns(columns, `${width}/${board}`);
+      if (board === 'protector') protectorColumns = columns;
+      else assert.deepEqual(columns, protectorColumns, `${width}: both modes share the same layout and styles`);
+      const bounds = await geometry();
+      assert.equal(bounds.overflow, false); assert.equal(bounds.dialogOverflow, false);
+      if (board === 'protector') {
+        if (width > 760) assert.ok(Math.abs(bounds.sections[0].y - bounds.sections[1].y) < 1);
+        else assert.ok(bounds.sections[1].y > bounds.sections[0].y + 100);
+      }
+      await screenshot(`columns-${board}-${width}`);
+      columnResults.push({ viewport: [width, height], board, columns });
+    }
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${base}?records=ties`); await ready();
@@ -164,6 +259,6 @@ try {
   assert.equal(await page.locator('#leaderboard-form').isVisible(), false);
   assert.equal(externalRequests, 0);
   assert.deepEqual(errors, []);
-  await writeFile(new URL('results.json', output), JSON.stringify({ results, scenarios: ['ties > 50', 'scope errors', 'empty', 'loading', 'storage', 'form', 'keyboard', 'PB', 'submit guard'], externalRequests, errors }, null, 2));
-  console.log('Browser QA passed: 1440×900, 1024×768, 390×844; scopes, ties, errors, form, keyboard, PB; zero external requests.');
+  await writeFile(new URL('results.json', output), JSON.stringify({ results, columnResults, scenarios: ['score column alignment in both scopes/modes at 1440/1024/761/760/390/320px', 'ties > 50', 'scope errors', 'empty', 'loading', 'storage', 'form', 'keyboard', 'PB', 'submit guard'], externalRequests, errors }, null, 2));
+  console.log('Browser QA passed: score columns at 1440/1024/761/760/390/320px in both scopes/modes; scopes, ties, errors, form, keyboard, PB; zero external requests.');
 } finally { await browser.close(); }
