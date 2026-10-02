@@ -737,7 +737,15 @@ dialog::backdrop { background: rgba(10,29,18,.5); backdrop-filter: none; }
 .ranking-scope-grid h3 { margin: 0 0 8px; color: #365a43; font-size: 15px; }
 .leaderboard-ranking-note { margin: 0; color: #627168; font-size: 13px; line-height: 1.5; }
 .leaderboard-form label small { color: #68786d; font-size: 13px; }
-.leaderboard-dialog .leaderboard-list li { padding: 5px 8px; }
+/* Keep detail columns independent of each row's score width; Top 3 keeps its compact layout. */
+.leaderboard-dialog .leaderboard-list li { padding: 5px 8px; grid-template-columns: 24px 96px minmax(0,1fr) 88px; }
+.leaderboard-dialog .leaderboard-school { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leaderboard-dialog .leaderboard-who { text-align: center; }
+.leaderboard-dialog .leaderboard-who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leaderboard-dialog .leaderboard-meta { grid-column: 2; grid-row: 2; }
+@media (max-width: 480px) {
+  .leaderboard-dialog .leaderboard-list li { grid-template-columns: 20px 76px minmax(0,1fr) 76px; column-gap: 4px; }
+}
 .dashboard-dialog .leaderboard-form { display: grid; flex: 0 0 auto; grid-template-columns: 2fr 1fr 1fr; text-align: left; padding: 8px 0 0; justify-items: stretch; }
 .dashboard-dialog .leaderboard-form[hidden] { display: none; }
 .dashboard-dialog .leaderboard-form > button { grid-column: 1/-1; }
