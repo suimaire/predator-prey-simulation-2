@@ -13,7 +13,7 @@ import { APEX_CHALLENGE_CONFIG, apexParameters, challengeSettingsLocked } from '
 // same node:test + TypeScript/VM boundary used by the existing presentation tests.
 const source = ts.createSourceFile('main.ts', readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true);
 const variables = new Set(['parameterDefinitions', 'groupInfo', 'initialStages']);
-const names = new Set(['formatParameter', 'parameterGroupActive', 'parameterInputMarkup', 'parameterMarkup', 'initialEcosystemMarkup', 'parameterGroupMarkup',
+const names = new Set(['formatParameter', 'parameterGroupActive', 'parameterInputMarkup', 'parameterMarkup', 'groupIconMarkup', 'initialEcosystemMarkup', 'parameterGroupMarkup',
   'selectParameterGroup', 'updateParameterNavigation', 'updateAllControls', 'editDraft', 'updateControlAvailability', 'challengeIsLocked', 'clearParameterDraft', 'applyParameterDraft']);
 const statements = source.statements.filter(node =>
   ts.isFunctionDeclaration(node) && names.has(node.name!.text)

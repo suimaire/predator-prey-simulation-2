@@ -13,7 +13,7 @@ import { RUNTIME_SPECIES, DEFAULT_PARAMETERS, ForestSimulation, SPECIES_LABELS, 
 // click listeners. Geometry and native keyboard focus are checked in the browser.
 const source = ts.createSourceFile('main.ts', readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true);
 const variables = new Set(['parameterDefinitions', 'groupInfo', 'initialStages']);
-const names = new Set(['formatParameter', 'parameterInputMarkup', 'parameterMarkup', 'initialEcosystemMarkup', 'parameterGroupMarkup', 'updateStructuralUi', 'switchMode']);
+const names = new Set(['formatParameter', 'parameterInputMarkup', 'parameterMarkup', 'groupIconMarkup', 'initialEcosystemMarkup', 'parameterGroupMarkup', 'updateStructuralUi', 'switchMode']);
 const statements = source.statements.filter(node =>
   ts.isFunctionDeclaration(node) && names.has(node.name!.text)
   || ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => variables.has(declaration.name.getText(source)))
@@ -67,7 +67,7 @@ test('branding stays in the banner and the single mode group belongs to the fore
   const markup = context.app.innerHTML as string;
   const banner = markup.match(/<header\b[^>]*>[\s\S]*?<\/header>/)?.[0];
   assert.ok(banner);
-  for (const label of ['Rabbits', 'Wolves', 'Extended forest population lab', '과학 수업 포털', '탐구 02', '통합과학 2']) assert.ok(banner.includes(label));
+  for (const label of ['토끼와 늑대 숲 생태계', '과학 수업 포털', '탐구 02', '통합과학2']) assert.ok(banner.includes(label));
   assert.doesNotMatch(banner, /현재 먹이 관계|header-chain|data-app-mode/);
   assert.doesNotMatch(markup, /class="mode-bar"|id="mode-summary"/);
   const forestHeader = [...markup.matchAll(/<header\b[^>]*>[\s\S]*?<\/header>/g)].map(match => match[0]).find(header => header.includes('id="forest-heading"'));

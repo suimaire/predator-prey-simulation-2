@@ -59,7 +59,7 @@ test('best result survives animation expiry and redraws without replaying or rep
   const ui = completedPresentation(4);
   ui.run('renderChallengePanel()');
   assert.equal(ui.classes.has('best-emphasis'), true);
-  assert.match(ui.panel.innerHTML, /NEW PERSONAL BEST/u);
+  assert.match(ui.panel.innerHTML, /내 최고 기록 경신/u);
   assert.match(ui.panel.innerHTML, /이전 최고보다 \+5 step/u);
   assert.match(ui.panel.innerHTML, /4 → 9/u);
   const markup = ui.panel.innerHTML;
@@ -75,15 +75,15 @@ test('best result survives animation expiry and redraws without replaying or rep
 test('first, equal and lower results keep the correct final score and best distinction', () => {
   const first = completedPresentation(null);
   first.run('renderChallengePanel()');
-  assert.match(first.panel.innerHTML, /NEW PERSONAL BEST/u);
+  assert.match(first.panel.innerHTML, /내 최고 기록 경신/u);
   assert.match(first.panel.innerHTML, /첫 기록 달성/u);
-  assert.doesNotMatch(first.panel.innerHTML, /Previous Best/u);
+  assert.doesNotMatch(first.panel.innerHTML, /이전 최고</u);
   for (const previous of [9, 20]) {
     const ui = completedPresentation(previous);
     ui.run('renderChallengePanel()');
-    assert.doesNotMatch(ui.panel.innerHTML, /NEW PERSONAL BEST/u);
+    assert.doesNotMatch(ui.panel.innerHTML, /내 최고 기록 경신/u);
     assert.match(ui.panel.innerHTML, /<strong>9<\/strong>/u);
-    assert.ok(ui.panel.innerHTML.includes(`Personal Best <b>${previous} step</b>`));
+    assert.ok(ui.panel.innerHTML.includes(`내 최고 기록 <b>${previous} step</b>`));
   }
 });
 
@@ -96,7 +96,7 @@ test('starting the next challenge clears completed presentation while preserving
   assert.equal(ui.context.apexSession.getState().phase, 'active');
   assert.equal(ui.context.apexSession.getState().score, 0);
   assert.equal(ui.context.personalBest.score, 9);
-  assert.doesNotMatch(ui.panel.innerHTML, /NEW PERSONAL BEST|Previous Best|FINAL SCORE/u);
+  assert.doesNotMatch(ui.panel.innerHTML, /내 최고 기록 경신|이전 최고<|최종 점수/u);
   assert.equal(ui.classes.has('best-emphasis'), false);
 });
 
@@ -114,7 +114,8 @@ test('completed settings unlock without clearing score, collapse, best or retry 
   ui.run('renderChallengePanel()');
   assert.equal(ui.run('challengeIsLocked()'), false);
   assert.equal(ui.panel.dataset.phase, 'over');
-  assert.match(ui.panel.innerHTML, /FINAL SCORE/u);
+  assert.match(ui.panel.innerHTML, /최종 점수/u);
+
   assert.match(ui.panel.innerHTML, /첫 기록 달성/u);
   assert.match(ui.panel.innerHTML, /붕괴 step · 10/u);
   assert.ok(ui.panel.innerHTML.includes('class="challenge-primary" data-challenge-action="edit-and-start" aria-haspopup="dialog" aria-controls="parameters-dialog">수정 후 도전</button><button type="button" class="challenge-secondary" data-challenge-action="retry">같은 조건 재현</button>'));

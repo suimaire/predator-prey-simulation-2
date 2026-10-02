@@ -104,14 +104,21 @@ const parameterDefinitions: ParameterDefinition[] = [
   { key: 'quaternaryMaxAge', label: '최대 수명', description: '이 나이에 도달하면 자연사합니다.', min: 10, max: 420, step: 5, group: 'quaternary', format: 'integer', suffix: 'step' },
 ];
 
-const groupInfo: Record<ParameterGroup, { title: string; subtitle: string; icon: string }> = {
-  start: { title: '공통 환경', subtitle: '공간 · 먹이사슬 · 시작 환경', icon: '⚙' },
-  forest: { title: '생산자 · 식생', subtitle: '재생 · 성장과 최대 밀도', icon: '♣' },
-  rabbit: { title: '1차 소비자 · 토끼', subtitle: '이동 · 먹이 · 번식 · 사망', icon: '♙' },
-  wolf: { title: '2차 소비자 · 늑대', subtitle: '탐색 · 사냥 · 번식 · 사망', icon: '◆' },
-  tertiary: { title: '3차 소비자', subtitle: '늑대를 먹는 상위 포식자', icon: '▲' },
-  quaternary: { title: '4차 소비자', subtitle: '최상위 영양 단계', icon: '⬟' },
+const groupInfo: Record<ParameterGroup, { title: string; subtitle: string }> = {
+  start: { title: '공통 환경', subtitle: '공간 · 먹이사슬 · 시작 환경' },
+  forest: { title: '생산자 · 식생', subtitle: '재생 · 성장과 최대 밀도' },
+  rabbit: { title: '1차 소비자 · 토끼', subtitle: '이동 · 먹이 · 번식 · 사망' },
+  wolf: { title: '2차 소비자 · 늑대', subtitle: '탐색 · 사냥 · 번식 · 사망' },
+  tertiary: { title: '3차 소비자', subtitle: '늑대를 먹는 상위 포식자' },
+  quaternary: { title: '4차 소비자', subtitle: '최상위 영양 단계' },
 };
+
+// 설정 창의 생물군 표시는 숲 화면과 같은 그림을 씁니다(동물은 initializeIconCanvases가 그림).
+function groupIconMarkup(group: ParameterGroup): string {
+  if (group === 'start') return '<span class="group-icon start" aria-hidden="true">⚙</span>';
+  if (group === 'forest') return '<span class="group-icon forest" aria-hidden="true"><i class="forest-key"></i></span>';
+  return `<canvas class="group-icon ${group}" data-mini-icon="${group}" width="28" height="28" aria-hidden="true"></canvas>`;
+}
 
 function formatParameter(definition: ParameterDefinition, value: number): string {
   if (definition.format === 'percent') return `${Math.round(value * 100)}%`;
@@ -151,7 +158,7 @@ function initialEcosystemMarkup(): string {
     const definition = parameterDefinitions.find((item) => item.key === key)!;
     return `<article class="initial-stage" data-initial-stage="${group}">
       <button type="button" class="stage-select" data-parameter-section="${group}" aria-controls="parameter-panel-${group}" aria-pressed="${group === 'wolf'}" aria-label="${info.title} 상세 설정">
-        <span class="group-icon ${group}" aria-hidden="true">${info.icon}</span><span class="stage-name">${info.title}<small id="stage-status-${group}" class="stage-status" hidden>비활성</small></span>
+        ${groupIconMarkup(group)}<span class="stage-name">${info.title}<small id="stage-status-${group}" class="stage-status" hidden>비활성</small></span>
         <output id="output-${key}" for="param-${key}" aria-hidden="true">${formatParameter(definition, DEFAULT_PARAMETERS[key])}</output><span class="selection-mark" aria-hidden="true">◀</span>
       </button>
       <div class="initial-stage-control"><label class="visually-hidden" for="param-${key}">${info.title} · ${definition.label}</label>${parameterInputMarkup(definition)}</div>
@@ -166,7 +173,7 @@ function parameterGroupMarkup(group: ParameterGroup, content?: string): string {
     ? [['재생 · 성장', /forest/]]
     : [['이동 · 탐색', /Move/], [group === 'rabbit' ? '먹이 · 에너지' : '사냥 · 에너지', /FoodEnergy|EnergyCost/], ['번식', /Breed/], ['사망', /MaxAge/]];
   return `<section class="parameter-detail" id="parameter-panel-${group}" data-parameter-panel="${group}" aria-labelledby="parameter-title-${group}" ${group === 'wolf' ? '' : 'hidden'}>
-    <header class="parameter-detail-heading"><span class="group-icon ${group}" aria-hidden="true">${info.icon}</span><div><h3 id="parameter-title-${group}">${info.title}</h3><p>${info.subtitle}</p></div></header>
+    <header class="parameter-detail-heading">${groupIconMarkup(group)}<div><h3 id="parameter-title-${group}">${info.title}</h3><p>${info.subtitle}</p></div></header>
     ${group === 'tertiary' || group === 'quaternary' ? `<p class="inactive-detail-note" id="inactive-note-${group}" hidden>현재 먹이사슬에서 비활성입니다. 공통 환경에서 먹이사슬 단계를 높이면 편집할 수 있습니다.</p>` : ''}
     ${content ?? categories.map(([title, pattern]) => `<section class="parameter-category"><h4>${title}</h4>${parameterMarkup(definitions.filter((definition) => pattern.test(definition.key)))}</section>`).join('')}
   </section>`;
@@ -183,8 +190,11 @@ app.innerHTML = `
   <div class="app-shell" id="app-shell">
     <header class="topbar">
       <div class="header-intro">
-        <div class="brand-row"><div class="brand-mark" aria-hidden="true"><span></span></div><div class="brand-copy"><p class="eyebrow">통합과학 2 · 생태계 상호작용</p><div class="brand-title"><h1>Rabbits <span>&</span> Wolves</h1><p>Extended forest population lab</p></div></div></div>
-        <nav class="portal-nav" aria-label="과학 수업 포털 안내"><a class="portal-link" href="https://suimaire.github.io/" aria-label="과학 수업 포털로 돌아가기">← 과학 수업 포털</a><span class="lesson-chip">탐구 02 · 영양 단계와 생태계 변화</span></nav>
+        <div class="brand-copy">
+          <nav class="crumbs" aria-label="현재 위치"><a href="https://suimaire.github.io/">과학 수업 포털</a><span aria-hidden="true">/</span><span>통합과학2 · 탐구 02 영양 단계와 생태계 변화</span></nav>
+          <h1>토끼와 늑대 숲 생태계</h1>
+        </div>
+        <p class="header-help"><b>사용 방법</b> <b>실행</b>으로 시작하고, 칸을 누르면 그 칸의 상태가 보여요. 조건은 <b>생태계 설계</b>에서 바꿉니다.</p>
       </div>
 
     </header>
@@ -195,7 +205,7 @@ app.innerHTML = `
           <div class="simulation-main">
             <section class="board-card" aria-labelledby="forest-heading">
               <header class="board-heading">
-                <div><p class="section-kicker">LIVE ECOSYSTEM</p><h2 id="forest-heading">숲 생태계</h2></div>
+                <div><h2 id="forest-heading">숲 생태계</h2></div>
                 <div class="board-heading-actions">
                   <div class="mode-switch" role="group" aria-label="모드 선택"><span class="mode-capsule" aria-hidden="true"><span class="apex-tab-glow"></span></span><button type="button" data-app-mode="free" aria-pressed="true">자유 탐구</button><button type="button" data-app-mode="apex" aria-pressed="false"><span class="apex-tab-label"><span class="apex-tab-ignition" aria-hidden="true"><svg class="apex-tab-flame" viewBox="0 0 16 20" focusable="false"><path fill="currentColor" fill-rule="evenodd" d="M9 1c1 4-3 5-2 8-1.5-.5-2-2-1.5-3.5C2.5 8 1 10.5 1.5 13.5a6.5 6.5 0 0 0 13-1C14.5 8 11 6 9 1ZM8.5 10c.5 2-2 3-2 5a2 2 0 0 0 4 0c0-2-1-3-2-5Z"/></svg></span>Apex Survival</span></button></div>
                   <div class="legend" id="board-legend"></div>
@@ -203,7 +213,7 @@ app.innerHTML = `
               </header>
               <section class="population-hud" aria-label="현재 실험 상태">
                 <div class="hud-readings">
-                  <div class="step-readout"><span>STEP</span><strong id="step-value">000</strong></div>
+                  <div class="step-readout"><span>경과 step</span><strong id="step-value">000</strong></div>
                   <article class="mini-population forest-population"><i class="forest-key" aria-hidden="true"></i><span><small>식생량</small><b id="forest-population"></b><em>성장 단계 합</em></span></article>
                   <div class="population-strip" id="population-strip"></div>
                 </div>
@@ -216,11 +226,11 @@ app.innerHTML = `
 
           <div class="simulation-sidebar">
             <aside class="simulation-console" aria-label="Experiment Console" id="simulation-console">
-              <div class="console-heading" id="experiment-heading"><p class="section-kicker">EXPERIMENT CONSOLE</p><h2>자유 탐구</h2></div>
+              <div class="console-heading" id="experiment-heading"><h2>자유 탐구</h2><p>조건을 정해 실행하고, 종을 넣거나 빼면서 생태계가 어떻게 바뀌는지 관찰하세요.</p></div>
               <section class="challenge-panel" id="challenge-panel" aria-live="polite" hidden></section>
-              <button type="button" class="parameter-entry" id="toggle-parameters" aria-label="생태계 설계 · Parameters" aria-describedby="parameter-entry-hint" aria-haspopup="dialog" aria-controls="parameters-dialog" aria-expanded="false">
+              <button type="button" class="parameter-entry" id="toggle-parameters" aria-label="생태계 설계" aria-describedby="parameter-entry-hint" aria-haspopup="dialog" aria-controls="parameters-dialog" aria-expanded="false">
                 <span class="parameter-entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h7m5 0h4M4 17h3m5 0h8"/><circle cx="13.5" cy="7" r="2.5"/><circle cx="9.5" cy="17" r="2.5"/></svg></span>
-                <span class="parameter-entry-copy"><span class="parameter-entry-title"><b>생태계 설계</b><small>Parameters</small></span><span class="parameter-entry-hint" id="parameter-entry-hint">개체수와 환경 조건을 조정해 실험을 설계하세요.</span></span>
+                <span class="parameter-entry-copy"><span class="parameter-entry-title"><b>생태계 설계</b></span><span class="parameter-entry-hint" id="parameter-entry-hint">개체수와 환경 조건을 조정해 실험을 설계하세요.</span></span>
                 <span class="parameter-entry-action" aria-hidden="true"><span id="parameter-entry-action">설계 열기</span><span>→</span></span>
               </button>
               <section class="intervention-card" id="intervention-card" aria-labelledby="intervention-heading">
@@ -250,12 +260,12 @@ app.innerHTML = `
         <section class="support-grid" aria-label="도전 안내">              <div class="challenge-copy" id="challenge-description" hidden>
                 <h2>전체 먹이사슬을 가장 오래 유지하세요</h2>
                 <p>식생부터 4차 소비자까지 모든 영양 단계를 유지하는 조건을 탐색합니다. 도전을 시작하면 설정이 잠기며, 어느 한 단계라도 사라지는 순간 기록이 결정됩니다.</p>
-                <small>Challenge Seed <b>${APEX_CHALLENGE_CONFIG.seed}</b> · ${APEX_CHALLENGE_CONFIG.simulationVersion} · 같은 조건과 seed에서는 같은 결과가 재현됩니다.</small>
+                <small>도전 시드 <b>${APEX_CHALLENGE_CONFIG.seed}</b> · ${APEX_CHALLENGE_CONFIG.simulationVersion} · 같은 조건과 시드에서는 같은 결과가 다시 나옵니다.</small>
               </div>
 </section>
         <section class="analysis-grid" aria-label="관찰과 분석">
           <section class="graph-card" id="graph-card">
-            <div class="card-heading"><div><p class="section-kicker">POPULATION GRAPH</p><h2>개체군 변화</h2></div><span class="live-pill"><i></i> LIVE</span></div>
+            <div class="card-heading"><h2>개체군 변화</h2><span>단추를 누르면 그 선을 숨기거나 다시 보여 줍니다.</span></div>
             <div class="graph-legend" id="graph-legend" aria-label="그래프 계열 표시 전환"></div>
             <canvas id="population-chart" aria-label="시간에 따른 활성 영양 단계와 숲 밀도 그래프"></canvas>
             <div class="graph-foot"><p><span>왼쪽 축: 소비자 개체 수</span><span>오른쪽 축: 숲 평균 밀도</span></p><div id="intervention-log"></div></div>
@@ -264,8 +274,8 @@ app.innerHTML = `
 
 
         <section class="lower-grid">
-          <section class="statistics-card"><div class="card-heading"><div><p class="section-kicker">CUMULATIVE RECORD</p><h2>누적 통계</h2></div><span>현재 실험</span></div><div class="stat-grid" id="stat-grid"></div></section>
-          <section class="learning-card"><div class="card-heading"><div><p class="section-kicker">MODEL ASSUMPTIONS</p><h2>모형의 가정과 한계</h2></div><span class="model-badge">확률적 모형</span></div><ul><li>학습을 위해 먹이 관계를 <b>직선형 먹이사슬</b>로 단순화했습니다. 실제 생태계는 대부분 먹이그물입니다.</li><li>영양 단계가 높을수록 이용 가능한 에너지가 제한되는 경향이 있습니다.</li><li><b>10%</b>는 보편 법칙이 아닌 교육적 대표값이며 실제 효율은 생태계와 종에 따라 다릅니다.</li><li>에너지는 실제 Joule 측정치가 아닌 <b>모델 내부 값</b>입니다.</li></ul><p class="model-limit">종 제거 뒤의 변화와 Apex Survival 점수는 실제 생태계의 안정성을 직접 측정하지 않으며, 이 단순화된 모형과 사용자가 고른 파라미터에서 나타난 결과입니다.</p></section>
+          <section class="statistics-card"><div class="card-heading"><h2>누적 통계</h2><span>이번 실험 처음부터</span></div><div class="stat-grid" id="stat-grid"></div></section>
+          <section class="learning-card"><div class="card-heading"><h2>모형의 가정과 한계</h2><span class="model-badge">확률적 모형</span></div><ul><li>학습을 위해 먹이 관계를 <b>직선형 먹이사슬</b>로 단순화했습니다. 실제 생태계는 대부분 먹이그물입니다.</li><li>영양 단계가 높을수록 이용 가능한 에너지가 제한되는 경향이 있습니다.</li><li><b>10%</b>는 보편 법칙이 아닌 교육적 대표값이며 실제 효율은 생태계와 종에 따라 다릅니다.</li><li>에너지는 실제 Joule 측정치가 아닌 <b>모델 내부 값</b>입니다.</li></ul><p class="model-limit">종 제거 뒤의 변화와 Apex Survival 점수는 실제 생태계의 안정성을 직접 측정하지 않으며, 이 단순화된 모형과 내가 고른 조건에서 나타난 결과입니다.</p></section>
         </section>
 
         <details class="rule-card"><summary><span><b>이 모델은 한 step을 어떻게 계산할까요?</b><small>행동 순서와 에너지 규칙 보기</small></span><i>⌄</i></summary><div class="rule-content"><ol><li><b>식생 성장</b><span>확률에 따라 한 단계 회복</span></li><li><b>토끼 행동</b><span>이동·식생 섭취·번식·사망</span></li><li><b>늑대 행동</b><span>토끼 탐색·사냥·번식·사망</span></li><li><b>상위 소비자</b><span>활성 단계별 동일 규칙 적용</span></li><li><b>기록</b><span>개체수·섭식 에너지·개입 저장</span></li></ol><p>한 번의 섭식에서 먹이의 가용 모델 에너지에 전달 효율을 정확히 한 번 적용합니다. 10%에서 기존 토끼·늑대의 획득량이 유지되며, 효율을 바꾸면 모든 영양 단계의 섭식 획득량이 같은 규칙으로 변합니다.</p></div></details>
@@ -273,7 +283,7 @@ app.innerHTML = `
     </div>
 
               <dialog id="parameters-dialog" class="dashboard-dialog parameters-dialog" aria-labelledby="parameters-title" aria-describedby="parameter-edit-note">
-                <div class="dialog-heading panel-title-row"><div><p class="section-kicker">EXPERIMENT SETUP</p><h2 id="parameters-title">실험 조건</h2></div><button type="button" class="icon-button close-parameters" aria-label="실험 조건 닫기">×</button></div>
+                <div class="dialog-heading panel-title-row"><div><h2 id="parameters-title">생태계 설계</h2></div><button type="button" class="icon-button close-parameters" aria-label="실험 조건 닫기">×</button></div>
                 <p id="parameter-edit-note" class="dialog-notice"></p>
                 <p class="parameter-lock-note" id="parameter-lock-note" hidden>🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</p>
                 <div class="parameter-workspace">
@@ -281,7 +291,7 @@ app.innerHTML = `
                     <div class="initial-ecosystem-heading"><h3 id="initial-ecosystem-title">초기 생태계 구성</h3><p>초기값을 조절하고, 생물군을 선택하세요.</p></div>
                     <div class="initial-stages">${initialEcosystemMarkup()}</div>
                     <p class="initial-hierarchy-note">카드 폭은 영양 단계만 나타냅니다. 밀도(%)와 개체수(마리)는 비교하지 않습니다.</p>
-                    <button type="button" class="environment-select" data-parameter-section="start" aria-controls="parameter-panel-start" aria-pressed="false"><span><b>⚙ 공통 환경</b><span class="selection-mark" aria-hidden="true">◀</span></span><small id="environment-summary"></small></button>
+                    <button type="button" class="environment-select" data-parameter-section="start" aria-controls="parameter-panel-start" aria-pressed="false"><span><b>공통 환경</b><span class="selection-mark" aria-hidden="true">◀</span></span><small id="environment-summary"></small></button>
                   </section>
                   <div class="parameter-scroll dialog-body" tabindex="0" aria-label="선택한 생물군의 세부 설정">
                     <p class="detail-kicker">선택한 항목의 세부 설정</p>
@@ -293,9 +303,9 @@ app.innerHTML = `
                   </section>
                   <section class="parameter-category"><h4>공간</h4>${parameterMarkup(parameterDefinitions.filter((definition) => definition.group === 'start'))}</section>
                   <section class="special-controls">
-                    <label class="seed-control" for="seed-input"><span><b id="seed-label">Random seed</b><small id="seed-helper">같은 seed와 설정은 같은 결과를 재현합니다.</small></span></label>
+                    <label class="seed-control" for="seed-input"><span><b id="seed-label">랜덤 시드</b><small id="seed-helper">같은 시드와 설정이면 같은 결과가 다시 나옵니다.</small></span></label>
                     <div class="seed-input-row"><input id="seed-input" maxlength="40" value="${initialFreeParameters.seed}" /><button type="button" id="random-seed" aria-label="새 랜덤 시드 만들기">↻</button></div>
-                    <label class="toggle-control" for="toroidal-toggle"><span><b>토로이드 경계</b><small>가장자리가 반대쪽과 연결됩니다.</small></span><input id="toroidal-toggle" type="checkbox" checked /><i></i></label>
+                    <label class="toggle-control" for="toroidal-toggle"><span><b>가장자리 연결 (토로이드)</b><small>오른쪽 끝으로 나간 동물이 왼쪽에서 다시 들어옵니다. 위아래도 같습니다.</small></span><input id="toroidal-toggle" type="checkbox" checked /><i></i></label>
                   </section>`)}
                   ${parameterGroupMarkup('forest')}
                   ${parameterGroupMarkup('rabbit')}
@@ -568,7 +578,7 @@ function renderChallengePanel(): void {
   const state = apexSession.getState();
   const metric = simulation.getHistory().at(-1)!;
   const statuses = state.levelStatus.length > 0 ? state.levelStatus : evaluateApexLevels(metric);
-  const phaseLabel = state.phase === 'setup' ? '생태계 설계' : state.phase === 'over' ? 'CHALLENGE OVER' : running ? 'CHALLENGE RUNNING' : '일시정지';
+  const phaseLabel = state.phase === 'setup' ? '생태계 설계' : state.phase === 'over' ? '도전 종료' : running ? '도전 중' : '일시정지';
 
   const bestMarkup = personalBest ? formatSteps(personalBest.score) : '아직 기록 없음';
   const result = state.phase === 'over' ? bestResult : null;
@@ -579,7 +589,7 @@ function renderChallengePanel(): void {
   const bestElapsed = result ? Math.max(0, performance.now() - bestEmphasisStartedAt) : 0;
   const emphasizeBest = result !== null && bestElapsed < PERSONAL_BEST_FEEDBACK_MS;
   const collapseLabels = state.collapsedLevels.map((level) => statuses.find((status) => status.level === level)?.label ?? level).join(', ');
-  const setupActions = '<button type="button" class="challenge-primary" data-challenge-action="start">도전 시작 · Start Challenge</button>';
+  const setupActions = '<button type="button" class="challenge-primary" data-challenge-action="start">도전 시작</button>';
   const activeActions = '<button type="button" class="challenge-secondary" data-challenge-action="abort">도전 중단</button>';
   const overActions = '<button type="button" class="challenge-primary" data-challenge-action="edit-and-start" aria-haspopup="dialog" aria-controls="parameters-dialog">수정 후 도전</button><button type="button" class="challenge-secondary" data-challenge-action="retry">같은 조건 재현</button>';
   challengePanel.dataset.phase = state.phase;
@@ -587,15 +597,15 @@ function renderChallengePanel(): void {
   challengePanel.classList.toggle('best-emphasis', emphasizeBest);
   challengePanel.style.setProperty('--best-elapsed', `-${bestElapsed}ms`);
   challengePanel.innerHTML = `
-    <p class="section-kicker challenge-title">APEX SURVIVAL</p>
+    <p class="challenge-title">Apex Survival 도전</p>
     <div class="challenge-score">
-      ${result ? '<span class="new-best">NEW PERSONAL BEST</span>' : ''}
+      ${result ? '<span class="new-best">내 최고 기록 경신!</span>' : ''}
       <strong>${state.score.toLocaleString()}</strong>
-      <span class="score-unit">${state.phase === 'over' ? 'FINAL SCORE' : 'SCORE'} · STEP</span>
+      <span class="score-unit">${state.phase === 'over' ? '최종 점수' : '점수'} · 버틴 step</span>
       ${result ? `<p class="best-improvement" aria-label="${result.description}">${result.improvement === null ? '첫 기록 달성' : `+${result.improvement.toLocaleString()} <span aria-hidden="true">↑</span><small>이전 최고보다 · step</small>`}</p>
-      ${result.previousBest === null ? '' : `<p class="best-comparison"><span>Previous Best</span><b>${result.previousBest.toLocaleString()} → ${result.finalScore.toLocaleString()}</b></p>`}`
-      : `<small>Personal Best <b>${bestMarkup}</b></small>`}
-      ${result ? `<small>Personal Best <b>${bestMarkup}</b></small>` : ''}
+      ${result.previousBest === null ? '' : `<p class="best-comparison"><span>이전 최고</span><b>${result.previousBest.toLocaleString()} → ${result.finalScore.toLocaleString()}</b></p>`}`
+      : `<small>내 최고 기록 <b>${bestMarkup}</b></small>`}
+      ${result ? `<small>내 최고 기록 <b>${bestMarkup}</b></small>` : ''}
     </div>
     <p class="challenge-status">상태 <b>${phaseLabel}</b></p>
     ${state.phase === 'over' ? `<p class="challenge-collapse">최초 붕괴 영양 단계 <b>${collapseLabels}</b><span>붕괴 step · ${state.collapseStep}</span></p>` : ''}
@@ -721,8 +731,8 @@ function updateControlAvailability(): void {
   applyParametersButton.disabled = prepared?.status !== 'apply' && !(startsChallenge && prepared?.status === 'unchanged');
   element('#parameter-edit-note').textContent = locked ? '도전 진행 중·일시정지 중에는 읽기 전용입니다.' : startsChallenge ? '설정을 적용하면 새 도전을 시작합니다. 취소하면 종료 결과로 돌아갑니다.' : appMode === 'apex' && state.phase === 'over' ? '다음 도전 설정을 편집합니다. 종료 결과와 숲은 그대로 유지됩니다.' : '설정 적용 시 새 조건으로 한 번 초기화됩니다. 자동 실행하지 않습니다.';
   element('#parameter-error').textContent = parameterDraftError;
-  element('#seed-label').textContent = appMode === 'apex' ? 'Challenge Seed' : 'Random seed';
-  element('#seed-helper').textContent = appMode === 'apex' ? '공정한 비교를 위해 이 도전에서는 고정됩니다.' : '같은 seed와 설정은 같은 결과를 재현합니다.';
+  element('#seed-label').textContent = appMode === 'apex' ? '도전 시드' : '랜덤 시드';
+  element('#seed-helper').textContent = appMode === 'apex' ? '공정한 비교를 위해 이 도전에서는 고정됩니다.' : '같은 시드와 설정이면 같은 결과가 다시 나옵니다.';
   element('#intervention-card').hidden = appMode !== 'free';
 
   if (appMode === 'free') {
@@ -916,7 +926,7 @@ function renderInterventions(snapshot: SimulationSnapshot): void {
     ? `최근 개입: Step ${latest.step.toLocaleString('ko-KR')} · ${interventionLabel(latest)}` : '최근 개입 없음';
   const state = apexSession.getState();
   const collapseMarkup = appMode === 'apex' && state.collapseStep !== null
-    ? `<span class="collapse-log" title="t = ${state.collapseStep}: Apex 먹이사슬 붕괴">Apex chain collapsed · t = ${state.collapseStep}</span>`
+    ? `<span class="collapse-log" title="t = ${state.collapseStep}: Apex 먹이사슬 붕괴">먹이사슬 붕괴 · t = ${state.collapseStep}</span>`
     : '';
   const completeMarkup = interventionMarkup + collapseMarkup;
   element('#intervention-log').innerHTML = completeMarkup || '<span>생태계 개입 기록 없음</span>';
@@ -931,7 +941,7 @@ function drawChart(now = performance.now()): void {
     interventions: simulation.getInterventions(),
     removalHighlights: [...removalFeedback.values()].map((feedback) => ({ ...feedback, emphasis: removalEmphasis(feedback, now, reducedMotion.matches, REMOVAL_MARKER_MS) })),
     challengeCollapse: appMode === 'apex' && apexSession.getState().collapseStep !== null
-      ? { step: apexSession.getState().collapseStep!, label: `Apex chain collapsed · t=${apexSession.getState().collapseStep}` }
+      ? { step: apexSession.getState().collapseStep!, label: `먹이사슬 붕괴 · t=${apexSession.getState().collapseStep}` }
       : null,
   });
 }
@@ -1009,7 +1019,7 @@ function updateParameterNavigation(values: SimulationParameters): void {
     element(`#param-${key}`).setAttribute('aria-describedby', `stage-status-${group}`);
     if (group === 'tertiary' || group === 'quaternary') element(`#inactive-note-${group}`).hidden = !inactive;
   }
-  element('#environment-summary').textContent = `격자 ${values.gridColumns}열 · 전달 ${Math.round(values.transferEfficiency * 100)}% · ${values.foodChainDepth}차까지\nSeed ${values.seed} · 토로이드 ${values.toroidal ? 'ON' : 'OFF'}`;
+  element('#environment-summary').textContent = `격자 ${values.gridColumns}열 · 전달 ${Math.round(values.transferEfficiency * 100)}% · ${values.foodChainDepth}차까지\n시드 ${values.seed} · 가장자리 연결 ${values.toroidal ? '켬' : '끔'}`;
 }
 
 function selectParameterGroup(group: ParameterGroup): void {
@@ -1040,7 +1050,7 @@ function finishApexChallenge(): void {
     bestResult = result.isNewBest ? personalBestFeedback(record.score, result.previousBest) : null;
     bestEmphasisStartedAt = result.isNewBest ? performance.now() : -Infinity;
   } catch {
-    challengeMessage = '이 브라우저에서는 Personal Best를 저장할 수 없습니다.';
+    challengeMessage = '이 브라우저에서는 내 최고 기록을 저장할 수 없습니다.';
     bestResult = null;
   }
 }
@@ -1094,7 +1104,7 @@ function returnToApexSetup(parameterSource: SimulationParameters = parameters): 
 function switchMode(nextMode: AppMode): void {
   if (nextMode === appMode) return;
   if (appMode === 'apex' && apexSession.getState().phase === 'active') {
-    const confirmed = window.confirm('현재 도전을 포기하고 자유 탐구로 돌아가시겠습니까? 이 기록은 Personal Best에 저장되지 않습니다.');
+    const confirmed = window.confirm('현재 도전을 포기하고 자유 탐구로 돌아갈까요? 이 기록은 내 최고 기록에 저장되지 않습니다.');
     if (!confirmed) return;
   }
   setRunning(false);
@@ -1331,7 +1341,7 @@ function handleChallengeAction(event: MouseEvent): void {
     if (snapshot) beginApexChallenge({ ...snapshot });
   }
   if (action === 'abort') {
-    const confirmed = window.confirm('현재 도전을 중단하시겠습니까? 이 기록은 Personal Best에 저장되지 않습니다.');
+    const confirmed = window.confirm('현재 도전을 중단할까요? 이 기록은 내 최고 기록에 저장되지 않습니다.');
     if (confirmed) returnToApexSetup(parameters);
   }
 }
@@ -1387,7 +1397,7 @@ resetButton.addEventListener('click', () => {
     return;
   }
   if (apexSession.getState().phase === 'active') {
-    const confirmed = window.confirm('현재 도전을 포기하고 초기화하시겠습니까? 이 기록은 Personal Best에 저장되지 않습니다.');
+    const confirmed = window.confirm('현재 도전을 포기하고 초기화할까요? 이 기록은 내 최고 기록에 저장되지 않습니다.');
     if (!confirmed) return;
   }
   const snapshot = apexSession.getState().parameterSnapshot;

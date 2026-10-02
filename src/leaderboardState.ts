@@ -40,7 +40,7 @@ export class LeaderboardStore {
 }
 
 export function leaderboardStateText(state: LeaderboardState): string {
-  if (state.phase === 'disabled') return '중앙 기록판 서버가 연결되지 않았습니다. Personal Best는 이 브라우저에 계속 저장됩니다.';
+  if (state.phase === 'disabled') return '중앙 기록판 서버가 연결되지 않았습니다. 내 최고 기록은 이 브라우저에 계속 저장됩니다.';
   if (state.phase === 'idle') return '기록판을 준비하고 있습니다…';
   if (state.phase === 'loading') return state.entries.length ? '갱신 중입니다. 이전 결과를 표시합니다…' : '기록판을 불러오는 중입니다…';
   if (state.phase === 'error') return state.message + (state.entries.length ? ' 이전 결과를 표시합니다.' : '');

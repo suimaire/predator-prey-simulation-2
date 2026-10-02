@@ -95,14 +95,14 @@ export function drawPopulationChart(canvas: HTMLCanvasElement, options: ChartOpt
   const maxPopulation = Math.max(20, ...history.flatMap((metric) => visibleSpecies.map((item) => populationValue(metric, item))));
   const roundedMaximum = Math.ceil(maxPopulation / 20) * 20;
 
-  ctx.font = "600 10px system-ui, sans-serif";
+  ctx.font = '600 12px "Pretendard Variable", Pretendard, system-ui, sans-serif';
   ctx.textBaseline = 'middle';
   for (let lineIndex = 0; lineIndex <= 4; lineIndex += 1) {
     const fraction = lineIndex / 4;
     const y = g.top + g.plotHeight * fraction;
     ctx.beginPath(); ctx.moveTo(g.left, y); ctx.lineTo(g.cssWidth - g.right, y);
     ctx.strokeStyle = '#dce4dc'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = '#68766d';
+    ctx.fillStyle = '#56615b';
     ctx.textAlign = 'right'; ctx.fillText(String(Math.round(roundedMaximum * (1 - fraction))), g.left - 8, y);
     ctx.textAlign = 'left'; ctx.fillText(`${Math.round(100 * (1 - fraction))}%`, g.cssWidth - g.right + 8, y);
   }
@@ -136,9 +136,9 @@ export function drawPopulationChart(canvas: HTMLCanvasElement, options: ChartOpt
     const onRight = x < g.left + g.plotWidth / 2;
     ctx.translate(x + (onRight ? 5 : -5), g.top + 8);
     ctx.rotate(-Math.PI / 2);
-    ctx.fillStyle = color; ctx.font = '700 9px system-ui, sans-serif';
+    ctx.fillStyle = color; ctx.font = '700 11px "Pretendard Variable", Pretendard, system-ui, sans-serif';
     ctx.textAlign = 'right';
-    labels.forEach((label, index) => ctx.fillText(label, 0, index * (onRight ? 11 : -11), g.plotHeight - 16));
+    labels.forEach((label, index) => ctx.fillText(label, 0, index * (onRight ? 13 : -13), g.plotHeight - 16));
     ctx.restore();
   });
 
@@ -149,13 +149,13 @@ export function drawPopulationChart(canvas: HTMLCanvasElement, options: ChartOpt
     ctx.setLineDash([3, 3]); ctx.strokeStyle = '#a75432'; ctx.lineWidth = 1.75;
     ctx.beginPath(); ctx.moveTo(x, g.top); ctx.lineTo(x, g.top + g.plotHeight); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = '#8b452b'; ctx.font = '700 9px system-ui, sans-serif'; ctx.textAlign = 'right';
+    ctx.fillStyle = '#8b452b'; ctx.font = '700 11px "Pretendard Variable", Pretendard, system-ui, sans-serif'; ctx.textAlign = 'right';
     ctx.fillText(collapse.label, Math.min(g.cssWidth - g.right, x - 5), g.top + 8);
     ctx.restore();
   }
 
-  ctx.fillStyle = '#68766d'; ctx.textBaseline = 'top'; ctx.font = '600 10px system-ui, sans-serif';
+  ctx.fillStyle = '#56615b'; ctx.textBaseline = 'top'; ctx.font = '600 12px "Pretendard Variable", Pretendard, system-ui, sans-serif';
   ctx.textAlign = 'left'; ctx.fillText(String(firstStep), g.left, g.cssHeight - g.bottom + 9);
-  ctx.textAlign = 'center'; ctx.fillText('STEP', g.left + g.plotWidth / 2, g.cssHeight - g.bottom + 9);
+  ctx.textAlign = 'center'; ctx.fillText('시간 (step)', g.left + g.plotWidth / 2, g.cssHeight - g.bottom + 9);
   ctx.textAlign = 'right'; ctx.fillText(String(lastStep), g.cssWidth - g.right, g.cssHeight - g.bottom + 9);
 }
