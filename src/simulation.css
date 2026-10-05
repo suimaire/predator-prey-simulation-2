@@ -615,6 +615,8 @@ html { scrollbar-gutter: stable; }
 .leaderboard-list--compact .leaderboard-who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .leaderboard-list--compact .leaderboard-score { font-size: 13px; }
 #open-leaderboard { min-height: 32px; border: 1px solid #c8d6ca; border-radius: 8px; color: #365a43; background: #f5f8f3; font-size: 14px; font-weight: 700; }
+.ranking-suspended-notice { margin: 2px 0; padding: 10px 8px; border: 1px solid #cfe0d1; border-radius: 8px; color: #2f5a3d; background: #f6f8ee; font-size: 13px; font-weight: 700; line-height: 1.5; text-align: center; }
+.challenge-message.is-info { color: #2f5a3d; background: #eef5ea; }
 .leaderboard-empty, .leaderboard-status { font-size: 13px; }
 .sim-toolbar { gap: 6px; margin: 0; padding: 10px 12px; border: 1px solid #d2ddd3; border-radius: 14px; background: #fff; }
 .run-controls button, .view-controls > button { min-height: 34px; font-size: 14px; }

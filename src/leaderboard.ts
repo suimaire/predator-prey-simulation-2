@@ -2,6 +2,13 @@ import { APEX_CHALLENGE_CONFIG, type ChallengeDefinition, type ChallengeRecord }
 import type { SimulationParameters } from './model.ts';
 
 /** Teacher-managed classification; hidden records never leave the public view. */
+/**
+ * 시험기간 랭킹 일시중단 스위치. true이면 기록판 조회·제출 요청을 아예 보내지 않고
+ * 공개 랭킹 자리에 안내 문구만 표시합니다. 시험기간이 끝나면 false로 바꾸기만 하면 됩니다.
+ */
+export const RANKING_SUSPENDED: boolean = true;
+export const RANKING_SUSPENDED_MESSAGE = '시험기간에는 랭킹 산정이 중단됩니다.';
+
 export type BoardGroup = 'protector' | 'manipulator';
 export const BOARD_GROUPS: readonly BoardGroup[] = Object.freeze(['protector', 'manipulator']);
 export type LeaderboardScope = 'national' | 'hafs';

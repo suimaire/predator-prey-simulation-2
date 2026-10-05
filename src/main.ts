@@ -25,6 +25,8 @@ import {
   loadParticipant,
   validateParticipant,
   BOARD_GROUPS,
+  RANKING_SUSPENDED,
+  RANKING_SUSPENDED_MESSAGE,
   type BoardGroup,
   type LeaderboardTransport,
   type Participant,
@@ -412,7 +414,8 @@ let personalBest: ApexSurvivalRecord | null = loadApexPersonalBest(window.localS
 let bestResult: PersonalBestFeedback | null = null;
 let bestEmphasisStartedAt = -Infinity;
 let challengeSignature = '';
-const leaderboardTransport: LeaderboardTransport | null = createLeaderboardTransport({
+// 랭킹 일시중단 중에는 transport를 만들지 않아 조회·제출 fetch가 하나도 나가지 않습니다.
+const leaderboardTransport: LeaderboardTransport | null = RANKING_SUSPENDED ? null : createLeaderboardTransport({
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
   table: import.meta.env.VITE_LEADERBOARD_TABLE,
@@ -613,7 +616,7 @@ function renderChallengePanel(): void {
     <div class="challenge-actions">${state.phase === 'setup' ? setupActions : state.phase === 'active' ? activeActions : overActions}</div>
       ${state.phase === 'over' ? `<p class="challenge-edit-note">설정을 수정해 새로운 조건으로 도전하거나, 같은 조건을 다시 재현할 수 있습니다.</p><button type="button" class="challenge-secondary submit-record-link" data-open-ranking>기록판 / 이 기록 제출</button>` : ''}
       ${challengeIsLocked() ? '<span class="challenge-lock">🔒 도전 진행 중에는 설정을 변경할 수 없습니다.</span>' : ''}
-      ${challengeMessage ? `<span class="challenge-message">${challengeMessage}</span>` : ''}
+      ${challengeMessage ? `<span class="challenge-message${challengeMessage === RANKING_SUSPENDED_MESSAGE ? ' is-info' : ''}">${challengeMessage}</span>` : ''}
 `;
 }
 
@@ -630,7 +633,7 @@ function rememberParticipant(participant: Participant): void {
 }
 
 function renderLeaderboardPanel(): void {
-  if (appMode !== 'apex') return;
+  if (appMode !== 'apex' || RANKING_SUSPENDED) return;
   const signature = JSON.stringify([appMode, leaderboardStore.states, leaderboardMessage, activeLeaderboardBoard]);
   if (signature !== leaderboardSignature) {
     leaderboardSignature = signature;
@@ -764,7 +767,7 @@ function updateModeLayout(): void {
     if (!document.querySelector('.leaderboard-summary')) {
       simulationToolbar.insertAdjacentHTML('beforebegin', leaderboardSummaryMarkup());
       element('#open-leaderboard').addEventListener('click', event => openLeaderboard(event.currentTarget as HTMLElement));
-      for (const board of BOARD_GROUPS) bindLeaderboardTab(element<HTMLButtonElement>(`#summary-tab-${board}`), board, 'summary');
+      if (!RANKING_SUSPENDED) for (const board of BOARD_GROUPS) bindLeaderboardTab(element<HTMLButtonElement>(`#summary-tab-${board}`), board, 'summary');
       leaderboardSignature = '';
     }
   }
@@ -1349,6 +1352,12 @@ challengePanel.addEventListener('click', handleChallengeAction);
 
 function openLeaderboard(opener: HTMLElement, board: BoardGroup = activeLeaderboardBoard): void {
   if (appMode !== 'apex') return;
+  if (RANKING_SUSPENDED) {
+    // 기록판 대신 중단 안내만 보여 줍니다. 점수와 내 최고 기록은 그대로 유지됩니다.
+    challengeMessage = RANKING_SUSPENDED_MESSAGE;
+    renderChallengePanel();
+    return;
+  }
   selectLeaderboardBoard(board);
   dialogs.open(leaderboardDialog, opener, element('#close-leaderboard', leaderboardDialog));
 }

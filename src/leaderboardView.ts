@@ -1,5 +1,7 @@
 import {
   BOARD_GROUPS,
+  RANKING_SUSPENDED,
+  RANKING_SUSPENDED_MESSAGE,
   rankAccentClass,
   type BoardGroup,
   type LeaderboardScope,
@@ -81,7 +83,14 @@ export function boardMarkup(
 }
 
 /** Mounted only in Apex Survival. Uses the existing v2 board rendering. */
-export function leaderboardSummaryMarkup(): string {
+export function leaderboardSummaryMarkup(suspended: boolean = RANKING_SUSPENDED): string {
+  if (suspended) {
+    return `<section class="leaderboard-summary is-suspended" aria-labelledby="ranking-summary-title">
+                <div class="card-heading"><h2 id="ranking-summary-title">공개 랭킹 <small>Top 3</small></h2></div>
+                <p class="ranking-suspended-notice" role="status">${escapeHtml(RANKING_SUSPENDED_MESSAGE)}</p>
+                <button type="button" id="open-leaderboard" disabled>전체 순위 보기</button>
+              </section>`;
+  }
   return `<section class="leaderboard-summary" aria-labelledby="ranking-summary-title">
                 <div class="card-heading"><h2 id="ranking-summary-title">공개 랭킹 <small>Top 3</small></h2></div>
                 <div class="leaderboard-tabs" role="tablist" aria-label="요약 기록판 선택">
