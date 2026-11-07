@@ -219,7 +219,6 @@ app.innerHTML = `
                   <article class="mini-population forest-population"><i class="forest-key" aria-hidden="true"></i><span><small>식생량</small><b id="forest-population"></b><em>성장 단계 합</em></span></article>
                   <div class="population-strip" id="population-strip"></div>
                 </div>
-                <p class="population-comparison" id="population-comparison"></p>
               </section>
               <div class="canvas-frame"><canvas id="forest-board" tabindex="0" aria-label="격자형 숲 생태계. 칸을 선택하면 상태를 확인할 수 있습니다."></canvas><div class="board-status" id="board-status"><span></span><b>준비됨</b></div><div class="cell-inspector" id="cell-inspector" hidden></div></div>
               <div class="board-footnote"><span>칸을 클릭하거나 터치해 식생 단계와 개체 에너지를 확인하세요.</span><span><b>공간 규칙</b> 식생과 동물은 함께 존재 · 동물은 한 칸에 한 마리</span></div>
@@ -805,7 +804,6 @@ function updateStructuralUi(): void {
 function renderPopulationStrip(snapshot: SimulationSnapshot): void {
   const comparison = populationComparison(simulation.getHistory());
   const fromStep = comparison?.step ?? snapshot.step;
-  element('#population-comparison').textContent = `순변화 · 최근 ${snapshot.step - fromStep} step (t=${fromStep} → ${snapshot.step}) · 개체 제거는 제거 직전 기준`;
   element('#forest-population').textContent = simulation.getHistory().at(-1)!.forestAbundance.toLocaleString();
   const strip = element('#population-strip');
   if (strip.dataset.depth !== simulation.getActiveSpecies().join(',')) {

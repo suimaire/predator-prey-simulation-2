@@ -263,7 +263,6 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 .board-footnote { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px; color: #56615b; font-size: 12px; line-height: 1.5; }
 .board-footnote b { color: #466051; }
 .population-strip { display: contents; }
-.population-comparison { margin: 7px 15px 0; color: #68786d; font-size: 13px; line-height: 1.5; }
 .mini-population { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 10px 12px; border-left: 1px solid #dce5dc; }
 .mini-population canvas { width: 34px; height: 34px; flex: 0 0 auto; }
 .mini-population span { min-width: 0; display: grid; gap: 2px; width: 100%; }
@@ -396,7 +395,6 @@ dialog .confirm-removal { color: #fff; border-color: #a65431; background: #a6543
 .population-hud .mini-population { gap: 4px; padding: 4px 6px; }
 .population-hud .mini-population canvas { width: 28px; height: 28px; }
 .population-hud .mini-population small { min-height: 16px; }
-.population-hud .population-comparison { margin: 5px 6px 0; font-size: 13px; }
 
 /* Respond to the HUD's own width, including free exploration at deeper levels. */
 @container (width > 480px) and (width <= 700px) {
@@ -655,7 +653,6 @@ html { scrollbar-gutter: stable; }
 .population-hud .mini-population span { gap: 1px; }
 .population-hud .mini-population em { min-height: 17px; line-height: 17px; }
 .population-hud .forest-population em { font-size: 13px; }
-.population-hud .population-comparison { margin-top: 4px; font-size: 13px; }
 .canvas-frame { width: 100%; max-width: calc(max(280px, 100dvh - 350px) * var(--forest-ratio, 1.333333)); margin: 8px auto 0; }
 .board-footnote { margin-top: 6px; font-size: 13px; }
 .support-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-top: 14px; }
