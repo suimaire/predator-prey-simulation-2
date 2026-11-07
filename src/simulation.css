@@ -91,10 +91,10 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
   container-type: inline-size;
 }
 /* A reserved legend column keeps its three/five real entries from moving the tabs. */
-.board-heading { display: grid; grid-template-columns: minmax(120px,1fr) 216px 300px; gap: 8px 12px; }
+.board-heading { display: grid; grid-template-columns: minmax(120px,1fr) 260px 300px; gap: 8px 12px; }
 .board-heading .mode-switch { grid-column: 2; grid-row: 1; }
 .board-heading .legend { grid-column: 3; grid-row: 1; min-height: 24px; }
-.mode-switch { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; width: 216px; flex: 0 0 auto; padding: 3px; border: 1px solid #cdd9cf; border-radius: 11px; background: #e6ece6; isolation: isolate; }
+.mode-switch { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; width: 260px; flex: 0 0 auto; padding: 3px; border: 1px solid #cdd9cf; border-radius: 11px; background: #e6ece6; isolation: isolate; }
 .mode-switch button { position: relative; z-index: 1; min-height: 34px; min-width: 0; padding: 0 12px; border: 0; border-radius: 8px; color: #66756c; background: transparent; font-size: 14px; font-weight: 750; white-space: nowrap; transition: color var(--apex-slide-ms) var(--apex-slide-ease); }
 .mode-switch button[aria-pressed=true] { color: #194d32; }
 .mode-switch button[data-app-mode=apex][aria-pressed=true] { color: #fff; }
@@ -138,8 +138,8 @@ input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
 .board-card[data-mode-phase=idle] .apex-panel-heat * { animation: none; }
 .board-card[data-effects-paused=true] .apex-panel-heat *, .board-card[data-effects-paused=true] .apex-tab-flame { animation-play-state: paused; }
 .board-card[data-effects-static=true] .mode-capsule, .board-card[data-effects-static=true] .mode-switch button { transition: none; }
-@container (max-width: 680px) {
-  .board-heading { grid-template-columns: minmax(0,1fr) 216px; }
+@container (max-width: 720px) {
+  .board-heading { grid-template-columns: minmax(0,1fr) 260px; }
   .board-heading .legend { grid-column: 1/-1; grid-row: 2; }
 }
 @media (max-width: 760px) {
