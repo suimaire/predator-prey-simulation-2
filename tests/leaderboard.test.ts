@@ -61,11 +61,13 @@ test('submission is normalized, private fields only POST, no school_key/server f
 
 test('public SELECT allowlist, scope filters, fixed board/range and no client identity fields', async () => {
   assert.deepEqual([...PUBLIC_LEADERBOARD_COLUMNS], ['id', 'challenge_id', 'simulation_version', 'seed', 'score', 'school_name', 'display_name', 'submitted_at', 'board_group', 'is_hafs']);
-  const server = fixtureServer([publicRow(1), publicRow(2, { school_name: '타교', is_hafs: false }), publicRow(3, { board_group: 'manipulator' })]);
+  const server = fixtureServer([publicRow(1, { school_name: 'HAFS', is_hafs: true }), publicRow(2),
+    publicRow(3, { school_name: 'HAFS', is_hafs: true, board_group: 'manipulator' }), publicRow(4, { board_group: 'manipulator' })]);
   const transport = createSupabaseLeaderboardTransport(config, server.fetch);
-  assert.equal((await transport.list()).length, 2); // national includes HAFS
-  assert.equal((await transport.list({ scope: 'hafs' })).length, 1);
-  assert.equal((await transport.list({ scope: 'hafs', boardGroup: 'manipulator' })).length, 1);
+  assert.deepEqual((await transport.list()).map(row => row.id), [uuid(2)]); // national excludes HAFS
+  assert.deepEqual((await transport.list({ scope: 'hafs' })).map(row => row.id), [uuid(1)]);
+  assert.deepEqual((await transport.list({ scope: 'hafs', boardGroup: 'manipulator' })).map(row => row.id), [uuid(3)]);
+  assert.deepEqual((await transport.list({ scope: 'national', boardGroup: 'manipulator' })).map(row => row.id), [uuid(4)]);
   for (const call of server.calls) {
     assert.equal(call.url.pathname, '/rest/v1/apex_leaderboard_public_v2');
     assert.equal(call.url.searchParams.get('select'), PUBLIC_LEADERBOARD_COLUMNS.join(','));
@@ -76,8 +78,9 @@ test('public SELECT allowlist, scope filters, fixed board/range and no client id
     assert.equal(call.init?.cache, 'no-store');
     for (const name of ['student_number','student_name','school_key','payload_hash','parameter_snapshot','achieved_at','verification','verified_at','verified_score','verifier_version']) assert.ok(!call.url.toString().includes(name));
   }
-  assert.equal(server.calls[0]!.url.searchParams.has('is_hafs'), false);
+  assert.equal(server.calls[0]!.url.searchParams.get('is_hafs'), 'eq.false');
   assert.ok(server.calls.some(c => c.url.searchParams.get('is_hafs') === 'eq.true'));
+  assert.ok(server.calls.every(c => ['eq.true', 'eq.false'].includes(c.url.searchParams.get('is_hafs')!)));
 });
 
 test('runtime unknown response validation rejects malformed rows rather than presenting an empty ranking', async () => {
@@ -91,7 +94,8 @@ test('runtime unknown response validation rejects malformed rows rather than pre
     const transport = createSupabaseLeaderboardTransport(config, async () => json(raw));
     await assert.rejects(transport.list(), /응답 형식/);
   }
-  await assert.rejects(createSupabaseLeaderboardTransport(config, async () => json([publicRow(1, { is_hafs: false })])).list({ scope: 'hafs' }), /응답 형식/);
+  await assert.rejects(createSupabaseLeaderboardTransport(config, async () => json([publicRow(1)])).list({ scope: 'hafs' }), /응답 형식/);
+  await assert.rejects(createSupabaseLeaderboardTransport(config, async () => json([publicRow(1, { school_name: 'HAFS', is_hafs: true })])).list({ scope: 'national' }), /응답 형식/);
   const transport = createSupabaseLeaderboardTransport(config, async () => json([]));
   for (const query of [{ scope: 'local' as LeaderboardScope }, { boardGroup: 'hidden' as BoardGroup }, { limit: 0 }, { limit: 2.5 }]) await assert.rejects(transport.list(query), /조회 설정/);
   assert.deepEqual(await transport.list(), []);
@@ -116,7 +120,7 @@ test('Top 10 includes >50 boundary ties, handles smaller server pages and stops 
     assert.ok(server.calls.length < 32);
     assert.ok(server.calls.some(c => c.url.searchParams.get('score') === 'gte.842'));
   }
-  const separate = fixtureServer([...Array.from({ length: 60 }, (_, i) => publicRow(i + 1, { is_hafs: false })), publicRow(100, { score: 10 })], 3);
+  const separate = fixtureServer([...Array.from({ length: 60 }, (_, i) => publicRow(i + 1, { is_hafs: false })), publicRow(100, { score: 10, school_name: 'HAFS', is_hafs: true })], 3);
   const transport = createSupabaseLeaderboardTransport(config, separate.fetch);
   assert.ok(!(await transport.list()).some(r => r.isHafs));
   assert.equal((await transport.list({ scope: 'hafs' }))[0]!.id, uuid(100));

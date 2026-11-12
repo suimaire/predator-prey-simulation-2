@@ -126,6 +126,12 @@ try {
     await page.locator('#open-leaderboard').click();
     assert.equal(await page.locator('#leaderboard-form').isVisible(), false);
     for (const scope of ['national','hafs']) assert.equal(await page.locator(`#ranking-list-protector-${scope}`).isVisible(), true);
+    const nationalSchools = await page.locator('#ranking-list-protector-national .leaderboard-school').allTextContents();
+    const hafsSchools = await page.locator('#ranking-list-protector-hafs .leaderboard-school').allTextContents();
+    assert.ok(nationalSchools.length > 0 && nationalSchools.every(name => name !== 'HAFS'));
+    assert.ok(hafsSchools.length > 0 && hafsSchools.every(name => name === 'HAFS'));
+    const scopeQueries = await page.evaluate(() => window.__fixture.calls.filter(url => url.includes('board_group=eq.protector')));
+    assert.ok(scopeQueries.some(url => url.includes('is_hafs=eq.false')) && scopeQueries.some(url => url.includes('is_hafs=eq.true')));
     const bounds = await geometry();
     assert.equal(bounds.overlap, false); assert.equal(bounds.overflow, false); assert.equal(bounds.dialogOverflow, false);
     if (width > 760) assert.ok(Math.abs(bounds.sections[0].y - bounds.sections[1].y) < 1);

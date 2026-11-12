@@ -2,8 +2,8 @@ import type { LeaderboardEntry } from '../../src/leaderboard.ts';
 export const uuid = (i: number) => `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`;
 export function publicRow(i = 1, overrides: Record<string, unknown> = {}) {
   return { id: uuid(i), challenge_id: 'apex-survival', simulation_version: 'apex-v1', seed: 260903,
-    score: 1000 - i, school_name: 'HAFS', display_name: '홍○동', submitted_at: '2026-09-01T00:00:00.000Z',
-    board_group: 'protector', is_hafs: true, ...overrides };
+    score: 1000 - i, school_name: '타교', display_name: '홍○동', submitted_at: '2026-09-01T00:00:00.000Z',
+    board_group: 'protector', is_hafs: false, ...overrides };
 }
 export function entry(i = 1, overrides: Partial<LeaderboardEntry> = {}): LeaderboardEntry {
   return { id: uuid(i), challengeId: 'apex-survival', simulationVersion: 'apex-v1', seed: 260903,
@@ -23,6 +23,7 @@ export function fixtureServer(rows: ReturnType<typeof publicRow>[], maxRows = In
       const q = url.searchParams;
       let result = rows.filter(r => `eq.${r.board_group}` === q.get('board_group'));
       if (q.get('is_hafs') === 'eq.true') result = result.filter(r => r.is_hafs);
+      if (q.get('is_hafs') === 'eq.false') result = result.filter(r => !r.is_hafs);
       const cursor = q.get('or');
       if (cursor) {
         const score = Number(cursor.match(/score.lt.(-?\d+)/)![1]);

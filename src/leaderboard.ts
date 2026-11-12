@@ -298,7 +298,7 @@ function toEntry(raw: unknown, boardGroup: BoardGroup, scope: LeaderboardScope, 
     || typeof row.score !== 'number' || !Number.isInteger(row.score) || row.score < 0 || row.score > 1000000
     || !publicString(row.school_name, 80) || !publicString(row.display_name, 16)
     || !validTimestamp(row.submitted_at) || row.board_group !== boardGroup
-    || typeof row.is_hafs !== 'boolean' || (scope === 'hafs' && !row.is_hafs)) {
+    || typeof row.is_hafs !== 'boolean' || row.is_hafs !== (scope === 'hafs')) {
     throw new LeaderboardError(CONTRACT_ERROR);
   }
   return { id: row.id, challengeId: row.challenge_id, simulationVersion: row.simulation_version,
@@ -346,7 +346,7 @@ export function createSupabaseLeaderboardTransport(
             challenge_id: 'eq.' + definition.id, simulation_version: 'eq.' + definition.simulationVersion,
             seed: 'eq.' + definition.seed, board_group: 'eq.' + boardGroup,
             order: 'score.desc,submitted_at.asc,id.asc', limit: String(cutoff === undefined ? limit - collected.size : 50) });
-          if (scope === 'hafs') search.set('is_hafs', 'eq.true');
+          search.set('is_hafs', scope === 'hafs' ? 'eq.true' : 'eq.false');
           if (cutoff !== undefined) search.set('score', 'gte.' + cutoff);
           if (cursor) search.set('or', '(score.lt.' + cursor.score
             + ',and(score.eq.' + cursor.score + ',submitted_at.gt.' + cursor.submittedAt + ')'
