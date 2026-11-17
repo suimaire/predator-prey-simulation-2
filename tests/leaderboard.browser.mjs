@@ -190,6 +190,30 @@ try {
       columnResults.push({ viewport: [width, height], board, columns });
     }
   }
+  // Desktop FHD and the reported Edge window should show ranks 1-10 without scrolling.
+  for (const [width, height] of [[1920, 1080], [1729, 864]]) {
+    await page.setViewportSize({ width, height });
+    await page.goto(`${base}?records=visible10`); await ready();
+    await page.locator('#open-leaderboard').click();
+    const visibleTen = await page.evaluate(() => ['national', 'hafs'].map(scope => {
+      const dialog = document.querySelector('#leaderboard-dialog');
+      const panel = document.querySelector('#leaderboard-panel');
+      const body = document.querySelector('.leaderboard-dialog .ranking-body');
+      const rows = [...document.querySelectorAll(`#ranking-list-protector-${scope} li`)];
+      const visibleBottom = Math.min(...[dialog, panel, body].map(el => el.getBoundingClientRect().bottom));
+      const visibleTop = Math.max(...[dialog, panel, body].map(el => el.getBoundingClientRect().top));
+      const last = rows[9]?.getBoundingClientRect();
+      return { scope, count: rows.length, lastBottom: last?.bottom, lastTop: last?.top,
+        visibleBottom, visibleTop, panelScroll: panel.scrollTop, bodyScroll: body.scrollTop };
+    }));
+    for (const result of visibleTen) {
+      assert.equal(result.count, 10, `${width}/${result.scope}: ten entries exist`);
+      assert.ok(result.lastTop >= result.visibleTop - 1 && result.lastBottom <= result.visibleBottom + 1,
+        `${width}/${result.scope}: 10th place must be visible without scrolling: ${JSON.stringify(result)}`);
+      assert.equal(result.panelScroll, 0, `${width}/${result.scope}: panel starts at top`);
+      assert.equal(result.bodyScroll, 0, `${width}/${result.scope}: body starts at top`);
+    }
+  }
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${base}?records=ties`); await ready();
   await page.locator('#open-leaderboard').click();

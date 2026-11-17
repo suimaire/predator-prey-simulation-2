@@ -32,11 +32,11 @@
     if (mode === 'error' || (hafs && (mode === 'partial' || fixture.failHafs))) return new Response(JSON.stringify({ message: 'Fixture read failure' }), { status: 503 });
     if (mode === 'loading') return new Promise(() => {});
     const board = q.get('board_group') === 'eq.manipulator' ? 'manipulator' : 'protector';
-    const count = mode === 'columns' ? alignmentScores.length : mode === 'ties' ? (hafs ? 80 : 120) : Number.isFinite(Number(mode)) ? Number(mode) : 24;
+    const count = mode === 'visible10' ? 10 : mode === 'columns' ? alignmentScores.length : mode === 'ties' ? (hafs ? 80 : 120) : Number.isFinite(Number(mode)) ? Number(mode) : 24;
     let rows = Array.from({ length: count }, (_, i) => ({
       id: `00000000-0000-0000-0000-${String((board === 'protector' ? 0 : 1000) + (hafs ? 2000 : 0) + i + 1).padStart(12,'0')}`,
       challenge_id: 'apex-survival', simulation_version: 'apex-v1', seed: 260903,
-      school_name: hafs ? 'HAFS' : i === 1 ? '긴학교명'.repeat(20) : '합성고등학교',
+      school_name: hafs ? 'HAFS' : mode === 'visible10' ? (i % 2 ? '포항여자고등학교' : '서울공업고등학교') : i === 1 ? '긴학교명'.repeat(20) : '합성고등학교',
       display_name: '합○생', is_hafs: hafs,
       score: mode === 'ties' ? (i < 9 ? 1000000 - i : i < (hafs ? 42 : 83) ? 900000 : 1) : 1000000 - Math.floor(i / 2) * 100,
       submitted_at: new Date(Date.UTC(2026,8,1,0,0,i)).toISOString(), board_group: board,
