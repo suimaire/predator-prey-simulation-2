@@ -113,7 +113,6 @@ export function createLeaderboardDialog(): HTMLDialogElement {
             <button type="button" id="leaderboard-refresh" aria-label="기록판 새로고침" title="새로고침">↻</button>
           </div>
           <p class="leaderboard-status" id="leaderboard-status" aria-live="polite"></p>
-          <p class="leaderboard-ranking-note">참가자별 대표 최고 기록 · Top 10과 경계 동점자 전체 · 점수 단위: step</p>
           <div class="dialog-body ranking-body" tabindex="0" aria-label="상세 랭킹 목록">${BOARD_GROUPS.map(board => `<div class="leaderboard-board" role="tabpanel" id="leaderboard-board-${board}" aria-labelledby="leaderboard-tab-${board}" ${board === 'protector' ? '' : 'hidden'}><div class="ranking-scope-grid">${['national', 'hafs'].map(scope => `<section aria-labelledby="ranking-heading-${board}-${scope}"><h3 id="ranking-heading-${board}-${scope}">${scope === 'national' ? '전국 순위' : 'HAFS 랭킹'}</h3><p class="leaderboard-status" id="ranking-status-${board}-${scope}" aria-live="polite"></p><div id="ranking-list-${board}-${scope}"></div></section>`).join('')}</div></div>`).join('')}
           </div><form class="leaderboard-form" id="leaderboard-form" hidden>
             <label for="leaderboard-school"><span>학교</span><input id="leaderboard-school" data-max-codepoints="80" required placeholder="학교명을 입력해 주세요" autocomplete="off" aria-describedby="leaderboard-school-hint" /><small id="leaderboard-school-hint">최대 80자</small></label>

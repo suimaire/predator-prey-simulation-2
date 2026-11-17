@@ -59,6 +59,7 @@ const columnGeometry = board => page.evaluate(board => {
       return { rank: rect(rank), school: rect(school), name: rect(name), score: rect(score), time: rect(time),
         scoreText: textRect(score), nameCenter: (nameText.left + nameText.right) / 2,
         nameClipped: name.scrollWidth > name.clientWidth,
+        schoolClipped: school.scrollWidth > school.clientWidth + 1 || school.scrollHeight > school.clientHeight + 1,
         schoolOverflow: getComputedStyle(school).textOverflow, schoolWhiteSpace: getComputedStyle(school).whiteSpace,
         nameOverflow: getComputedStyle(name).textOverflow, nameWhiteSpace: getComputedStyle(name).whiteSpace,
         scoreValue: score.textContent, rankValue: rank.textContent,
@@ -81,6 +82,9 @@ const assertColumns = (boards, label) => {
     for (const row of rows) {
       const prefix = `${scope}/${row.scoreValue}`;
       assert.equal(row.overflow, false, `${label}/${prefix}: row overflow`);
+      assert.equal(row.schoolClipped, false, `${label}/${prefix}: full school name visible`);
+      assert.equal(row.schoolOverflow, 'clip', `${label}/${prefix}: no school ellipsis`);
+      assert.equal(row.schoolWhiteSpace, 'normal', `${label}/${prefix}: school name may wrap`);
       for (const column of ['rank', 'school', 'name', 'score', 'time']) {
         close(row[column].left, first[column].left, `${prefix}: ${column} left`);
         if (column !== 'time') close(row[column].width, first[column].width, `${prefix}: ${column} width`);
@@ -95,8 +99,6 @@ const assertColumns = (boards, label) => {
         close(row.nameCenter, first.nameCenter, `${prefix}: visible name center`);
       } else {
         assert.equal(row.nameOverflow, 'ellipsis', `${label}/${prefix}: long name ellipsis`);
-        assert.equal(row.schoolOverflow, 'ellipsis', `${label}/${prefix}: long school ellipsis`);
-        assert.equal(row.schoolWhiteSpace, 'nowrap', `${label}/${prefix}: single-line school`);
         assert.equal(row.nameWhiteSpace, 'nowrap', `${label}/${prefix}: single-line name`);
       }
     }
@@ -124,6 +126,8 @@ try {
     assert.equal(await page.locator('#leaderboard-school').inputValue(), '');
     await screenshot(`summary-${width}`);
     await page.locator('#open-leaderboard').click();
+    assert.equal(await page.locator('.leaderboard-ranking-note').count(), 0);
+    assert.equal(await page.locator('#leaderboard-dialog').textContent().then(text => text?.includes('참가자별 대표 최고 기록')), false);
     assert.equal(await page.locator('#leaderboard-form').isVisible(), false);
     for (const scope of ['national','hafs']) assert.equal(await page.locator(`#ranking-list-protector-${scope}`).isVisible(), true);
     const nationalSchools = await page.locator('#ranking-list-protector-national .leaderboard-school').allTextContents();
