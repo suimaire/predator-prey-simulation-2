@@ -191,7 +191,7 @@ try {
     }
   }
   // Desktop FHD and the reported Edge window should show ranks 1-10 without scrolling.
-  for (const [width, height] of [[1920, 1080], [1729, 864]]) {
+  for (const [width, height] of [[1920, 960], [1729, 826]]) {
     await page.setViewportSize({ width, height });
     await page.goto(`${base}?records=visible10`); await ready();
     await page.locator('#open-leaderboard').click();
